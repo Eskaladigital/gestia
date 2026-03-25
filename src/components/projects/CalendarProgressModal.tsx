@@ -314,8 +314,8 @@ export function CalendarProgressModal({
             </div>
             <p className="text-xs text-surface-500 mt-1 font-medium">
               {totalInserted} / {totalExpected} publicaciones
-              {!isTerminal && currentMonthIdx >= 0 && months[currentMonthIdx] && (
-                <> &middot; Generando <strong className="text-surface-900">{months[currentMonthIdx].label}</strong> (mes {currentMonthIdx + 1} de {months.length})</>
+              {!isTerminal && months.length > 0 && (
+                <> &middot; Generando <strong className="text-surface-900">{months.length} {months.length === 1 ? 'mes' : 'meses'} en paralelo</strong></>
               )}
             </p>
           </div>
@@ -329,8 +329,8 @@ export function CalendarProgressModal({
                 const offset = firstDayOfWeek(my, mm);
                 const result = results.get(mIdx);
                 const postDatesSet = new Set(result?.dates || []);
-                const isActive = mIdx === currentMonthIdx && !isTerminal;
                 const isDone = result != null;
+                const isActive = !isTerminal && !isDone;
 
                 return (
                   <div key={mIdx} className={`border-2 p-2 ${isDone ? 'border-surface-900 bg-surface-50' : isActive ? 'border-surface-400' : 'border-surface-200'}`}>
