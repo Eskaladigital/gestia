@@ -94,10 +94,20 @@ async function processOneVisual(
     maxTokens: 4096,
   });
 
-  const vPrompt = clip(aiResponse.data?.visual_prompt);
+  const rawData = aiResponse.data as Record<string, unknown> | null;
+
+  let vPrompt = clip(rawData?.visual_prompt);
+
+  if (!vPrompt && rawData) {
+    const firstStringValue = Object.values(rawData).find(v => typeof v === 'string' && v.length > 50);
+    if (firstStringValue) {
+      console.warn(`[generate-visual-briefs] visual_prompt not found, using first long string field. Keys: ${Object.keys(rawData).join(',')}`);
+      vPrompt = clip(firstStringValue);
+    }
+  }
 
   if (!vPrompt) {
-    console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId}[${job.visualIndex}]`);
+    console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId}[${job.visualIndex}]. rawData keys: ${rawData ? Object.keys(rawData).join(',') : 'null'}`);
     return null;
   }
 
@@ -162,7 +172,7 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(content_item_ids) && content_item_ids.length > 0) {
       query = query.in('id', content_item_ids);
     } else {
-      query = query.or('visual_brief.is.null,visual_brief.eq.');
+      query = query.or('visual_prompt.is.null,visual_prompt.eq.');
     }
 
     const { data: items, error: fetchError } = await query;
@@ -213,6 +223,7 @@ export async function POST(request: NextRequest) {
         let aborted = false;
 
         const postVisualResults = new Map<string, Array<{ index: number; label: string; prompt: string }>>();
+        const postVisualsAttempted = new Map<string, number>();
         const completedPostIds = new Set<string>();
 
         try {
@@ -239,6 +250,7 @@ export async function POST(request: NextRequest) {
             }
 
             visualsDone++;
+            postVisualsAttempted.set(job.contentItemId, (postVisualsAttempted.get(job.contentItemId) || 0) + 1);
 
             if (signal.aborted) { aborted = true; break; }
 
@@ -254,25 +266,27 @@ export async function POST(request: NextRequest) {
             }
 
             if (!completedPostIds.has(job.contentItemId)) {
-              const allVisualsForPost = visualQueue.filter(v => v.contentItemId === job.contentItemId);
-              const doneForPost = postVisualResults.get(job.contentItemId)?.length || 0;
+              const totalVisualsForPost = visualQueue.filter(v => v.contentItemId === job.contentItemId).length;
+              const attemptedForPost = postVisualsAttempted.get(job.contentItemId) || 0;
 
-              if (doneForPost >= allVisualsForPost.length) {
+              if (attemptedForPost >= totalVisualsForPost) {
                 const postResults = postVisualResults.get(job.contentItemId) || [];
                 postResults.sort((a, b) => a.index - b.index);
 
-                const combinedPrompt = postResults.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
+                if (postResults.length > 0) {
+                  const combinedPrompt = postResults.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
 
-                const { error: updateErr } = await supabase
-                  .from('content_items')
-                  .update({
-                    visual_brief: null,
-                    visual_prompt: clip(combinedPrompt),
-                  })
-                  .eq('id', job.contentItemId);
+                  const { error: updateErr } = await supabase
+                    .from('content_items')
+                    .update({
+                      visual_brief: null,
+                      visual_prompt: clip(combinedPrompt),
+                    })
+                    .eq('id', job.contentItemId);
 
-                if (updateErr) {
-                  console.error(`[generate-visual-briefs] update content_items error for ${job.contentItemId}:`, updateErr);
+                  if (updateErr) {
+                    console.error(`[generate-visual-briefs] update content_items error for ${job.contentItemId}:`, updateErr);
+                  }
                 }
 
                 completedPostIds.add(job.contentItemId);
