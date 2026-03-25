@@ -7,6 +7,7 @@ import { CalendarTable } from './CalendarTable';
 import { CalendarGrid } from './CalendarGrid';
 import { PostEditor } from './PostEditor';
 import { createClient } from '@/lib/supabase/client';
+import { BriefsProgressModal } from '../projects/BriefsProgressModal';
 
 interface CalendarViewProps {
   items: ContentItem[];
@@ -63,14 +64,9 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
     URL.revokeObjectURL(url);
   }
 
-  const [generatingBriefs, setGeneratingBriefs] = useState(false);
-  const [briefsMessage, setBriefsMessage] = useState<string | null>(null);
+  const [briefsModalIds, setBriefsModalIds] = useState<string[] | null>(null);
 
   const pendingBriefsCount = localItems.filter(i => !i.visual_brief?.trim()).length;
-
-  /** Mientras la API genera briefs (varios lotes / llamadas IA), la lista solo se refrescaba al final; sondeamos Supabase para ver cada ítem en cuanto se guarda. */
-  const briefPollCancelRef = useRef(false);
-  const briefPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshCalendarItems = useCallback(async () => {
     const { data } = await supabase
@@ -81,57 +77,9 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
     if (data) setLocalItems(data as ContentItem[]);
   }, [projectId, supabase]);
 
-  const startBriefGenerationPolling = useCallback(() => {
-    briefPollCancelRef.current = false;
-    const tick = async () => {
-      if (briefPollCancelRef.current) return;
-      await refreshCalendarItems();
-      if (!briefPollCancelRef.current) {
-        briefPollTimeoutRef.current = setTimeout(tick, 1800);
-      }
-    };
-    briefPollTimeoutRef.current = setTimeout(tick, 400);
-  }, [refreshCalendarItems]);
-
-  const stopBriefGenerationPolling = useCallback(() => {
-    briefPollCancelRef.current = true;
-    if (briefPollTimeoutRef.current != null) {
-      clearTimeout(briefPollTimeoutRef.current);
-      briefPollTimeoutRef.current = null;
-    }
+  const handleGenerateVisualBriefs = useCallback((itemIds?: string[]) => {
+    setBriefsModalIds(itemIds || []);
   }, []);
-
-  useEffect(() => () => stopBriefGenerationPolling(), [stopBriefGenerationPolling]);
-
-  const handleGenerateVisualBriefs = useCallback(async (itemIds?: string[]) => {
-    setGeneratingBriefs(true);
-    setBriefsMessage(null);
-    startBriefGenerationPolling();
-    try {
-      const payload: { project_id: string; content_item_ids?: string[] } = { project_id: projectId };
-      if (itemIds?.length) payload.content_item_ids = itemIds;
-
-      const res = await fetch('/api/generate-visual-briefs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setBriefsMessage(json.error || 'Error al generar briefs');
-        return;
-      }
-
-      const total = typeof json.total === 'number' ? json.total : json.updated;
-      setBriefsMessage(`${json.updated} de ${total} briefs generados`);
-    } catch {
-      setBriefsMessage('Error de red al generar briefs');
-    } finally {
-      stopBriefGenerationPolling();
-      setGeneratingBriefs(false);
-      await refreshCalendarItems();
-    }
-  }, [projectId, supabase, startBriefGenerationPolling, stopBriefGenerationPolling, refreshCalendarItems]);
 
   return (
     <div>
@@ -163,19 +111,12 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          {briefsMessage && (
-            <span className="text-xs text-surface-600 px-2 py-1 bg-surface-50 rounded-full text-center">{briefsMessage}</span>
-          )}
           <button
             onClick={() => handleGenerateVisualBriefs()}
-            disabled={generatingBriefs || pendingBriefsCount === 0}
+            disabled={pendingBriefsCount === 0}
             className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
           >
-            {generatingBriefs
-              ? pendingBriefsCount > 0
-                ? `Generando briefs… (${pendingBriefsCount} pendientes)`
-                : 'Generando briefs…'
-              : pendingBriefsCount === 0
+            {pendingBriefsCount === 0
                 ? 'Briefs completados'
                 : `Generar briefs visuales (${pendingBriefsCount})`}
           </button>
@@ -195,7 +136,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           projectId={projectId}
           onItemsChange={setLocalItems}
           onGenerateBriefForPost={(id) => handleGenerateVisualBriefs([id])}
-          generatingBrief={generatingBriefs}
+          generatingBrief={false}
         />
       ) : (
         <CalendarGrid items={localItems} onSelectItem={setEditingItem} onItemsChange={setLocalItems} />
@@ -215,10 +156,17 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           onStatusChange={(status) => handleStatusUpdate(editingItem.id, status)}
           onClose={() => setEditingItem(null)}
           onDelete={() => handleDelete(editingItem.id)}
-          onGenerateBrief={async () => {
-            await handleGenerateVisualBriefs([editingItem.id]);
-          }}
-          generatingBrief={generatingBriefs}
+          onGenerateBrief={() => handleGenerateVisualBriefs([editingItem.id])}
+          generatingBrief={false}
+        />
+      )}
+
+      {briefsModalIds && (
+        <BriefsProgressModal
+          projectId={projectId}
+          contentItemIds={briefsModalIds.length > 0 ? briefsModalIds : undefined}
+          onClose={() => setBriefsModalIds(null)}
+          onComplete={() => refreshCalendarItems()}
         />
       )}
     </div>

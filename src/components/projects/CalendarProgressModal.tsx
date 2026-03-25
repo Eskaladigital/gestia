@@ -300,10 +300,16 @@ export function CalendarProgressModal({
               <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-surface-500">Progreso</span>
               <span className="font-display font-bold text-surface-900 text-sm">{progressPct}%</span>
             </div>
-            <div className="h-3 bg-surface-100 border-2 border-surface-900 relative overflow-hidden">
+            <div className="h-5 bg-surface-100 border-2 border-surface-900 relative overflow-hidden">
               <div
-                className="absolute inset-y-0 left-0 bg-accent-emerald transition-all duration-700 ease-out"
-                style={{ width: `${progressPct}%` }}
+                className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out border-r-2 border-surface-900 ${
+                  isTerminal ? 'bg-accent-emerald' : 'bg-brand-500 animate-progress-stripe'
+                }`}
+                style={{ 
+                  width: `${progressPct}%`,
+                  backgroundImage: !isTerminal ? 'linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent)' : 'none',
+                  backgroundSize: '2rem 2rem'
+                }}
               />
             </div>
             <p className="text-xs text-surface-500 mt-1 font-medium">
@@ -362,15 +368,15 @@ export function CalendarProgressModal({
                         const monthDone = isDone;
                         const monthProcessing = isActive && !isDone;
 
-                        let cellClass = 'aspect-square rounded-sm flex items-center justify-center text-[8px] font-bold ';
+                        let cellClass = 'relative aspect-square rounded-none border border-surface-200 flex items-center justify-center text-[8px] font-bold overflow-hidden ';
                         if (hasPost) {
-                          cellClass += 'bg-surface-900 text-white shadow-brutal-sm animate-cell-fill';
+                          cellClass = 'relative aspect-square rounded-none border-2 border-surface-900 bg-surface-900 text-white flex items-center justify-center text-[8px] font-bold shadow-brutal-sm animate-brutal-pop z-10';
                         } else if (monthDone) {
-                          cellClass += 'bg-surface-200 text-surface-500';
+                          cellClass += 'bg-surface-200 text-surface-400';
                         } else if (monthProcessing) {
-                          cellClass += 'bg-surface-100 text-surface-400';
+                          cellClass += 'bg-surface-50 text-surface-400';
                         } else {
-                          cellClass += 'bg-surface-50 text-surface-300';
+                          cellClass += 'bg-white text-surface-300';
                         }
 
                         return (

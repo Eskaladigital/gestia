@@ -57,6 +57,8 @@ module.exports = {
         'spin-slow': 'spin 12s linear infinite',
         'cell-fill': 'cellFill 0.35s cubic-bezier(0.34,1.56,0.64,1) both',
         'pulse-dot': 'pulseDot 1.4s ease-in-out infinite',
+        'brutal-pop': 'brutalPop 0.4s cubic-bezier(0.25, 1, 0.5, 1.25) both',
+        'progress-stripe': 'progressStripe 1s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -91,6 +93,15 @@ module.exports = {
           '0%, 100%': { opacity: '0.4', transform: 'scale(0.85)' },
           '50%': { opacity: '1', transform: 'scale(1)' },
         },
+        brutalPop: {
+          '0%': { transform: 'scale(0)', opacity: '0' },
+          '70%': { transform: 'scale(1.2)' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        progressStripe: {
+          '0%': { backgroundPosition: '0 0' },
+          '100%': { backgroundPosition: '2rem 0' },
+        }
       },
       fontSize: {
         'hero': ['clamp(3rem, 8vw, 7rem)', { lineHeight: '0.95', letterSpacing: '-0.03em', fontWeight: '900' }],
