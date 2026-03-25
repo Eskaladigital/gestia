@@ -8,7 +8,7 @@ export const maxDuration = 300;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const PARALLEL_VISUALS = 3;
+// Sequential processing: one visual at a time (like an n8n workflow)
 
 function clip(text: unknown, max = 6000): string {
   const s = typeof text === 'string' ? text.trim() : '';
@@ -216,55 +216,44 @@ export async function POST(request: NextRequest) {
         const completedPostIds = new Set<string>();
 
         try {
-          for (let i = 0; i < visualQueue.length; i += PARALLEL_VISUALS) {
+          for (let i = 0; i < visualQueue.length; i++) {
             if (signal.aborted) { aborted = true; break; }
 
-            const batch = visualQueue.slice(i, i + PARALLEL_VISUALS);
+            const job = visualQueue[i];
 
             send('progress', {
               phase: 'visual_start',
               visualsDone,
               totalVisuals: visualQueue.length,
-              postIdea: batch[0].postIdea.slice(0, 80),
-              postFormat: batch[0].postFormat,
-              label: batch.map(b => b.label).join(', '),
-              batchSize: batch.length,
+              postIdea: job.postIdea.slice(0, 80),
+              postFormat: job.postFormat,
+              label: job.label,
+              current: i + 1,
             });
 
-            const results = await Promise.allSettled(
-              batch.map(job => processOneVisual(job, project, user.id, supabase))
-            );
+            let result: VisualResult | null = null;
+            try {
+              result = await processOneVisual(job, project, user.id, supabase);
+            } catch (err) {
+              console.error(`[generate-visual-briefs] Failed visual ${job.contentItemId}[${job.visualIndex}]:`, err);
+            }
+
+            visualsDone++;
 
             if (signal.aborted) { aborted = true; break; }
 
-            for (let j = 0; j < results.length; j++) {
-              const result = results[j];
-              const job = batch[j];
-
-              if (result.status === 'fulfilled' && result.value) {
-                const r = result.value;
-
-                if (!postVisualResults.has(r.contentItemId)) {
-                  postVisualResults.set(r.contentItemId, []);
-                }
-                postVisualResults.get(r.contentItemId)!.push({
-                  index: r.visualIndex,
-                  label: r.label,
-                  prompt: r.prompt,
-                });
-
-                visualsDone++;
-              } else if (result.status === 'rejected') {
-                console.error(`[generate-visual-briefs] Failed visual ${job.contentItemId}[${job.visualIndex}]:`, result.reason);
-                visualsDone++;
-              } else {
-                visualsDone++;
+            if (result) {
+              if (!postVisualResults.has(result.contentItemId)) {
+                postVisualResults.set(result.contentItemId, []);
               }
+              postVisualResults.get(result.contentItemId)!.push({
+                index: result.visualIndex,
+                label: result.label,
+                prompt: result.prompt,
+              });
             }
 
-            for (const job of batch) {
-              if (completedPostIds.has(job.contentItemId)) continue;
-
+            if (!completedPostIds.has(job.contentItemId)) {
               const allVisualsForPost = visualQueue.filter(v => v.contentItemId === job.contentItemId);
               const doneForPost = postVisualResults.get(job.contentItemId)?.length || 0;
 
@@ -297,8 +286,8 @@ export async function POST(request: NextRequest) {
               totalVisuals: visualQueue.length,
               postsCompleted,
               totalPosts: posts.length,
-              label: batch.map(b => b.label).join(', '),
-              postIdea: batch[0].postIdea.slice(0, 80),
+              label: job.label,
+              postIdea: job.postIdea.slice(0, 80),
             });
           }
 
