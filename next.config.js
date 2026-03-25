@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['puppeteer'],
+  serverExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium'],
   async rewrites() {
     return [
       {

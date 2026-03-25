@@ -13,6 +13,7 @@
     "screenshot:portfolio": "node scripts/screenshot-portfolio.js"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^143.0.4",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.43.0",
     "clsx": "^2.1.0",
@@ -23,6 +24,7 @@
     "next": "^16.2.1",
     "openai": "^4.50.0",
     "puppeteer": "^24.40.0",
+    "puppeteer-core": "^24.40.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zustand": "^4.5.0"

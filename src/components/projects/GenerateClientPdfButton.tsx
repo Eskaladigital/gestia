@@ -48,6 +48,11 @@ const CONTENT_TYPE_LABELS: Record<string, string> = {
   corporativo: 'Corporativo',
 };
 
+const MEDIA_TYPE_LABELS: Record<string, string> = {
+  imagen: 'Imagen',
+  video: 'Video',
+};
+
 function sanitizeText(text: string | null | undefined): string {
   if (!text) return '';
   return (
@@ -279,6 +284,40 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         }
       }
 
+      // ========== ESTILO DE CONTENIDO ==========
+      const cstyle = data.project.content_style;
+      if (cstyle && typeof cstyle === 'object') {
+        const entries = Object.entries(cstyle as Record<string, number>).filter(([, v]) => v > 0);
+        if (entries.length > 0) {
+          sectionTitle('Estilo de Contenido (pesos)');
+          for (const [key, val] of entries) {
+            const label = CONTENT_TYPE_LABELS[key] || key;
+            checkPage(12);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+            doc.text(label.toUpperCase(), margin, y);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+            doc.text(`${val}%`, margin + 35, y);
+            doc.setFillColor(LIGHT_BG[0], LIGHT_BG[1], LIGHT_BG[2]);
+            doc.roundedRect(margin + 50, y - 3, 100, 4, 2, 2, 'F');
+            if (val > 0) {
+              doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
+              doc.roundedRect(margin + 50, y - 3, (val / 100) * 100, 4, 2, 2, 'F');
+            }
+            y += 10;
+          }
+          y += 5;
+        }
+      }
+
+      // ========== REGLAS IA PERSONALIZADAS ==========
+      if (data.project.ai_rules && typeof data.project.ai_rules === 'string' && data.project.ai_rules.trim()) {
+        sectionTitle('Reglas IA Personalizadas');
+        labelValue('Instrucciones adicionales para la IA', data.project.ai_rules.trim(), 'card');
+      }
+
       // ========== IDENTIDAD VISUAL ==========
       if (data.project.brand_summary || data.project.brand_colors?.length || data.project.brand_fonts?.length) {
         sectionTitle('Identidad Visual');
@@ -292,31 +331,38 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           doc.text('PALETA DE COLORES', margin, y);
           y += 6;
           
-          let colorX = margin;
           for (const c of data.project.brand_colors) {
-            checkPage(15);
+            checkPage(22);
             const hex = c.hex || '#000';
             const r = parseInt(hex.slice(1, 3), 16) || 0;
             const g = parseInt(hex.slice(3, 5), 16) || 0;
             const b = parseInt(hex.slice(5, 7), 16) || 0;
-            
-            if (colorX + 30 > pageW - margin) {
-              colorX = margin;
-              y += 18;
-            }
 
             doc.setFillColor(r, g, b);
             doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
-            doc.circle(colorX + 6, y + 4, 6, 'FD');
-            
-            doc.setFontSize(8);
+            doc.circle(margin + 6, y + 4, 5, 'FD');
+
+            const colorLabel = [
+              hex.toUpperCase(),
+              sanitizeText(c.name) || '',
+            ].filter(Boolean).join(' — ');
+            doc.setFontSize(9);
             doc.setTextColor(DARK[0], DARK[1], DARK[2]);
             doc.setFont('helvetica', 'bold');
-            doc.text(hex.toUpperCase(), colorX, y + 14);
-            
-            colorX += 35;
+            doc.text(colorLabel, margin + 14, y + 2);
+
+            const colorDetail = [sanitizeText(c.usage), sanitizeText(c.notes)].filter(Boolean).join(' · ');
+            if (colorDetail) {
+              doc.setFontSize(8);
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+              doc.text(doc.splitTextToSize(colorDetail, contentW - 20), margin + 14, y + 7);
+              y += 14;
+            } else {
+              y += 10;
+            }
           }
-          y += 20;
+          y += 4;
         }
 
         if (data.project.brand_fonts?.length) {
@@ -358,6 +404,18 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
               bid.typography_analysis ? `Tipografía: ${sanitizeText(bid.typography_analysis)}` : '',
               bid.layout_components ? `Layout: ${sanitizeText(bid.layout_components)}` : '',
             ].filter(Boolean).join('\n\n'), 'card');
+          }
+          if (bid.imagery_iconography) {
+            labelValue('Imágenes e Iconografía', sanitizeText(bid.imagery_iconography), 'card');
+          }
+          if (bid.brand_feel_keywords?.length) {
+            labelValue('Sensación de Marca (keywords)', bid.brand_feel_keywords.map((k: string) => sanitizeText(k)).join(', '));
+          }
+          if (bid.accessibility_notes) {
+            labelValue('Notas de Accesibilidad', sanitizeText(bid.accessibility_notes));
+          }
+          if (bid.rrss_practical_tips?.length) {
+            labelValue('Tips Prácticos para RRSS', bid.rrss_practical_tips.map((t: string) => `• ${sanitizeText(t)}`).join('\n'), 'card');
           }
           if (bid.dos?.length || bid.donts?.length) {
             checkPage(20);
@@ -453,6 +511,114 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         }
       }
 
+      // ========== ANÁLISIS IA DE COMPETIDORES (detallado) ==========
+      if (strat) {
+        let compAn = strat.competitor_analysis;
+        if (typeof compAn === 'string') { try { compAn = JSON.parse(compAn); } catch { compAn = null; } }
+        if (compAn && typeof compAn === 'object') {
+          const ca = compAn as Record<string, unknown>;
+          const comps = Array.isArray(ca.competitors) ? ca.competitors : [];
+          if (comps.length > 0) {
+            sectionTitle('Análisis IA de Competidores');
+            for (const comp of comps as Record<string, unknown>[]) {
+              checkPage(30);
+              doc.setFontSize(10);
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(BRAND[0], BRAND[1], BRAND[2]);
+              doc.text(sanitizeText(comp.name as string) || 'Competidor', margin, y);
+              y += 5;
+              if (Array.isArray(comp.strengths) && comp.strengths.length) {
+                labelValue('Fortalezas', (comp.strengths as string[]).map(s => `• ${sanitizeText(s)}`).join('\n'));
+              }
+              if (Array.isArray(comp.weaknesses) && comp.weaknesses.length) {
+                labelValue('Debilidades', (comp.weaknesses as string[]).map(s => `• ${sanitizeText(s)}`).join('\n'));
+              }
+              if (comp.estimated_frequency) {
+                labelValue('Frecuencia estimada', sanitizeText(comp.estimated_frequency as string));
+              }
+              if (comp.tone_detected) {
+                labelValue('Tono detectado', sanitizeText(comp.tone_detected as string));
+              }
+              if (Array.isArray(comp.detected_content_types) && comp.detected_content_types.length) {
+                labelValue('Tipos de contenido', (comp.detected_content_types as string[]).join(', '));
+              }
+            }
+            if (Array.isArray(ca.market_opportunities) && ca.market_opportunities.length) {
+              labelValue('Oportunidades de mercado', (ca.market_opportunities as string[]).map(s => `• ${sanitizeText(s)}`).join('\n'), 'card');
+            }
+            if (Array.isArray(ca.differentiation_ideas) && ca.differentiation_ideas.length) {
+              labelValue('Ideas de diferenciación', (ca.differentiation_ideas as string[]).map(s => `• ${sanitizeText(s)}`).join('\n'), 'card');
+            }
+            if (Array.isArray(ca.content_gaps) && ca.content_gaps.length) {
+              labelValue('Huecos de contenido', (ca.content_gaps as string[]).map(s => `• ${sanitizeText(s)}`).join('\n'), 'card');
+            }
+            if (typeof ca.recommendations === 'string' && ca.recommendations.trim()) {
+              labelValue('Recomendaciones sobre competencia', sanitizeText(ca.recommendations), 'card');
+            }
+          }
+        }
+      }
+
+      // ========== LÍNEAS TEMÁTICAS ==========
+      if (strat) {
+        let tl = strat.thematic_lines;
+        if (typeof tl === 'string') { try { tl = JSON.parse(tl); } catch { tl = null; } }
+        if (Array.isArray(tl) && tl.length > 0) {
+          sectionTitle('Líneas Temáticas');
+          for (const line of tl as Record<string, unknown>[]) {
+            checkPage(25);
+            doc.setFillColor(LIGHT_BG[0], LIGHT_BG[1], LIGHT_BG[2]);
+            doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+            doc.setLineWidth(0.3);
+
+            const lTitle = sanitizeText(line.theme as string) || 'Línea';
+            const lDesc = sanitizeText(line.description as string) || '';
+            const lFreq = line.frequency ? `Frecuencia: ${sanitizeText(line.frequency as string)}` : '';
+            const lTopics = Array.isArray(line.example_topics) && line.example_topics.length
+              ? `Temas: ${(line.example_topics as string[]).map(t => sanitizeText(t)).join(', ')}`
+              : '';
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            const dLines = doc.splitTextToSize(lDesc, contentW - 10);
+            const fLine = lFreq ? doc.splitTextToSize(lFreq, contentW - 10) : [];
+            const tLines = lTopics ? doc.splitTextToSize(lTopics, contentW - 10) : [];
+
+            const rH = 8 + dLines.length * 4.5 + (fLine.length ? fLine.length * 4.5 + 2 : 0) + (tLines.length ? tLines.length * 4.5 + 2 : 0);
+            doc.roundedRect(margin, y, contentW, rH, 2, 2, 'FD');
+
+            doc.setFontSize(10);
+            doc.setTextColor(BRAND[0], BRAND[1], BRAND[2]);
+            doc.setFont('helvetica', 'bold');
+            doc.text(lTitle, margin + 4, y + 6);
+
+            let tY = y + 11;
+            doc.setFontSize(9);
+            doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+            doc.setFont('helvetica', 'normal');
+            doc.text(dLines, margin + 4, tY);
+            tY += dLines.length * 4.5;
+
+            if (fLine.length) {
+              tY += 2;
+              doc.setFontSize(8);
+              doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+              doc.setFont('helvetica', 'bold');
+              doc.text(fLine, margin + 4, tY);
+              tY += fLine.length * 4.5;
+            }
+            if (tLines.length) {
+              tY += 2;
+              doc.setFontSize(8);
+              doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+              doc.setFont('helvetica', 'italic');
+              doc.text(tLines, margin + 4, tY);
+            }
+            y += rH + 4;
+          }
+        }
+      }
+
       // ========== COMPETIDORES ==========
       if (data.competitors.length > 0) {
         sectionTitle(`Competidores (${data.competitors.length})`);
@@ -530,22 +696,30 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           const tableData = items.map((item: Record<string, unknown>) => {
             const d = new Date(item.scheduled_date as string);
             const dayLabel = d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit' }).toUpperCase();
+            const sp = item.production_specs as Record<string, unknown> | null;
+            const specBits: string[] = [];
+            if (sp) {
+              if (sp.num_slides != null) specBits.push(`${sp.num_slides} slides`);
+              if (sp.duration_seconds != null) specBits.push(`${sp.duration_seconds}s`);
+              if (sp.media_type) specBits.push(MEDIA_TYPE_LABELS[sp.media_type as string] || (sp.media_type as string));
+            }
             return [
               dayLabel,
               (FORMAT_LABELS[item.format as string] || (item.format as string) || '-').toUpperCase(),
               CONTENT_TYPE_LABELS[item.content_type as string] || (item.content_type as string),
               sanitizeText(String(item.idea || '')),
+              specBits.join(' · ') || '-',
             ];
           });
 
           autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
-            head: [['Fecha', 'Formato', 'Tipo', 'Idea Principal']],
+            head: [['Fecha', 'Formato', 'Tipo', 'Idea Principal', 'Produccion']],
             body: tableData,
             theme: 'grid',
             styles: {
-              fontSize: 8.5,
+              fontSize: 8,
               cellPadding: 3,
               textColor: DARK,
               lineColor: BORDER,
@@ -555,13 +729,14 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
               fillColor: LIGHT_BG,
               textColor: GRAY,
               fontStyle: 'bold',
-              fontSize: 8,
+              fontSize: 7.5,
             },
             columnStyles: {
-              0: { cellWidth: 22, fontStyle: 'bold' },
-              1: { cellWidth: 26, fontStyle: 'bold' },
-              2: { cellWidth: 28 },
+              0: { cellWidth: 20, fontStyle: 'bold' },
+              1: { cellWidth: 22, fontStyle: 'bold' },
+              2: { cellWidth: 24 },
               3: { cellWidth: 'auto' },
+              4: { cellWidth: 30 },
             },
           });
 
@@ -585,13 +760,36 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           const copyL = doc.splitTextToSize(sanitizeText(item.copy), contentW - 6);
           const ctaL = item.cta ? doc.splitTextToSize(sanitizeText(item.cta), contentW - 6) : [];
           const hashL = item.hashtags?.length ? doc.splitTextToSize(sanitizeText(item.hashtags.join(' ')), contentW - 6) : [];
+          const goalL = item.post_goal ? doc.splitTextToSize(sanitizeText(item.post_goal), contentW - 6) : [];
+          const plats = Array.isArray(item.platforms) && item.platforms.length ? item.platforms.join(', ') : '';
+          const platL = plats ? doc.splitTextToSize(plats, contentW - 6) : [];
 
-          let cardHeight = 8; // header
+          const specs = item.production_specs;
+          const specParts: string[] = [];
+          if (specs) {
+            if (specs.num_slides != null) specParts.push(`Slides: ${specs.num_slides}`);
+            if (specs.duration_seconds != null) specParts.push(`Duracion: ${specs.duration_seconds}s`);
+            if (specs.media_type) specParts.push(`Medio: ${MEDIA_TYPE_LABELS[specs.media_type] || specs.media_type}`);
+          }
+          const specLine = specParts.join('  |  ');
+          const specLineL = specLine ? doc.splitTextToSize(specLine, contentW - 6) : [];
+          const sceneSumL = specs?.scene_summary?.trim() ? doc.splitTextToSize(sanitizeText(specs.scene_summary), contentW - 6) : [];
+
+          const briefL = item.visual_brief ? doc.splitTextToSize(sanitizeText(item.visual_brief), contentW - 6) : [];
+          const promptL = item.visual_prompt ? doc.splitTextToSize(sanitizeText(item.visual_prompt), contentW - 6) : [];
+
+          let cardHeight = 8;
           cardHeight += 4 + 4 + ideaL.length * 4.5 + 2;
           cardHeight += 4 + 4 + copyL.length * 4.5 + 4;
           if (ctaL.length) cardHeight += 4 + 4 + ctaL.length * 4.5 + 2;
+          if (goalL.length) cardHeight += 4 + 4 + goalL.length * 4.5 + 2;
           if (hashL.length) cardHeight += 4 + 4 + hashL.length * 4.5 + 2;
-          cardHeight += 2; 
+          if (platL.length) cardHeight += 4 + 4 + platL.length * 4.5 + 2;
+          if (specLineL.length) cardHeight += 4 + 4 + specLineL.length * 4.5 + 2;
+          if (sceneSumL.length) cardHeight += 4 + 4 + sceneSumL.length * 4.5 + 2;
+          if (briefL.length) cardHeight += 4 + 4 + briefL.length * 4.5 + 2;
+          if (promptL.length) cardHeight += 4 + 4 + promptL.length * 4.5 + 2;
+          cardHeight += 2;
 
           checkPage(cardHeight + 10);
 
@@ -630,7 +828,13 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           drawField('IDEA / ENFOQUE', ideaL);
           drawField('COPY (TEXTO)', copyL, 4);
           drawField('CALL TO ACTION (CTA)', ctaL);
+          drawField('OBJETIVO DEL POST', goalL);
           drawField('HASHTAGS', hashL);
+          drawField('PLATAFORMAS', platL);
+          drawField('PRODUCCION (slides / duracion / medio)', specLineL);
+          drawField('GUION / ESCENAS', sceneSumL);
+          drawField('BRIEF VISUAL', briefL);
+          drawField('PROMPT IA (generacion de imagen)', promptL);
 
           y += bodyH + 8;
         }

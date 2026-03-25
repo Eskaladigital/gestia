@@ -1,4 +1,5 @@
 import { createServiceSupabase } from '@/lib/supabase/server';
+import type { Browser, Page } from 'puppeteer-core';
 
 const BUCKET = 'screenshots';
 
@@ -42,7 +43,36 @@ function storageSafeSlug(slug: string): string {
   return slug.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').slice(0, 120);
 }
 
-async function dismissCookieBanners(page: import('puppeteer').Page) {
+const isVercel = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+async function launchBrowser(): Promise<Browser> {
+  if (isVercel) {
+    const chromiumMod = await import('@sparticuz/chromium');
+    const chromium: any = chromiumMod.default;
+    const puppeteerCore = await import('puppeteer-core');
+    chromium.setHeadlessMode = true;
+    chromium.setGraphicsMode = false;
+    return puppeteerCore.default.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport ?? { width: 1400, height: 900 },
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    }) as unknown as Browser;
+  }
+
+  const puppeteer = await import('puppeteer');
+  return puppeteer.default.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--window-size=1400,900',
+    ],
+  }) as unknown as Browser;
+}
+
+async function dismissCookieBanners(page: Page) {
   for (const sel of COOKIE_SELECTORS) {
     try {
       const h = await page.$(sel);
@@ -83,7 +113,8 @@ async function ensureBucket(supabase: ReturnType<typeof createServiceSupabase>) 
 }
 
 /**
- * Captura con Puppeteer las primeras URLs, sube JPEG al bucket `screenshots` y devuelve metadata por URL.
+ * Captura con Puppeteer/Chromium las primeras URLs, sube JPEG al bucket `screenshots` y devuelve metadata por URL.
+ * En Vercel usa @sparticuz/chromium (headless serverless); en local usa puppeteer con Chrome bundled.
  * Si falta service role o Puppeteer falla, devuelve un Map vacío (el análisis web sigue).
  */
 export async function captureWebScreenshotsToStorage(
@@ -105,26 +136,16 @@ export async function captureWebScreenshotsToStorage(
     return results;
   }
 
-  let puppeteer: typeof import('puppeteer');
+  let browser: Browser;
   try {
-    puppeteer = await import('puppeteer');
+    browser = await launchBrowser();
   } catch (e) {
-    console.warn('[screenshots] Puppeteer no disponible:', e);
+    console.warn('[screenshots] No se pudo lanzar el navegador:', e);
     return results;
   }
 
   const supabase = createServiceSupabase();
   await ensureBucket(supabase);
-
-  const browser = await puppeteer.default.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--window-size=1400,900',
-    ],
-  });
 
   try {
     const page = await browser.newPage();
