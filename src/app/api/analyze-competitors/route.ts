@@ -56,14 +56,7 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('project_id', project_id);
 
-    if (!competitors || competitors.length === 0) {
-      markErrorOnFailure = false;
-      return NextResponse.json({
-        success: true,
-        analysis: { competitors: [], market_opportunities: [], differentiation_ideas: [], content_gaps: [] },
-        message: 'No hay competidores definidos',
-      });
-    }
+    const hasManualCompetitors = competitors && competitors.length > 0;
 
     const scraper = getScrapingProvider();
     const seenUrls = new Set<string>();
@@ -83,21 +76,23 @@ export async function POST(request: NextRequest) {
       if (h) excludeHostsForSerp.add(h);
     }
 
-    const manualBases = [
-      ...new Set(
-        competitors
-          .map(c => c.url?.trim())
-          .filter((u): u is string => !!u)
-          .map(u => normalizeUrl(u))
-      ),
-    ];
+    const manualBases = hasManualCompetitors
+      ? [
+          ...new Set(
+            competitors
+              .map(c => c.url?.trim())
+              .filter((u): u is string => !!u)
+              .map(u => normalizeUrl(u))
+          ),
+        ]
+      : [];
 
     for (const base of manualBases) {
       const hk = hostKey(base);
       if (hk) excludeHostsForSerp.add(hk);
     }
 
-    // 1) Mismo enfoque que analyze-site: discoverPages + luego scrape de cada URL
+    // 1) Scrape competidores manuales (si hay)
     for (const base of manualBases) {
       if (urlsToScrape.length >= GLOBAL_MAX_SCRAPE_URLS) break;
       const discovered = await scraper.discoverPages(base, { maxExtraPages: MANUAL_MAX_EXTRA_PAGES });
@@ -108,13 +103,16 @@ export async function POST(request: NextRequest) {
       await new Promise(r => setTimeout(r, 400));
     }
 
-    // 2) Google orgánico vía Apify (mismo APIFY_API_TOKEN que Website Content Crawler)
+    // 2) Google orgánico: busca competidores del sector SIEMPRE (haya manuales o no)
     const searchQueries: string[] = [];
     if (project.sector?.trim() && project.location?.trim()) {
       searchQueries.push(`${project.sector.trim()} ${project.location.trim()}`);
     }
     if (project.sector?.trim() && project.name?.trim()) {
       searchQueries.push(`${project.name.trim()} ${project.sector.trim()}`);
+    }
+    if (!hasManualCompetitors && project.sector?.trim()) {
+      searchQueries.push(`mejores ${project.sector.trim()} ${project.location?.trim() || ''} redes sociales`.trim());
     }
     const uniqQueries = [...new Set(searchQueries.map(q => q.trim()).filter(q => q.length > 3))];
 
@@ -123,7 +121,17 @@ export async function POST(request: NextRequest) {
       serpSeedUrls = await discoverCompetitorUrlsFromGoogle({
         queries: uniqQueries,
         excludeHosts: excludeHostsForSerp,
-        maxUrls: SERP_MAX_SEEDS,
+        maxUrls: hasManualCompetitors ? SERP_MAX_SEEDS : 5,
+      });
+    }
+
+    // Sin competidores manuales NI resultados de búsqueda → no hay nada que analizar
+    if (!hasManualCompetitors && serpSeedUrls.length === 0) {
+      markErrorOnFailure = false;
+      return NextResponse.json({
+        success: true,
+        analysis: { competitors: [], market_opportunities: [], differentiation_ideas: [], content_gaps: [] },
+        message: 'No hay competidores definidos y no se encontraron resultados en búsqueda',
       });
     }
 
@@ -157,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     const { system, user: userPrompt } = buildCompetitorAnalysisPrompt(
       project,
-      competitors,
+      competitors ?? [],
       competitorContent
     );
     const aiResponse = await callAI<CompetitorAnalysis>(system, userPrompt, {

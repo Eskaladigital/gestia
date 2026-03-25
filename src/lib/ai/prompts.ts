@@ -314,8 +314,9 @@ Tu tarea es transformar evidencia parcial y desigual sobre competidores en un an
 
 REGLAS:
 - Devuelve una entrada por cada competidor declarado cuando sea posible, usando su mismo nombre.
+- Si NO hay competidores declarados manualmente pero hay resultados de búsqueda Google, identifica los negocios más relevantes del sector como competidores potenciales. Asegúrate de incluir "name" y "source": "discovered" para indicar que fueron descubiertos automáticamente.
 - Si de un competidor apenas hay evidencia, mantén sus arrays vacíos y usa "No determinable con la evidencia disponible" en campos como tono o frecuencia.
-- Solo añade actores adicionales al array "competitors" si están claramente identificados en la evidencia.
+- Cuando haya tanto competidores declarados como resultados de búsqueda, añade actores adicionales al array "competitors" si están claramente identificados en la evidencia.
 - Las fortalezas y debilidades deben derivarse del contenido observado, no de estereotipos del sector.
 - "detected_content_types" debe recoger formatos o enfoques realmente observables.
 - "estimated_frequency" y "tone_detected" deben ser prudentes; si no hay base suficiente, dilo explícitamente.
@@ -346,7 +347,9 @@ FORMATO DE RESPUESTA JSON:
 ${buildProjectContext(project)}
 
 ## COMPETIDORES DEFINIDOS
-${competitors.map(c => `- ${c.name}: ${c.url || c.social_url || 'Sin URL'} (Razón: ${c.reason || 'No especificada'})`).join('\n')}
+${competitors.length > 0
+  ? competitors.map(c => `- ${c.name}: ${c.url || c.social_url || 'Sin URL'} (Razón: ${c.reason || 'No especificada'})`).join('\n')
+  : 'El usuario NO ha declarado competidores manualmente. Identifica los competidores más relevantes a partir de los resultados de búsqueda de Google incluidos abajo. Busca negocios del mismo sector y zona geográfica que ofrezcan servicios o productos similares.'}
 
 ## CONTENIDO SCRAPEADO DE COMPETIDORES
 ${competitorContent || 'No se ha podido obtener contenido de los competidores. Analiza basándote en la información disponible.'}
@@ -355,7 +358,7 @@ Objetivo:
 - describir a cada competidor con prudencia,
 - detectar huecos del mercado,
 - y proponer diferenciación accionable para el cliente.
-
+${competitors.length === 0 ? '\nIMPORTANTE: Como no hay competidores declarados, usa los resultados de búsqueda Google para identificar 3-5 competidores potenciales del sector. Indica claramente que fueron descubiertos automáticamente.' : ''}
 Si la evidencia es débil, dilo con claridad en vez de completar huecos.`,
   };
 }
