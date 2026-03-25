@@ -10,6 +10,9 @@ import {
 } from '@/lib/projects/pipeline';
 import type { CalendarGeneration } from '@/types';
 
+export const maxDuration = 300;
+export const runtime = 'nodejs';
+
 const ALLOWED_DURATION = new Set([1, 3, 6, 9]);
 const ALLOWED_FORMATS = new Set(['story', 'carrusel', 'publicacion', 'reel']);
 const ALLOWED_CONTENT_TYPES = new Set([

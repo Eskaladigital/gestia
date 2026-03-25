@@ -6,6 +6,9 @@ import { discoverCompetitorUrlsFromGoogle, hasGoogleSerpRestKey } from '@/lib/sc
 import { callAI, buildCompetitorAnalysisPrompt } from '@/lib/ai';
 import type { CompetitorAnalysis } from '@/types';
 
+export const maxDuration = 300;
+export const runtime = 'nodejs';
+
 /** Máximo de URLs finales a scrapear (manual + Google + subpáginas descubiertas). */
 const GLOBAL_MAX_SCRAPE_URLS = 48;
 /** Por competidor manual: home + hasta N URLs internas priorizadas (mismo criterio que analyze-site). */

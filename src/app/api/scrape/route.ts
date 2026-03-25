@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { getScrapingProvider } from '@/lib/scraping';
 
-// Endpoint para scrapear una URL específica y guardar el resultado
+export const maxDuration = 60;
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabase();

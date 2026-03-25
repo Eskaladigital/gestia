@@ -5,6 +5,9 @@ import { callAI, buildStrategyPrompt } from '@/lib/ai';
 import { canRunGenerateStrategyStep, type StrategyForPipeline } from '@/lib/projects/pipeline';
 import type { StrategyGeneration } from '@/types';
 
+export const maxDuration = 120;
+export const runtime = 'nodejs';
+
 function clipText(value: unknown, max = 2000): string {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text) return '';

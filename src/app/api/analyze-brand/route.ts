@@ -10,6 +10,9 @@ import {
 } from '@/lib/scraping/provider';
 import type { BrandColorEntry, BrandFontEntry, BrandIdentityDetail } from '@/types';
 
+export const maxDuration = 120;
+export const runtime = 'nodejs';
+
 interface BrandAnalysisResult {
   brand_colors: Array<{
     hex: string;

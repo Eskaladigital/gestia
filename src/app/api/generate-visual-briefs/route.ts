@@ -4,6 +4,9 @@ import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
 import { buildVisualBriefsPrompt, callAI } from '@/lib/ai';
 import type { VisualBriefGeneration, ContentItem } from '@/types';
 
+export const maxDuration = 300;
+export const runtime = 'nodejs';
+
 const BATCH_SIZE = 10;
 
 function clipBrief(text: unknown, max = 4000): string {
