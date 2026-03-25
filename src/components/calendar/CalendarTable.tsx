@@ -222,7 +222,19 @@ export function CalendarTable({
                                 🎨 Brief {expandedBrief === item.id ? '▲' : '▼'}
                               </button>
                             ) : (
-                              <span className="text-xs text-surface-300 font-medium" title="Sin brief visual">sin brief</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-surface-400 font-medium">Sin brief</span>
+                                {onGenerateBriefForPost && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onGenerateBriefForPost(item.id)}
+                                    disabled={generatingBrief}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-brand-600 hover:text-brand-700 underline disabled:opacity-50"
+                                  >
+                                    Generar
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -274,9 +286,21 @@ export function CalendarTable({
                         {expandedBrief === item.id && item.visual_brief && (
                           <div className="mt-3 border-t-2 border-surface-900 pt-3 space-y-3">
                             <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-surface-500">Brief Creativo</span>
-                                <span className="text-[10px] text-surface-400">— para diseñador / equipo</span>
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-surface-500">Brief Creativo</span>
+                                  <span className="text-[10px] text-surface-400">— para diseñador / equipo</span>
+                                </div>
+                                {onGenerateBriefForPost && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onGenerateBriefForPost(item.id)}
+                                    disabled={generatingBrief}
+                                    className="text-[10px] font-bold uppercase text-brand-600 hover:text-brand-700 border border-brand-300 px-1.5 py-0.5 hover:bg-brand-50 transition-colors disabled:opacity-50"
+                                  >
+                                    Regenerar
+                                  </button>
+                                )}
                               </div>
                               <div className="bg-surface-50 border-2 border-surface-200 p-3 text-sm text-surface-800 leading-relaxed whitespace-pre-wrap">
                                 {item.visual_brief}
