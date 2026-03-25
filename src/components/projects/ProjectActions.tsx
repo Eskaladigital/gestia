@@ -141,6 +141,27 @@ export function ProjectActions({
   const canRunStrategy = pipelineFlags.webAnalyzed && pipelineFlags.competitorsAnalyzed;
   const anyBusy = !!loading;
 
+  async function runClearCalendar() {
+    if (!confirm('¿Estás seguro de que quieres borrar TODAS las publicaciones de este calendario? Esta acción no se puede deshacer.')) return;
+    
+    setLoading('limpiando calendario');
+    setError('');
+    try {
+      const res = await fetch('/api/clear-calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res));
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      setError(`Error al limpiar calendario: ${msg}`);
+    } finally {
+      setLoading(null);
+    }
+  }
+
   function openCalendarFlow() {
     if (!phase1Complete || loading) return;
     setCalendarModeChoice('append');
@@ -317,12 +338,23 @@ export function ProjectActions({
                 </Button>
               </span>
               {hasCalendar && (
-                <Link
-                  href={`${base}/calendar`}
-                  className="inline-flex items-center text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-150"
-                >
-                  Abrir calendario →
-                </Link>
+                <>
+                  <Link
+                    href={`${base}/calendar`}
+                    className="inline-flex items-center text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-150"
+                  >
+                    Abrir calendario →
+                  </Link>
+                  <Button
+                    variant="danger"
+                    onClick={runClearCalendar}
+                    loading={loading === 'limpiando calendario'}
+                    disabled={anyBusy}
+                    title="Borra todas las publicaciones de este proyecto"
+                  >
+                    Limpiar calendario
+                  </Button>
+                </>
               )}
             </div>
             {!phase1Complete && (
