@@ -145,7 +145,7 @@ OBLIGATORIO: Objetos concretos (no "paisaje bonito"), personas con acción (no "
 
 PROHIBIDO: Descripciones vagas, briefs genéricos, prompts de IA cortos o genéricos, repetir estilo visual en posts seguidos, decir "usar colores de marca" sin especificar cuáles y dónde.
 
-VISUAL_PROMPT: Comenzar con estilo (fotografía editorial, flat vector, etc.), sujeto detallado, composición, iluminación específica, --ar correcto, NO incluir texto (se añade en postproducción), mínimo 60 palabras.
+VISUAL_PROMPT: Estructurar siempre de forma rica y muy descriptiva en: "Escena:", "Composición:" (incluir --ar), "Sujetos:", "Luz y Atmósfera:", "Fondo:", y "Estilo:". Cada parte debe tener un nivel de detalle fotográfico/editorial. NO incluir texto (se añade en postproducción). Si es carrusel, generar un prompt con esta estructura por cada slide.
 
 - Responde en español. Devuelve SOLO JSON válido.`,
   },

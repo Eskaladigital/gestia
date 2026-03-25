@@ -780,15 +780,16 @@ PROHIBIDO:
 - Repetir el mismo estilo visual en posts consecutivos
 
 REGLAS PARA EL VISUAL_PROMPT (IA generativa):
-- Comenzar con el estilo: "Fotografía editorial", "Ilustración flat vector", "Foto lifestyle", etc.
-- Describir el sujeto principal con detalle
-- Describir la composición y el encuadre
-- Describir la iluminación específica (golden hour, luz cenital, contraluz, etc.)
-- Incluir aspect ratio: --ar 9:16 (story/reel), --ar 1:1 o --ar 4:5 (publicación)
-- Para carruseles: un prompt POR CADA slide, etiquetado
-- Para reels: describir el key frame más representativo
-- NO incluir texto en el prompt de IA (la IA generativa es mala con texto; el texto se añade en postproducción)
-- Longitud mínima: 60 palabras por prompt
+- Debe ser extremadamente rico, detallado y estructurado en las siguientes secciones:
+  1. "Escena:": Descripción general de la situación, entorno y contexto principal.
+  2. "Composición:": Tipo de plano, encuadre, ángulo de cámara, disposición de elementos para crear profundidad, e incluir el aspect ratio al final (--ar 9:16 para story/reel, --ar 1:1 o --ar 4:5 para publicación).
+  3. "Sujetos:": Descripción física minuciosa de protagonistas u objetos principales (texturas, colores específicos, ropas, acciones, gestos, detalles táctiles).
+  4. "Luz y Atmósfera:": Tipo de iluminación (ej. luz natural del día, luz cálida de invernadero, golden hour, contraluz), cómo incide en los sujetos, las sombras y la sensación o mood que transmite.
+  5. "Fondo:": Qué hay detrás, nivel de nitidez (ej. desenfoque suave, bokeh orgánico), colores predominantes y su relación con el primer plano.
+  6. "Estilo:": Estética visual (ej. Fotografía de stock con estética editorial, ilustración flat vector), texturas (ej. grano de película, barro, madera), características de lente simuladas (ej. apertura amplia, profundidad de campo reducida).
+- Para carruseles: un prompt estructurado completo POR CADA slide, etiquetado ("Slide 1:", "Slide 2:", etc.).
+- Para reels/video: describir el fotograma clave (key frame) más representativo usando esta misma estructura detallada.
+- NO incluir texto literal en el prompt de IA (el texto se añade en postproducción).
 
 Responde en español.
 Devuelve SOLO JSON válido.
