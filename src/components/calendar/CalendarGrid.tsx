@@ -170,16 +170,16 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2 sm:gap-3">
-          <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-surface-100 transition-colors text-surface-500 hover:text-surface-900">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          <button onClick={prevMonth} className="p-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-surface-900">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
           </button>
-          <h2 className="font-display text-lg sm:text-xl font-bold text-surface-900 min-w-[160px] sm:min-w-[200px] text-center">
+          <h2 className="font-display text-lg sm:text-xl font-black text-surface-900 uppercase tracking-wider min-w-[160px] sm:min-w-[200px] text-center">
             {MONTH_NAMES[currentMonth]} {currentYear}
           </h2>
-          <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-surface-100 transition-colors text-surface-500 hover:text-surface-900">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          <button onClick={nextMonth} className="p-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-surface-900">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
           </button>
-          <span className="text-sm text-surface-500 ml-auto sm:ml-0">{postsThisMonth} posts</span>
+          <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest ml-auto sm:ml-0">{postsThisMonth} posts</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex flex-wrap gap-1">
@@ -188,7 +188,7 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
               const isActive = y === currentYear && m === currentMonth;
               return (
                 <button key={key} onClick={() => { setCurrentYear(y); setCurrentMonth(m); }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${isActive ? 'bg-brand-600 text-white' : 'bg-surface-100 text-surface-500 hover:bg-surface-200'}`}>
+                  className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider border-2 transition-all ${isActive ? 'bg-brand-600 text-white border-surface-900 shadow-brutal-sm' : 'bg-white text-surface-500 border-surface-200 hover:border-surface-900 hover:text-surface-900'}`}>
                   {MONTH_NAMES[m].slice(0, 3)}
                 </button>
               );
@@ -198,18 +198,18 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
       </div>
 
       {/* Legend - hidden on mobile, visible on md+ */}
-      <div className="hidden md:flex flex-wrap gap-x-6 gap-y-2 mb-4 bg-white rounded-xl border border-surface-200 px-4 py-3">
+      <div className="hidden md:flex flex-wrap gap-x-6 gap-y-2 mb-4 bg-white border-2 border-surface-900 shadow-brutal-sm px-4 py-3">
         <div>
-          <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wider mb-1.5">Formato (icono)</p>
+          <p className="text-[10px] font-bold text-surface-900 uppercase tracking-[0.15em] mb-1.5">Formato</p>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5"><FormatIcon format="story" /><span className="text-xs text-surface-600">Story</span></div>
-            <div className="flex items-center gap-1.5"><FormatIcon format="carrusel" /><span className="text-xs text-surface-600">Carrusel</span></div>
-            <div className="flex items-center gap-1.5"><FormatIcon format="publicacion" /><span className="text-xs text-surface-600">Publicación</span></div>
-            <div className="flex items-center gap-1.5"><FormatIcon format="reel" /><span className="text-xs text-surface-600">Reel</span></div>
+            <div className="flex items-center gap-1.5"><FormatIcon format="story" /><span className="text-xs font-medium text-surface-700">Story</span></div>
+            <div className="flex items-center gap-1.5"><FormatIcon format="carrusel" /><span className="text-xs font-medium text-surface-700">Carrusel</span></div>
+            <div className="flex items-center gap-1.5"><FormatIcon format="publicacion" /><span className="text-xs font-medium text-surface-700">Publicación</span></div>
+            <div className="flex items-center gap-1.5"><FormatIcon format="reel" /><span className="text-xs font-medium text-surface-700">Reel</span></div>
           </div>
         </div>
-        <div className="border-l border-surface-200 pl-6">
-          <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wider mb-1.5">Intención (color tarjeta)</p>
+        <div className="border-l-2 border-surface-900 pl-6">
+          <p className="text-[10px] font-bold text-surface-900 uppercase tracking-[0.15em] mb-1.5">Intención</p>
           <div className="flex items-center gap-3">
             {[
               { key: 'educativo', label: 'Educativo', dot: 'bg-blue-500' },
@@ -220,19 +220,19 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
               { key: 'corporativo', label: 'Corporativo', dot: 'bg-surface-500' },
             ].map(t => (
               <div key={t.key} className="flex items-center gap-1">
-                <div className={`w-2.5 h-2.5 rounded-full ${t.dot}`} />
-                <span className="text-xs text-surface-600">{t.label}</span>
+                <div className={`w-2.5 h-2.5 border border-surface-900 ${t.dot}`} />
+                <span className="text-xs font-medium text-surface-700">{t.label}</span>
               </div>
             ))}
           </div>
         </div>
-        <div className="border-l border-surface-200 pl-6">
-          <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wider mb-1.5">Semana (fondo)</p>
+        <div className="border-l-2 border-surface-900 pl-6">
+          <p className="text-[10px] font-bold text-surface-900 uppercase tracking-[0.15em] mb-1.5">Semana</p>
           <div className="flex items-center gap-2">
             {Object.values(weekColorMap).filter((v, i, a) => a.indexOf(v) === i).slice(0, 5).map(idx => (
               <div key={idx} className="flex items-center gap-1">
-                <div className={`w-2.5 h-2.5 rounded ${WEEK_COLORS[idx % WEEK_COLORS.length].bar}`} />
-                <span className="text-xs text-surface-400">Sem {idx + 1}</span>
+                <div className={`w-2.5 h-2.5 border border-surface-900 ${WEEK_COLORS[idx % WEEK_COLORS.length].bar}`} />
+                <span className="text-xs font-medium text-surface-500">Sem {idx + 1}</span>
               </div>
             ))}
           </div>
@@ -240,10 +240,10 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
       </div>
 
       {/* Desktop Grid */}
-      <div className="hidden md:block bg-white rounded-2xl border border-surface-200 overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-surface-100">
+      <div className="hidden md:block bg-white border-2 border-surface-900 shadow-brutal overflow-hidden">
+        <div className="grid grid-cols-7 border-b-2 border-surface-900 bg-surface-50">
           {WEEKDAYS.map(day => (
-            <div key={day} className="px-2 py-2.5 text-center text-xs font-semibold text-surface-500 uppercase tracking-wider bg-surface-50/50">{day}</div>
+            <div key={day} className="px-2 py-2.5 text-center text-[10px] font-bold text-surface-900 uppercase tracking-[0.15em]">{day}</div>
           ))}
         </div>
 
@@ -259,13 +259,13 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
             const isMonday = day.date ? day.date.getDay() === 1 : false;
 
             return (
-              <div key={i} className={`min-h-[120px] border-b border-r border-surface-100 p-1.5 transition-colors relative ${
+              <div key={i} className={`min-h-[120px] border-b border-r border-surface-200 p-1.5 transition-colors relative ${
                 day.date ? (weekColor?.bg || 'bg-white') : 'bg-surface-50/30'
               } ${hasItems ? 'hover:brightness-95' : ''}`}>
                 {day.dayNum !== null && (
                   <>
                     {isMonday && weekColor && (
-                      <div className={`absolute top-0 left-0 w-full h-0.5 ${weekColor.bar}`} />
+                      <div className={`absolute top-0 left-0 w-full h-1 ${weekColor.bar}`} />
                     )}
                     <div className="flex items-center gap-1 mb-1">
                       {hasItems ? (
@@ -273,16 +273,16 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                           type="button"
                           title="Ver publicaciones completas del día"
                           onClick={() => setSelectedDay(dateKey === selectedDay ? null : dateKey)}
-                          className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full transition-colors ${
-                            todayMark ? 'bg-brand-600 text-white' : 'text-surface-900'
-                          } ${dateKey === selectedDay ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:bg-surface-200/80'}`}
+                          className={`text-xs font-bold w-6 h-6 flex items-center justify-center transition-colors ${
+                            todayMark ? 'bg-brand-600 text-white border-2 border-surface-900' : 'text-surface-900 hover:bg-surface-200'
+                          } ${dateKey === selectedDay ? 'ring-2 ring-brand-500 ring-offset-1' : ''}`}
                         >
                           {day.dayNum}
                         </button>
                       ) : (
                         <div
-                          className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full ${
-                            todayMark ? 'bg-brand-600 text-white' : 'text-surface-400'
+                          className={`text-xs font-bold w-6 h-6 flex items-center justify-center ${
+                            todayMark ? 'bg-brand-600 text-white border-2 border-surface-900' : 'text-surface-400'
                           }`}
                         >
                           {day.dayNum}
@@ -304,17 +304,17 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                               e.stopPropagation();
                               onSelectItem(item);
                             }}
-                            className={`w-full text-left p-1.5 rounded-lg border ${colors.bg} ${colors.border} hover:shadow-sm transition-all cursor-pointer`}
+                            className={`w-full text-left p-1.5 border-2 border-surface-900 ${colors.bg} shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer`}
                           >
                             <div className="flex items-start gap-1">
                               <div className="mt-0.5 shrink-0 text-surface-500 flex flex-col items-center gap-0.5">
                                 <FormatIcon format={item.format} />
                                 {item.visual_brief && (
-                                  <div className="w-2 h-2 rounded-full bg-emerald-400" title="Brief visual" />
+                                  <div className="w-2 h-2 bg-emerald-400 border border-surface-900" title="Brief visual" />
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="text-[11px] font-semibold text-surface-900 line-clamp-2 leading-tight">{item.idea}</p>
+                                <p className="text-[11px] font-bold text-surface-900 line-clamp-2 leading-tight">{item.idea}</p>
                                 {item.copy && (
                                   <p className="text-[10px] text-surface-500 line-clamp-1 mt-0.5 leading-tight">{item.copy}</p>
                                 )}
@@ -339,11 +339,11 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
 
       {/* Mobile compact monthly grid */}
       <div className="md:hidden">
-        <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden">
+        <div className="bg-white border-2 border-surface-900 shadow-brutal overflow-hidden">
           {/* Weekday headers */}
-          <div className="grid grid-cols-7 border-b border-surface-100">
+          <div className="grid grid-cols-7 border-b-2 border-surface-900 bg-surface-50">
             {WEEKDAYS_SHORT.map(d => (
-              <div key={d} className="py-2 text-center text-[10px] font-bold text-surface-400 uppercase bg-surface-50/50">{d}</div>
+              <div key={d} className="py-2 text-center text-[10px] font-black text-surface-900 uppercase tracking-widest">{d}</div>
             ))}
           </div>
 
@@ -365,14 +365,14 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                     if (!day.date || !hasItems) { setSelectedDay(null); return; }
                     setSelectedDay(isSelected ? null : dateKey);
                   }}
-                  className={`min-h-[52px] border-b border-r border-surface-100 p-1 flex flex-col items-center gap-0.5 transition-colors relative ${
-                    !day.date ? 'bg-surface-50/30' : isSelected ? 'bg-brand-50 ring-2 ring-inset ring-brand-500' : hasItems ? 'active:bg-surface-100' : ''
+                  className={`min-h-[52px] border-b border-r border-surface-200 p-1 flex flex-col items-center gap-0.5 transition-colors relative ${
+                    !day.date ? 'bg-surface-50/30' : isSelected ? 'bg-brand-50 ring-2 ring-inset ring-brand-600' : hasItems ? 'active:bg-surface-100' : ''
                   }`}
                 >
                   {day.dayNum !== null && (
                     <>
-                      <div className={`text-[11px] font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
-                        todayMark ? 'bg-brand-600 text-white' : hasItems ? 'text-surface-900' : 'text-surface-400'
+                      <div className={`text-[11px] font-bold w-6 h-6 flex items-center justify-center ${
+                        todayMark ? 'bg-brand-600 text-white border-2 border-surface-900' : hasItems ? 'text-surface-900 font-black' : 'text-surface-400'
                       }`}>
                         {day.dayNum}
                       </div>
@@ -382,12 +382,12 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                             const dotColor = typeColors[item.content_type]?.dot || 'bg-surface-400';
                             return (
                               <div key={item.id} className="flex items-center gap-0">
-                                <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                                <div className={`w-1.5 h-1.5 border border-surface-900 ${dotColor}`} />
                               </div>
                             );
                           })}
                           {dayItems.length > 3 && (
-                            <span className="text-[8px] text-surface-400 font-bold">+{dayItems.length - 3}</span>
+                            <span className="text-[8px] text-surface-900 font-black">+{dayItems.length - 3}</span>
                           )}
                         </div>
                       )}
@@ -404,11 +404,11 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
       {selectedDay && selectedDayItems.length > 0 && (
         <div
           ref={detailRef}
-          className="mt-4 bg-white rounded-2xl border-2 border-surface-200 overflow-hidden shadow-sm"
+          className="mt-4 bg-white border-2 border-surface-900 shadow-brutal overflow-hidden"
         >
-          <div className="px-4 py-3 bg-surface-50 border-b border-surface-200 flex flex-wrap items-center justify-between gap-2">
+          <div className="px-4 py-3 bg-surface-50 border-b-2 border-surface-900 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="font-display font-bold text-surface-900 text-sm">
+              <span className="font-display font-black text-surface-900 text-sm uppercase tracking-wider">
                 {(() => {
                   const [y, m, d] = selectedDay.split('-').map(Number);
                   return new Date(y, m, d).toLocaleDateString('es-ES', {
@@ -418,19 +418,19 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                   });
                 })()}
               </span>
-              <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-1.5 py-0.5 rounded uppercase">
+              <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-1.5 py-0.5 uppercase tracking-widest">
                 {selectedDayItems.length} {selectedDayItems.length === 1 ? 'post' : 'posts'}
               </span>
             </div>
             <button
               type="button"
               onClick={() => setSelectedDay(null)}
-              className="text-xs font-bold text-surface-500 hover:text-surface-900 uppercase tracking-wider"
+              className="text-xs font-bold text-surface-900 uppercase tracking-wider border-2 border-surface-900 px-3 py-1 hover:bg-surface-900 hover:text-white transition-colors"
             >
-              Cerrar detalle
+              Cerrar
             </button>
           </div>
-          <div className="divide-y divide-surface-100">
+          <div className="divide-y-2 divide-surface-200">
             {selectedDayItems.map(item => {
               const fmtCfg = item.format ? FORMAT_CONFIG[item.format] : null;
               const tb = TYPE_BORDER[item.content_type] || TYPE_BORDER.corporativo;
@@ -444,7 +444,7 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                     className={`shrink-0 sm:w-24 flex flex-row sm:flex-col items-center justify-center gap-2 py-3 px-3 sm:px-2 ${fmtCfg?.pill || 'bg-surface-500 text-white'}`}
                   >
                     <span className="text-lg">{fmtCfg?.icon || '📄'}</span>
-                    <span className="text-[10px] font-bold tracking-wider text-center">
+                    <span className="text-[10px] font-black tracking-wider text-center uppercase">
                       {fmtCfg?.label || item.format || '—'}
                     </span>
                   </div>
@@ -452,25 +452,25 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                     <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border ${typeCls.bg} ${typeCls.border} text-surface-800`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 border-2 border-surface-900 text-xs font-bold ${typeCls.bg} text-surface-900`}
                         >
                           {TYPE_LABELS[item.content_type]?.icon}{' '}
                           {TYPE_LABELS[item.content_type]?.label || item.content_type}
                         </span>
                         {item.is_edited && (
-                          <span className="text-xs text-amber-600 font-medium">editado</span>
+                          <span className="text-xs text-amber-600 font-bold uppercase">editado</span>
                         )}
                         {item.visual_brief ? (
-                          <span className="text-xs text-emerald-600 font-medium">brief</span>
+                          <span className="text-xs text-emerald-600 font-bold uppercase">brief</span>
                         ) : (
-                          <span className="text-xs text-surface-300">sin brief</span>
+                          <span className="text-xs text-surface-300 font-bold uppercase">sin brief</span>
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <select
                           value={item.status}
                           onChange={e => handleStatusChange(item.id, e.target.value)}
-                          className="text-xs bg-white border-2 border-surface-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                          className="text-xs font-bold bg-white border-2 border-surface-900 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                         >
                           <option value="draft">Borrador</option>
                           <option value="approved">Aprobado</option>
@@ -480,13 +480,13 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                         <button
                           type="button"
                           onClick={() => onSelectItem(item)}
-                          className="text-xs font-bold text-brand-600 hover:text-brand-700 uppercase tracking-wider"
+                          className="text-xs font-bold text-white bg-brand-600 border-2 border-surface-900 px-3 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all uppercase tracking-wider"
                         >
                           Editar
                         </button>
                       </div>
                     </div>
-                    <p className="text-sm font-semibold text-surface-900 mb-1">{item.idea}</p>
+                    <p className="text-sm font-bold text-surface-900 mb-1">{item.idea}</p>
                     <div className="mb-2">
                       <ProductionSpecsDisplay specs={item.production_specs} compact />
                     </div>
@@ -497,16 +497,16 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                       <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-surface-500">
                         {item.cta && (
                           <span>
-                            <span className="font-medium text-surface-600">CTA:</span> {item.cta}
+                            <span className="font-bold text-surface-700">CTA:</span> {item.cta}
                           </span>
                         )}
                         {item.post_goal && (
                           <span>
-                            <span className="font-medium text-surface-600">Objetivo:</span> {item.post_goal}
+                            <span className="font-bold text-surface-700">Objetivo:</span> {item.post_goal}
                           </span>
                         )}
                         {item.hashtags && item.hashtags.length > 0 && (
-                          <span className="text-surface-400">{item.hashtags.join(' ')}</span>
+                          <span className="text-surface-400 font-medium">{item.hashtags.join(' ')}</span>
                         )}
                       </div>
                     )}

@@ -86,24 +86,24 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
       {/* Controls bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 rounded uppercase tracking-widest shrink-0">{localItems.length} posts</span>
-          <div className="flex border-2 border-surface-200 rounded-full p-0.5">
+          <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest shrink-0">{localItems.length} posts</span>
+          <div className="flex border-2 border-surface-900 p-0">
             <button
               onClick={() => setView('list')}
-              className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
                 view === 'list'
                   ? 'bg-surface-900 text-white'
-                  : 'text-surface-500 hover:text-surface-900'
+                  : 'bg-white text-surface-500 hover:text-surface-900'
               }`}
             >
               Lista
             </button>
             <button
               onClick={() => setView('calendar')}
-              className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all border-l-2 border-surface-900 ${
                 view === 'calendar'
                   ? 'bg-surface-900 text-white'
-                  : 'text-surface-500 hover:text-surface-900'
+                  : 'bg-white text-surface-500 hover:text-surface-900'
               }`}
             >
               Calendario
@@ -114,7 +114,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           <button
             onClick={() => handleGenerateVisualBriefs()}
             disabled={pendingBriefsCount === 0}
-            className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 rounded-full hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+            className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
           >
             {pendingBriefsCount === 0
                 ? 'Briefs completados'
@@ -122,7 +122,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           </button>
           <button
             onClick={handleExportJSON}
-            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 border-2 border-surface-300 rounded-full hover:border-surface-900 transition-colors w-full sm:w-auto"
+            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full sm:w-auto"
           >
             Exportar JSON
           </button>
