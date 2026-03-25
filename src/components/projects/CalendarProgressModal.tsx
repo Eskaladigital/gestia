@@ -370,7 +370,7 @@ export function CalendarProgressModal({
 
                         let cellClass = 'relative aspect-square rounded-none border border-surface-200 flex items-center justify-center text-[8px] font-bold overflow-hidden ';
                         if (hasPost) {
-                          cellClass = 'relative aspect-square rounded-none border-2 border-surface-900 bg-surface-900 text-white flex items-center justify-center text-[8px] font-bold shadow-brutal-sm animate-brutal-pop z-10';
+                          cellClass = 'relative aspect-square rounded-none border-2 border-surface-900 bg-brand-600 text-white flex items-center justify-center text-[8px] font-bold shadow-brutal-sm animate-brutal-pop z-10';
                         } else if (monthDone) {
                           cellClass += 'bg-surface-200 text-surface-400';
                         } else if (monthProcessing) {
