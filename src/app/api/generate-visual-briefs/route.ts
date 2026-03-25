@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
-import { buildSingleVisualPrompt, decomposePostIntoVisuals, callAI } from '@/lib/ai';
-import type { SingleVisualAIResponse, ContentItem, VisualBriefInput } from '@/types';
+import { buildSingleVisualPrompt, decomposePostIntoVisuals, callAI, type VisualBriefInput } from '@/lib/ai';
+import type { SingleVisualAIResponse, ContentItem } from '@/types';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
