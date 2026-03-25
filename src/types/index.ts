@@ -372,7 +372,7 @@ export interface CalendarGeneration {
 
 export interface VisualBriefPost {
   content_item_id: string;
-  visual_brief: string;
+  visual_brief?: string | null;
   visual_prompt: string;
 }
 
@@ -393,5 +393,4 @@ export interface ContentItemVisual {
 
 export interface SingleVisualAIResponse {
   visual_prompt: string;
-  visual_brief: string;
 }

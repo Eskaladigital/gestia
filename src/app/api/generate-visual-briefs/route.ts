@@ -71,7 +71,7 @@ interface VisualResult {
   label: string;
   totalVisualsForPost: number;
   prompt: string;
-  brief: string;
+  brief: string | null;
 }
 
 async function processOneVisual(
@@ -95,7 +95,6 @@ async function processOneVisual(
   });
 
   const vPrompt = clip(aiResponse.data?.visual_prompt);
-  const vBrief = clip(aiResponse.data?.visual_brief);
 
   if (!vPrompt) {
     console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId}[${job.visualIndex}]`);
@@ -110,7 +109,7 @@ async function processOneVisual(
         visual_index: job.visualIndex,
         label: job.label,
         visual_prompt: vPrompt,
-        visual_brief: vBrief || null,
+        visual_brief: null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'content_item_id,visual_index' });
   } catch (e) {
@@ -123,7 +122,7 @@ async function processOneVisual(
     label: job.label,
     totalVisualsForPost: job.totalVisualsForPost,
     prompt: vPrompt,
-    brief: vBrief,
+    brief: null,
   };
 }
 
@@ -251,7 +250,6 @@ export async function POST(request: NextRequest) {
                 postVisualResults.get(r.contentItemId)!.push({
                   index: r.visualIndex,
                   label: r.label,
-                  brief: r.brief,
                   prompt: r.prompt,
                 });
 
@@ -274,13 +272,12 @@ export async function POST(request: NextRequest) {
                 const postResults = postVisualResults.get(job.contentItemId) || [];
                 postResults.sort((a, b) => a.index - b.index);
 
-                const combinedBrief = postResults.map(r => `### ${r.label}\n${r.brief}`).join('\n\n');
                 const combinedPrompt = postResults.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
 
                 const { error: updateErr } = await supabase
                   .from('content_items')
                   .update({
-                    visual_brief: clip(combinedBrief),
+                    visual_brief: null,
                     visual_prompt: clip(combinedPrompt),
                   })
                   .eq('id', job.contentItemId);

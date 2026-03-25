@@ -245,13 +245,13 @@ export function CalendarTable({
                               {TYPE_LABELS[item.content_type]?.icon || ''} {TYPE_LABELS[item.content_type]?.label || item.content_type}
                             </span>
                             {item.is_edited && <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border-2 border-amber-400 px-1.5 py-0.5">editado</span>}
-                            {item.visual_brief ? (
+                            {item.visual_prompt ? (
                               <button
                                 type="button"
                                 onClick={() => handleToggleBrief(item.id)}
                                 className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border-2 border-surface-900 hover:bg-emerald-200 hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                               >
-                                🎨 Brief {expandedBrief === item.id ? '▲' : '▼'}
+                                🎨 Prompt {expandedBrief === item.id ? '▲' : '▼'}
                               </button>
                             ) : (
                               <div className="flex items-center gap-2">
@@ -315,7 +315,7 @@ export function CalendarTable({
                           </div>
                         )}
 
-                        {expandedBrief === item.id && item.visual_brief && (
+                        {expandedBrief === item.id && item.visual_prompt && (
                           <div className="mt-4 border-t-2 border-surface-900 pt-4 space-y-4">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
@@ -366,11 +366,6 @@ export function CalendarTable({
                                         {copiedId === visual.id ? 'Copiado' : 'Copiar prompt'}
                                       </button>
                                     </div>
-                                    {visual.visual_brief && (
-                                      <div className="bg-white px-3 py-2 text-xs text-surface-700 leading-relaxed whitespace-pre-wrap border-b border-surface-200">
-                                        {visual.visual_brief}
-                                      </div>
-                                    )}
                                     <div className="bg-surface-900 text-emerald-300 px-3 py-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
                                       {visual.visual_prompt}
                                     </div>
@@ -379,30 +374,25 @@ export function CalendarTable({
                               </div>
                             )}
 
-                            {visualsCache[item.id] && visualsCache[item.id].length === 0 && (
-                              <div className="bg-white border-2 border-surface-900 p-4 text-sm text-surface-800 leading-relaxed whitespace-pre-wrap shadow-brutal-sm">
-                                {item.visual_brief}
-                                {item.visual_prompt && (
-                                  <div className="mt-3 pt-3 border-t border-surface-200">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-emerald-600 text-white px-2 py-0.5">Prompt</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCopyPrompt(item.visual_prompt!, `legacy-${item.id}`)}
-                                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                          copiedId === `legacy-${item.id}`
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-white text-surface-900'
-                                        }`}
-                                      >
-                                        {copiedId === `legacy-${item.id}` ? 'Copiado' : 'Copiar'}
-                                      </button>
-                                    </div>
-                                    <div className="bg-surface-900 text-emerald-300 border-2 border-surface-700 p-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                                      {item.visual_prompt}
-                                    </div>
-                                  </div>
-                                )}
+                            {visualsCache[item.id] && visualsCache[item.id].length === 0 && item.visual_prompt && (
+                              <div className="bg-white border-2 border-surface-900 shadow-brutal-sm">
+                                <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-200">
+                                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-emerald-600 text-white px-2 py-0.5">Prompt</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyPrompt(item.visual_prompt!, `legacy-${item.id}`)}
+                                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                      copiedId === `legacy-${item.id}`
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-white text-surface-900'
+                                    }`}
+                                  >
+                                    {copiedId === `legacy-${item.id}` ? 'Copiado' : 'Copiar'}
+                                  </button>
+                                </div>
+                                <div className="bg-surface-900 text-emerald-300 p-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                                  {item.visual_prompt}
+                                </div>
                               </div>
                             )}
                           </div>

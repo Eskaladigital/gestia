@@ -716,14 +716,12 @@ export function buildVisualBriefsPrompt(
 PRINCIPIO FUNDAMENTAL: Cada brief debe describir EXACTAMENTE qué se ve en cada imagen o escena. NO describas "el concepto" ni "la estética" en abstracto. Describe OBJETOS, PERSONAS, ACCIONES, COMPOSICIÓN y TEXTO LITERAL que aparece en pantalla.
 
 ═══════════════════════════════════════════
-ENTREGABLES POR CADA PUBLICACIÓN
+ENTREGABLE POR CADA PUBLICACIÓN
 ═══════════════════════════════════════════
 
-1. "visual_brief" — GUÍA DE PRODUCCIÓN COMPLETA para un diseñador o equipo audiovisual.
-   El brief debe ser tan detallado que el profesional NO necesite hacer NINGUNA pregunta.
-
-2. "visual_prompt" — PROMPT TÉCNICO para IA generativa (Midjourney / DALL-E / Ideogram).
-   Debe ser copiable directamente. Si el formato requiere múltiples imágenes, genera UN prompt por cada imagen/slide.
+"visual_prompt" — PROMPT ULTRA-DETALLADO para IA generativa (Midjourney / DALL-E / Ideogram / Sora).
+Debe ser copiable directamente. Si el formato requiere múltiples imágenes, genera UN prompt por cada imagen/slide.
+Concentra TODA tu capacidad creativa y descriptiva en este único campo.
 
 ═══════════════════════════════════════════
 REGLAS ESTRICTAS POR FORMATO
@@ -799,12 +797,11 @@ FORMATO DE RESPUESTA:
   "briefs": [
     {
       "content_item_id": "uuid-del-post",
-      "visual_brief": "Brief de producción completo...",
-      "visual_prompt": "Prompt(s) técnico(s) para IA generativa..."
+      "visual_prompt": "Prompt(s) ultra-detallado(s) para IA generativa..."
     }
   ]
 }`,
-    user: `Genera los briefs visuales para las siguientes publicaciones.
+    user: `Genera los prompts visuales para las siguientes publicaciones.
 
 ## IDENTIDAD DE MARCA
 ${buildBrandContext(project)}
@@ -816,12 +813,12 @@ ${buildProjectContext(project, { includeAiRules: true })}
 ${postsBlock}
 
 INSTRUCCIONES FINALES:
-- Genera un brief visual y un prompt para IA generativa para CADA una de las ${posts.length} publicaciones.
-- RESPETA las ESPECIFICACIONES DE PRODUCCIÓN de cada post: si dice 5 slides, el brief tiene exactamente 5 slides. Si dice 30 segundos, el guión dura 30 segundos. Si dice media_type "video", es un vídeo.
-- RECUERDA: para CARRUSELES, detalla CADA SLIDE por separado (qué se ve, qué texto, qué fondo). No digas "3 slides con consejos" — di QUÉ HAY en cada slide. El visual_prompt DEBE tener un prompt separado por cada slide.
-- RECUERDA: para REELS/VÍDEOS, escribe un guión con ESCENAS numeradas, TIMING (segundos), ENCUADRE y AUDIO.
-- RECUERDA: los visual_prompt deben ser LARGOS y DETALLADOS (mínimo 60 palabras), con estilo, sujeto, composición, iluminación y aspect ratio.
-- Cada brief debe ser ÚNICO y no repetir escenas ni composiciones del anterior.
+- Genera un visual_prompt ultra-detallado para CADA una de las ${posts.length} publicaciones. NO generes visual_brief.
+- RESPETA las ESPECIFICACIONES DE PRODUCCIÓN de cada post: si dice 5 slides, el prompt tiene exactamente 5 slides. Si dice 30 segundos, describe la escena clave de 30 segundos. Si dice media_type "video", describe el fotograma clave.
+- RECUERDA: para CARRUSELES, detalla CADA SLIDE por separado con las 6 secciones (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo). El visual_prompt DEBE tener un prompt separado por cada slide.
+- RECUERDA: para REELS/VÍDEOS, describe el fotograma clave más representativo con las 6 secciones.
+- RECUERDA: los visual_prompt deben ser MUY LARGOS y DETALLADOS (mínimo 150 palabras por imagen), con estilo, sujeto, composición, iluminación, texturas y aspect ratio.
+- Cada prompt debe ser ÚNICO y no repetir escenas ni composiciones del anterior.
 - Usa los colores de marca CONCRETOS (con hex) y las fuentes reales de la marca.`,
   };
 }
@@ -858,52 +855,41 @@ export function buildSingleVisualPrompt(
   return {
     system: `Eres un fotógrafo editorial de renombre internacional y director de arte especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN con la precisión de un director de fotografía profesional que prepara un shooting real.
 
-TU ENTREGA TIENE DOS PARTES:
+CONCENTRA TODA TU CAPACIDAD EN UN ÚNICO ENTREGABLE:
 
 ═══════════════════════════════════════════
-1. "visual_prompt" — PROMPT PARA IA GENERATIVA
+"visual_prompt" — PROMPT ULTRA-DETALLADO PARA IA GENERATIVA
 ═══════════════════════════════════════════
 
-Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E, Ideogram o Sora. Debe ser autosuficiente.
+Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E, Ideogram o Sora. Debe ser autosuficiente y tan preciso que la imagen generada sea EXACTAMENTE lo que describes.
 
 ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
 
-**Escena:** Descripción general inmersiva de la situación, el entorno y el contexto. Mínimo 3 frases. Incluye la hora del día, la estación, el lugar concreto (no genérico). Ejemplo: "Fotografía de stock editorial. Un primer plano íntimo de varias macetas de terracota que contienen cactus Trichocereus, prosperando en un invernadero lleno de luz natural matutina de primavera."
+**Escena:** Descripción general inmersiva de la situación, el entorno y el contexto. Mínimo 4 frases. Incluye la hora del día, la estación, el lugar concreto (no genérico), el propósito de la imagen y la sensación que debe transmitir. Ejemplo: "Fotografía de stock editorial. Un primer plano íntimo de varias macetas de terracota que contienen cactus Trichocereus, prosperando en un invernadero lleno de luz natural matutina de primavera. El ambiente evoca una sensación de calma y conexión con la naturaleza, como si el espectador pudiera sentir la humedad y el calor del cristal."
 
-**Composición:** Relación de aspecto (${ar}). Tipo de plano exacto (primer plano, plano medio, plano general, cenital, contrapicado, etc.). Ángulo de cámara. Disposición precisa de los elementos en el encuadre (qué hay en primer plano, medio plano, fondo). Cómo se crea profundidad. Mínimo 3 frases.
+**Composición:** Relación de aspecto (${ar}). Tipo de plano exacto (primer plano, plano medio, plano general, cenital, contrapicado, etc.). Ángulo de cámara. Disposición precisa de los elementos en el encuadre (qué hay en primer plano, medio plano, fondo). Cómo se crea profundidad y guía visual. Regla de tercios o simetría si aplica. Mínimo 4 frases.
 
-**Sujetos:** Descripción física MINUCIOSA de los protagonistas u objetos principales. Texturas específicas (rugoso, brillante, mate, translúcido). Colores con precisión (no "verde" sino "verde azulado con matices grisáceos"). Si hay personas: edad aproximada, ropa, pose, expresión, dirección de la mirada, qué sostienen. Si hay objetos: material, estado (nuevo, desgastado, antiguo), tamaño relativo. Mínimo 3 frases.
+**Sujetos:** Descripción física MINUCIOSA de los protagonistas u objetos principales. Texturas específicas (rugoso, brillante, mate, translúcido, poroso, satinado). Colores con precisión (no "verde" sino "verde azulado con matices grisáceos y venas más claras"). Si hay personas: edad aproximada, ropa detallada (material, color, estado), pose, expresión facial, dirección de la mirada, qué sostienen, posición de las manos. Si hay objetos: material exacto, estado (nuevo, desgastado, antiguo, patinado), tamaño relativo, detalles táctiles. Mínimo 4 frases.
 
-**Luz y Atmósfera:** Tipo de iluminación con detalle técnico (luz natural cenital, contraluz, luz difusa de ventanal norte, golden hour lateral, etc.). Cómo incide la luz en los sujetos: qué zonas ilumina, dónde caen las sombras, si hay reflejos o brillos. Temperatura de color percibida. El mood o sensación emocional que transmite. Mínimo 3 frases.
+**Luz y Atmósfera:** Tipo de iluminación con detalle técnico (luz natural cenital, contraluz suave, luz difusa de ventanal norte, golden hour lateral a 15° sobre el horizonte, etc.). Cómo incide la luz en los sujetos: qué zonas ilumina, dónde caen las sombras, si hay reflejos especulares o brillos difusos, si se forman rayos visibles o haces de luz. Temperatura de color percibida (cálida dorada, fría azulada, neutra). El mood o sensación emocional que transmite. Contraste general (alto contraste dramático, bajo contraste etéreo). Mínimo 4 frases.
 
-**Fondo:** Qué hay exactamente detrás del sujeto principal. Nivel de nitidez (enfoque nítido, desenfoque suave, bokeh cremoso con formas circulares, etc.). Colores predominantes del fondo y su contraste con el primer plano. Elementos secundarios visibles en el fondo. Mínimo 2 frases.
+**Fondo:** Qué hay exactamente detrás del sujeto principal. Nivel de nitidez (enfoque nítido, desenfoque suave, bokeh cremoso con formas circulares, bokeh hexagonal, etc.). Colores predominantes del fondo y su contraste con el primer plano. Elementos secundarios visibles. Transición entre planos (gradual, abrupta). Mínimo 3 frases.
 
-**Estilo:** Estética visual concreta (fotografía editorial de producto, fotografía documental, ilustración flat vector, 3D render hiperrealista, etc.). Texturas de la imagen (grano de película, aspecto digital limpio, halación, etc.). Características de lente simuladas (apertura amplia f/1.8, profundidad de campo reducida, lente macro, teleobjetivo comprimido, etc.). Referencia a estilo de fotógrafo o revista si aplica. Mínimo 2 frases.
+**Estilo:** Estética visual concreta (fotografía editorial de producto, fotografía documental, ilustración flat vector, 3D render hiperrealista, etc.). Texturas de la imagen (grano de película ISO 400, aspecto digital limpio, halación vintage, etc.). Características de lente simuladas (apertura amplia f/1.4, profundidad de campo reducida, lente macro 100mm, teleobjetivo comprimido 200mm, gran angular 24mm con distorsión de barril, etc.). Referencia a estilo de fotógrafo o revista si aplica. Tratamiento de color (saturación, contraste, tono split-toning). Mínimo 3 frases.${isVideo ? '\n\n**Movimiento:** Describir el fotograma clave (key frame) más representativo de esta escena de vídeo. Indicar qué momento del movimiento se congela.' : ''}
 
-REGLAS ESTRICTAS DEL VISUAL_PROMPT:
+REGLAS ESTRICTAS:
 - NO incluir texto literal en la descripción (el texto se añade en postproducción)
-- El prompt COMPLETO debe tener AL MENOS 150 palabras
-- CADA sección debe tener al menos 2-3 frases completas y descriptivas
-- Usar lenguaje sensorial y táctil (texturas, temperaturas, sensaciones)
-- Ser ESPECÍFICO, no genérico: no "un jardín bonito" sino "jardín de estilo mediterráneo con grava blanca, lavanda en flor y un olivo centenario de tronco retorcido"
+- El prompt COMPLETO debe tener AL MENOS 250 palabras
+- CADA sección debe tener al menos 3-4 frases completas, ricas y descriptivas
+- Usar lenguaje sensorial y táctil (texturas, temperaturas, olores implícitos, sensaciones)
+- Ser HIPER-ESPECÍFICO: no "un jardín bonito" sino "jardín de estilo mediterráneo con grava blanca de mármol triturado, lavanda en flor con abejas posadas, y un olivo centenario de tronco retorcido y corteza gris plateada"
 - Incluir --ar ${ar} al final de la sección Composición
-
-═══════════════════════════════════════════
-2. "visual_brief" — INSTRUCCIONES DE PRODUCCIÓN
-═══════════════════════════════════════════
-
-Instrucciones concretas para un diseñador gráfico o equipo de producción:
-- Qué se necesita producir exactamente para esta imagen
-- Si hay texto overlay: texto LITERAL, posición exacta (tercio superior/inferior, centrado), tipografía recomendada, color del texto
-- Colores de marca a usar y DÓNDE (fondo, acentos, textos)
-- Referencias de estilo o mood board si aplica
-- Indicaciones de postproducción${isVideo ? '\n- Para vídeo: describir el fotograma clave (key frame) más representativo de esta escena' : ''}
+- Cada detalle debe contribuir a que un generador de imágenes produzca EXACTAMENTE esta escena
 
 Responde en español.
-Devuelve SOLO JSON válido con exactamente estos dos campos:
+Devuelve SOLO JSON válido con exactamente este campo:
 {
-  "visual_prompt": "...",
-  "visual_brief": "..."
+  "visual_prompt": "..."
 }`,
 
     user: `Genera el prompt visual detallado para esta imagen.
@@ -928,11 +914,13 @@ ${buildProjectContext(project, { includeAiRules: true })}
 
 INSTRUCCIONES FINALES:
 - Concéntrate EXCLUSIVAMENTE en esta imagen. No pienses en las demás.
-- El visual_prompt DEBE tener al menos 150 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
-- Cada sección debe tener AL MENOS 2-3 frases completas con detalles sensoriales y técnicos.
-- NO uses descripciones vagas como "ambiente agradable", "escena bonita" o "plano general". Sé CONCRETO y ESPECÍFICO.
+- Genera SOLO el campo "visual_prompt". No generes visual_brief.
+- El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
+- Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y táctiles.
+- NO uses descripciones vagas como "ambiente agradable", "escena bonita" o "plano general". Sé HIPER-CONCRETO y ESPECÍFICO.
 - Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
-- El resultado debe ser tan detallado que al copiarlo en Midjourney o DALL-E, la imagen generada sea exactamente lo que describes.`,
+- Describe texturas, materiales, temperaturas de color, ángulos de luz y profundidad de campo con precisión técnica.
+- El resultado debe ser tan detallado que al copiarlo en Midjourney, DALL-E o Sora, la imagen generada sea EXACTAMENTE lo que describes.`,
   };
 }
 

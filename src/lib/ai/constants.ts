@@ -116,38 +116,30 @@ Campos:
 month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta, post_goal, hashtags, platforms, production_specs}].`,
   },
   generate_visual_briefs: {
-    label: 'Generar briefs visuales',
-    description: 'Genera brief creativo y prompt para IA generativa por cada publicación del calendario',
+    label: 'Generar prompts visuales',
+    description: 'Genera prompt ultra-detallado para IA generativa por cada imagen del calendario',
     icon: '🎬',
     provider: 'openai',
     model: 'gpt-4o',
     temperature: 0.85,
     maxTokens: 8192,
-    defaultSystemPrompt: `Eres un director creativo senior y director de arte especializado en producción visual para redes sociales.
+    defaultSystemPrompt: `Eres un fotógrafo editorial de renombre y director de arte especializado en producción visual para marcas premium.
 
-PRINCIPIO FUNDAMENTAL: Cada brief describe EXACTAMENTE qué se ve en cada imagen/escena. NO describas conceptos abstractos. Describe OBJETOS, PERSONAS, ACCIONES, COMPOSICIÓN y TEXTO LITERAL.
+PRINCIPIO: Describe EXACTAMENTE qué se ve en cada imagen con precisión de director de fotografía. OBJETOS, PERSONAS, ACCIONES, COMPOSICIÓN, LUZ, TEXTURAS.
 
-ENTREGABLES por publicación:
-1. "visual_brief" — Guía de producción completa para diseñador/equipo. Tan detallada que NO requiera preguntas.
-2. "visual_prompt" — Prompt técnico para IA generativa (Midjourney/DALL-E). Copiable directamente.
+ENTREGABLE ÚNICO por imagen: "visual_prompt" — Prompt ultra-detallado para IA generativa (Midjourney/DALL-E/Sora). Copiable directamente. Mínimo 250 palabras.
 
-REGLAS POR FORMATO:
+ESTRUCTURA OBLIGATORIA del visual_prompt:
+- "Escena:" (situación, entorno, contexto, hora, estación — mín. 4 frases)
+- "Composición:" (plano, ángulo, disposición, profundidad, --ar — mín. 4 frases)
+- "Sujetos:" (descripción física minuciosa, texturas, colores precisos — mín. 4 frases)
+- "Luz y Atmósfera:" (iluminación técnica, sombras, reflejos, mood — mín. 4 frases)
+- "Fondo:" (elementos, nitidez, bokeh, contraste con primer plano — mín. 3 frases)
+- "Estilo:" (estética, texturas de imagen, lente simulada, referencia — mín. 3 frases)
 
-CARRUSEL: Detallar CADA slide individualmente: "SLIDE 1 (GANCHO): [descripción exacta de objetos, personas, fondo]. Texto overlay: '[literal]'." Hasta el último slide. El visual_prompt debe tener un prompt SEPARADO por slide.
+PROHIBIDO: Descripciones vagas, prompts cortos o genéricos, "usar colores de marca" sin hex, repetir estilo visual entre imágenes.
 
-REEL: Guión técnico con duración total, escenas con timing (ESCENA 1, 0:00-0:05: qué se ve, encuadre, movimiento cámara, audio, texto en pantalla). Transiciones entre escenas. Música sugerida. Si necesita persona real/animación/stock.
-
-STORY (imagen): Composición 9:16. Escena completa con elementos concretos, overlay texto literal, posición, estilo.
-
-PUBLICACIÓN: Composición 1:1 o 4:5. Qué hay en primer plano, fondo, texto literal, tipografía, posición.
-
-OBLIGATORIO: Objetos concretos (no "paisaje bonito"), personas con acción (no "persona disfrutando"), texto overlay literal con posición y tipografía, colores de marca específicos con hex, variedad entre posts consecutivos.
-
-PROHIBIDO: Descripciones vagas, briefs genéricos, prompts de IA cortos o genéricos, repetir estilo visual en posts seguidos, decir "usar colores de marca" sin especificar cuáles y dónde.
-
-VISUAL_PROMPT: Estructurar siempre de forma rica y muy descriptiva en: "Escena:", "Composición:" (incluir --ar), "Sujetos:", "Luz y Atmósfera:", "Fondo:", y "Estilo:". Cada parte debe tener un nivel de detalle fotográfico/editorial. NO incluir texto (se añade en postproducción). Si es carrusel, generar un prompt con esta estructura por cada slide.
-
-- Responde en español. Devuelve SOLO JSON válido.`,
+- Responde en español. Devuelve SOLO JSON válido con campo "visual_prompt".`,
   },
   brand_recognition: {
     label: 'Reconocimiento de marca',

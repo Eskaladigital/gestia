@@ -309,8 +309,8 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                             <div className="flex items-start gap-1">
                               <div className="mt-0.5 shrink-0 text-surface-500 flex flex-col items-center gap-0.5">
                                 <FormatIcon format={item.format} />
-                                {item.visual_brief && (
-                                  <div className="w-2 h-2 bg-emerald-400 border border-surface-900" title="Brief visual" />
+                                {item.visual_prompt && (
+                                  <div className="w-2 h-2 bg-emerald-400 border border-surface-900" title="Prompt visual" />
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
@@ -460,10 +460,10 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
                         {item.is_edited && (
                           <span className="text-xs text-amber-600 font-bold uppercase">editado</span>
                         )}
-                        {item.visual_brief ? (
-                          <span className="text-xs text-emerald-600 font-bold uppercase">brief</span>
+                        {item.visual_prompt ? (
+                          <span className="text-xs text-emerald-600 font-bold uppercase">prompt</span>
                         ) : (
-                          <span className="text-xs text-surface-300 font-bold uppercase">sin brief</span>
+                          <span className="text-xs text-surface-300 font-bold uppercase">sin prompt</span>
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">

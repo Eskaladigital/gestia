@@ -66,7 +66,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
 
   const [briefsModalIds, setBriefsModalIds] = useState<string[] | null>(null);
 
-  const pendingBriefsCount = localItems.filter(i => !i.visual_brief?.trim()).length;
+  const pendingBriefsCount = localItems.filter(i => !i.visual_prompt?.trim()).length;
 
   const refreshCalendarItems = useCallback(async () => {
     const { data } = await supabase
