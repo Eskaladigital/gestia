@@ -112,40 +112,70 @@ async function ensureBucket(supabase: ReturnType<typeof createServiceSupabase>) 
   }
 }
 
+export type ScreenshotResult = {
+  screenshots: Map<string, ScreenshotMetadata>;
+  attempted: number;
+  succeeded: number;
+  skipped_reason: string | null;
+  errors: string[];
+};
+
 /**
  * Captura con Puppeteer/Chromium las primeras URLs, sube JPEG al bucket `screenshots` y devuelve metadata por URL.
  * En Vercel usa @sparticuz/chromium (headless serverless); en local usa puppeteer con Chrome bundled.
- * Si falta service role o Puppeteer falla, devuelve un Map vacío (el análisis web sigue).
+ * Devuelve siempre un ScreenshotResult con detalles de éxito/fallo para diagnóstico.
  */
 export async function captureWebScreenshotsToStorage(
   urls: string[],
   projectId: string,
   options?: { maxPages?: number }
-): Promise<Map<string, ScreenshotMetadata>> {
-  const results = new Map<string, ScreenshotMetadata>();
+): Promise<ScreenshotResult> {
+  const result: ScreenshotResult = {
+    screenshots: new Map(),
+    attempted: 0,
+    succeeded: 0,
+    skipped_reason: null,
+    errors: [],
+  };
   const maxPages = options?.maxPages ?? 3;
   const list = urls.slice(0, maxPages).filter(Boolean);
 
-  if (list.length === 0) return results;
+  if (list.length === 0) {
+    result.skipped_reason = 'No hay URLs para capturar';
+    return result;
+  }
   if (process.env.DISABLE_PUPPETEER_SCREENSHOTS === '1') {
-    console.warn('[screenshots] DISABLE_PUPPETEER_SCREENSHOTS=1: capturas automáticas desactivadas');
-    return results;
+    result.skipped_reason = 'DISABLE_PUPPETEER_SCREENSHOTS=1';
+    console.warn('[screenshots]', result.skipped_reason);
+    return result;
   }
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-    console.warn('[screenshots] Sin SUPABASE_SERVICE_ROLE_KEY: no se suben capturas al Storage');
-    return results;
+    result.skipped_reason = 'Sin SUPABASE_SERVICE_ROLE_KEY: no se suben capturas al Storage';
+    console.warn('[screenshots]', result.skipped_reason);
+    return result;
   }
 
   let browser: Browser;
   try {
+    console.log('[screenshots] Lanzando navegador…', isVercel ? '(Vercel / @sparticuz/chromium)' : '(local / puppeteer)');
     browser = await launchBrowser();
-  } catch (e) {
-    console.warn('[screenshots] No se pudo lanzar el navegador:', e);
-    return results;
+    console.log('[screenshots] Navegador lanzado OK');
+  } catch (e: any) {
+    const msg = `No se pudo lanzar el navegador: ${e?.message || e}`;
+    result.skipped_reason = msg;
+    result.errors.push(msg);
+    console.error('[screenshots]', msg);
+    return result;
   }
 
   const supabase = createServiceSupabase();
-  await ensureBucket(supabase);
+  try {
+    await ensureBucket(supabase);
+  } catch (e: any) {
+    const msg = `Error creando bucket: ${e?.message || e}`;
+    result.errors.push(msg);
+    console.error('[screenshots]', msg);
+  }
 
   try {
     const page = await browser.newPage();
@@ -154,9 +184,11 @@ export async function captureWebScreenshotsToStorage(
 
     for (let i = 0; i < list.length; i++) {
       const url = list[i];
+      result.attempted++;
       const slug = folderSlugFromUrl(url, i);
       const safe = storageSafeSlug(slug);
       try {
+        console.log(`[screenshots] (${i + 1}/${list.length}) Navegando a ${url}…`);
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30_000 });
         await dismissCookieBanners(page);
         await delay(1200);
@@ -167,7 +199,9 @@ export async function captureWebScreenshotsToStorage(
         const fullBuf = Buffer.from(fullRaw);
 
         if (heroBuf.length < 500) {
-          console.warn('[screenshots] Captura demasiado pequeña:', url);
+          const msg = `Captura demasiado pequeña (${heroBuf.length} bytes) para ${url}`;
+          result.errors.push(msg);
+          console.warn('[screenshots]', msg);
           continue;
         }
 
@@ -175,12 +209,16 @@ export async function captureWebScreenshotsToStorage(
         const heroPath = `${projectId}/${safe}-hero-${ts}.jpg`;
         const fullPath = `${projectId}/${safe}-full-${ts}.jpg`;
 
+        console.log(`[screenshots] Subiendo hero (${(heroBuf.length / 1024).toFixed(0)} KB) y full (${(fullBuf.length / 1024).toFixed(0)} KB)…`);
+
         const { error: e1 } = await supabase.storage.from(BUCKET).upload(heroPath, heroBuf, {
           contentType: 'image/jpeg',
           upsert: true,
         });
         if (e1) {
-          console.error('[screenshots] Upload hero:', e1.message);
+          const msg = `Upload hero falló para ${url}: ${e1.message}`;
+          result.errors.push(msg);
+          console.error('[screenshots]', msg);
           continue;
         }
 
@@ -188,7 +226,11 @@ export async function captureWebScreenshotsToStorage(
           contentType: 'image/jpeg',
           upsert: true,
         });
-        if (e2) console.error('[screenshots] Upload full:', e2.message);
+        if (e2) {
+          const msg = `Upload full falló para ${url}: ${e2.message}`;
+          result.errors.push(msg);
+          console.error('[screenshots]', msg);
+        }
 
         const { data: pubHero } = supabase.storage.from(BUCKET).getPublicUrl(heroPath);
         const { data: pubFull } = supabase.storage.from(BUCKET).getPublicUrl(fullPath);
@@ -196,20 +238,25 @@ export async function captureWebScreenshotsToStorage(
         const fullUrl = pubFull?.publicUrl || heroUrl;
 
         if (heroUrl) {
-          results.set(url, {
+          result.screenshots.set(url, {
             screenshot_url: heroUrl,
             portfolio_hero: heroUrl,
             portfolio_full: fullUrl || heroUrl,
             portfolio_folder: slug,
           });
+          result.succeeded++;
+          console.log(`[screenshots] ✓ ${url} → ${heroUrl}`);
         }
-      } catch (err) {
-        console.error('[screenshots] Error en', url, err);
+      } catch (err: any) {
+        const msg = `Error capturando ${url}: ${err?.message || err}`;
+        result.errors.push(msg);
+        console.error('[screenshots]', msg);
       }
     }
   } finally {
     await browser.close();
+    console.log(`[screenshots] Resultado: ${result.succeeded}/${result.attempted} capturas OK`);
   }
 
-  return results;
+  return result;
 }

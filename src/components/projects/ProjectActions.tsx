@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
+import { CalendarProgressModal } from './CalendarProgressModal';
 
 async function readApiError(res: Response): Promise<string> {
   const text = await res.text();
@@ -57,9 +58,11 @@ export function ProjectActions({
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [screenshotWarning, setScreenshotWarning] = useState('');
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [calendarModeChoice, setCalendarModeChoice] = useState<'append' | 'replace'>('append');
   const [durationMonths, setDurationMonths] = useState<1 | 3 | 6 | 9>(1);
+  const [progressModalOpen, setProgressModalOpen] = useState(false);
 
   const now = new Date();
   const currentMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
@@ -71,13 +74,29 @@ export function ProjectActions({
       body: JSON.stringify({ project_id: projectId }),
     });
     if (!res.ok) throw new Error(await readApiError(res));
-    await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({}));
+
+    if (endpoint === 'analyze-site' && data?.screenshots) {
+      const ss = data.screenshots as { attempted: number; succeeded: number; skipped_reason: string | null; errors: string[] };
+      if (ss.skipped_reason) {
+        setScreenshotWarning(`Capturas omitidas: ${ss.skipped_reason}`);
+      } else if (ss.attempted > 0 && ss.succeeded === 0) {
+        setScreenshotWarning(`Capturas fallidas (${ss.attempted} intentos). ${ss.errors?.[0] || ''}`);
+      } else if (ss.succeeded > 0 && ss.succeeded < ss.attempted) {
+        setScreenshotWarning(`Capturas parciales: ${ss.succeeded}/${ss.attempted} OK`);
+      } else if (ss.succeeded > 0) {
+        setScreenshotWarning('');
+      }
+    }
+
+    return data;
   }
 
   /** Un solo paso del pipeline (web / competidores / estrategia). La marca va en la tarjeta «Identidad visual». */
   async function runStep(endpoint: string, stepName: string) {
     setLoading(stepName);
     setError('');
+    setScreenshotWarning('');
     try {
       await postPipelineStep(endpoint);
       router.refresh();
@@ -92,6 +111,7 @@ export function ProjectActions({
   /** Marca (si hay URL) → web → competidores → estrategia. Todo en secuencia, solo tras pulsar. */
   async function runFullBasePipeline() {
     setError('');
+    setScreenshotWarning('');
     try {
       if (projectUrl?.trim()) {
         setLoading('base:marca');
@@ -128,40 +148,24 @@ export function ProjectActions({
     setCalendarModalOpen(true);
   }
 
-  async function runGenerateCalendar(mode: 'append' | 'replace') {
+  function launchCalendarGeneration(chosenMode: 'append' | 'replace') {
     setCalendarModalOpen(false);
     if (!phase1Complete) {
       setError('Completa primero el análisis base completo (marca, web, competidores y estrategia).');
       return;
     }
-    setLoading('calendario');
+    const effectiveMode = hasCalendar ? chosenMode : 'replace';
+    setCalendarModeChoice(effectiveMode);
     setError('');
-    try {
-      const d = new Date();
-      const effectiveMode = hasCalendar ? mode : 'replace';
-      const res = await fetch('/api/generate-calendar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: projectId,
-          calendar_mode: effectiveMode,
-          duration_months: durationMonths,
-          month: d.getMonth(),
-          year: d.getFullYear(),
-        }),
-      });
-      if (!res.ok) throw new Error(await readApiError(res));
-      await res.json().catch(() => ({}));
-      router.refresh();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error desconocido';
-      setError(`Error al generar calendario: ${msg}`);
-    } finally {
-      setLoading(null);
-    }
+    setProgressModalOpen(true);
   }
 
-  const calendarDisabled = !phase1Complete || !!loading;
+  function handleProgressModalClose() {
+    setProgressModalOpen(false);
+    router.refresh();
+  }
+
+  const calendarDisabled = !phase1Complete || !!loading || progressModalOpen;
   const calendarTitle = !phase1Complete
     ? 'Completa la fase base (todo en uno o los tres pasos sueltos: web → competidores → estrategia)'
     : undefined;
@@ -185,6 +189,11 @@ export function ProjectActions({
         {error && (
           <div className="mb-4 bg-red-50 border-2 border-surface-900 text-red-700 px-4 py-3 text-xs font-bold">
             {error}
+          </div>
+        )}
+        {screenshotWarning && !error && (
+          <div className="mb-4 bg-amber-50 border-2 border-surface-900 text-amber-800 px-4 py-3 text-xs font-bold">
+            {screenshotWarning}
           </div>
         )}
 
@@ -302,7 +311,6 @@ export function ProjectActions({
                 <Button
                   variant={pipelineFlags.calendarReady ? 'success' : 'secondary'}
                   onClick={openCalendarFlow}
-                  loading={loading === 'calendario'}
                   disabled={calendarDisabled}
                 >
                   Generar calendario
@@ -335,13 +343,25 @@ export function ProjectActions({
           </div>
         </div>
 
+        {progressModalOpen && (
+          <CalendarProgressModal
+            projectId={projectId}
+            calendarBasePath={`${base}/calendar`}
+            mode={calendarModeChoice}
+            durationMonths={durationMonths}
+            month={now.getMonth()}
+            year={now.getFullYear()}
+            onClose={handleProgressModalClose}
+          />
+        )}
+
         {calendarModalOpen && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="calendar-modal-title"
-            onClick={() => !loading && setCalendarModalOpen(false)}
+            onClick={() => setCalendarModalOpen(false)}
           >
             <div
               className="bg-white border-2 border-surface-900 shadow-brutal-lg max-w-lg w-full p-6"
@@ -421,10 +441,10 @@ export function ProjectActions({
               )}
 
               <div className="flex justify-end gap-3">
-                <Button variant="ghost" onClick={() => setCalendarModalOpen(false)} disabled={loading === 'calendario'}>
+                <Button variant="ghost" onClick={() => setCalendarModalOpen(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={() => runGenerateCalendar(calendarModeChoice)} loading={loading === 'calendario'}>
+                <Button onClick={() => launchCalendarGeneration(calendarModeChoice)}>
                   Generar
                 </Button>
               </div>

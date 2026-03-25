@@ -55,6 +55,8 @@ module.exports = {
         'float': 'float 6s ease-in-out infinite',
         'float-slow': 'floatSlow 8s ease-in-out infinite',
         'spin-slow': 'spin 12s linear infinite',
+        'cell-fill': 'cellFill 0.35s cubic-bezier(0.34,1.56,0.64,1) both',
+        'pulse-dot': 'pulseDot 1.4s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -80,6 +82,14 @@ module.exports = {
         floatSlow: {
           '0%, 100%': { transform: 'translateY(0) rotate(0deg)' },
           '50%': { transform: 'translateY(-12px) rotate(-3deg)' },
+        },
+        cellFill: {
+          '0%': { transform: 'scale(0)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        pulseDot: {
+          '0%, 100%': { opacity: '0.4', transform: 'scale(0.85)' },
+          '50%': { opacity: '1', transform: 'scale(1)' },
         },
       },
       fontSize: {

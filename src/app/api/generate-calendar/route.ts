@@ -28,7 +28,6 @@ function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 }
 
-/** Mapea variantes típicas del LLM al valor canónico que exige la BD. */
 function coerceFormat(raw: string): string | null {
   const k = stripAccents(raw.trim()).replace(/\s+/g, '_');
   const map: Record<string, string> = {
@@ -171,10 +170,13 @@ function toYmd(year: number, month0: number, day: number): string {
   return `${year}-${String(month0 + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function sseMessage(event: string, data: Record<string, unknown>): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase();
   let projectId: string | undefined;
-  let markErrorOnFailure = false;
 
   try {
     const {
@@ -203,8 +205,6 @@ export async function POST(request: NextRequest) {
     if (!project) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }
-
-    markErrorOnFailure = true;
 
     const { data: strategy } = await supabase
       .from('strategies')
@@ -270,118 +270,205 @@ export async function POST(request: NextRequest) {
 
       if (delErr) {
         console.error('[generate-calendar] Delete error:', delErr);
-        throw new Error('No se pudo vaciar el calendario del rango seleccionado');
+        return NextResponse.json({ error: 'No se pudo vaciar el calendario del rango seleccionado' }, { status: 500 });
       }
     }
 
-    const allInserted: unknown[] = [];
-
-    let totalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
-
+    const monthsPlan: Array<{ monthIndex: number; year: number; month0: number; label: string; expectedPosts: number; totalDays: number }> = [];
     for (let i = 0; i < duration; i++) {
       const { year: y, month0: m0 } = addCalendarMonths(targetYear, targetMonth, i);
-      const { system, user: userPrompt, segments } = buildCalendarPrompt(project, strategyText, m0, y);
-      const expectedPosts = segments.reduce((sum, segment) => sum + segment.postsQuota, 0);
-
-      let normalizedPosts: ReturnType<typeof normalizeCalendarPosts> = [];
-
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const retryHint =
-          attempt > 0
-            ? `\n\n---\nREINTENTO OBLIGATORIO: La respuesta anterior no tenía exactamente ${expectedPosts} publicaciones válidas (formato y content_type deben ser exactamente uno de los valores permitidos, sin variantes en inglés ni acentos distintos a los canónicos: format story|carrusel|publicacion|reel; content_type educativo|inspiracional|comercial|entretenimiento|personal|corporativo). Devuelve de nuevo el JSON completo con EXACTAMENTE ${expectedPosts} posts en el array "posts" y total_posts=${expectedPosts}.`
-            : '';
-
-        const aiResponse = await callAI<CalendarGeneration>(system, userPrompt + retryHint, {
-          agentKey: 'generate_calendar',
-          userId: user.id,
-        });
-
-        if (aiResponse.usage) {
-          totalUsage = totalUsage
-            ? {
-                prompt_tokens: (totalUsage.prompt_tokens ?? 0) + (aiResponse.usage.prompt_tokens ?? 0),
-                completion_tokens:
-                  (totalUsage.completion_tokens ?? 0) + (aiResponse.usage.completion_tokens ?? 0),
-                total_tokens: (totalUsage.total_tokens ?? 0) + (aiResponse.usage.total_tokens ?? 0),
-              }
-            : aiResponse.usage;
-        }
-
-        if (!aiResponse.data?.posts || !Array.isArray(aiResponse.data.posts)) {
-          throw new Error('La IA no devolvió un calendario válido (falta el array de publicaciones)');
-        }
-
-        normalizedPosts = normalizeCalendarPosts(aiResponse.data.posts, expectedPosts);
-        if (normalizedPosts.length === expectedPosts) break;
-      }
-
-      const minAcceptable = Math.max(1, expectedPosts - Math.ceil(expectedPosts * 0.1));
-      if (normalizedPosts.length < minAcceptable) {
-        throw new Error(
-          `La IA devolvió ${normalizedPosts.length} publicaciones válidas tras reintento, pero se esperaban al menos ${minAcceptable} (cupo: ${expectedPosts}). Vuelve a generar.`
-        );
-      }
-
-      redistributeCalendarPostsBySegments(normalizedPosts, segments);
-
-      const monthStart = toYmd(y, m0, 1);
-      const monthEnd = toYmd(y, m0, lastDayInMonth(y, m0));
-
-      const postsToInsert = normalizedPosts.map(post => ({
-        project_id,
-        strategy_id: strategy?.id || null,
-        scheduled_date: post.scheduled_date,
-        content_type: post.content_type,
-        format: post.format,
-        idea: post.idea,
-        copy: post.copy,
-        cta: post.cta,
-        post_goal: post.post_goal,
-        hashtags: post.hashtags || [],
-        platforms: post.platforms || ['instagram'],
-        production_specs: post.production_specs,
-        status: 'draft' as const,
-      }));
-
-      const filtered = postsToInsert.filter(p => p.scheduled_date >= monthStart && p.scheduled_date <= monthEnd);
-      if (filtered.length < postsToInsert.length) {
-        console.warn(`[generate-calendar] ${postsToInsert.length - filtered.length} post(s) fuera de rango mensual; se omitieron.`);
-      }
-
-      const { data: inserted, error: insertError } = await supabase
-        .from('content_items')
-        .insert(filtered)
-        .select();
-
-      if (insertError) {
-        console.error('[generate-calendar] Insert error:', insertError);
-        throw new Error('Error al guardar el calendario');
-      }
-
-      if (inserted?.length) {
-        (allInserted as unknown[]).push(...inserted);
-      }
+      const { segments: segs } = buildCalendarPrompt(project, strategyText, m0, y);
+      const expected = segs.reduce((s, g) => s + g.postsQuota, 0);
+      monthsPlan.push({
+        monthIndex: i,
+        year: y,
+        month0: m0,
+        label: `${getMonthName(m0)} ${y}`,
+        expectedPosts: expected,
+        totalDays: lastDayInMonth(y, m0),
+      });
     }
 
-    await supabase.from('projects').update({ status: 'ready' }).eq('id', project_id);
+    const totalExpectedPosts = monthsPlan.reduce((s, m) => s + m.expectedPosts, 0);
+    const signal = request.signal;
 
-    const firstLabel = `${getMonthName(targetMonth)} ${targetYear}`;
-    const rangeLabel =
-      duration === 1 ? firstLabel : `${firstLabel} – ${getMonthName(lastPeriod.month0)} ${lastPeriod.year}`;
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: Record<string, unknown>) => {
+          try {
+            controller.enqueue(encoder.encode(sseMessage(event, data)));
+          } catch { /* stream closed */ }
+        };
 
-    return NextResponse.json({
-      success: true,
-      calendar: {
-        month: rangeLabel,
-        total_posts: allInserted.length,
-        posts: allInserted,
-        mode,
-        duration_months: duration,
+        send('init', {
+          totalMonths: duration,
+          totalExpectedPosts,
+          months: monthsPlan.map(m => ({ label: m.label, expectedPosts: m.expectedPosts, totalDays: m.totalDays })),
+          mode,
+        });
+
+        let grandTotalInserted = 0;
+        let totalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+        let aborted = false;
+
+        try {
+          for (let i = 0; i < duration; i++) {
+            if (signal.aborted) {
+              aborted = true;
+              break;
+            }
+
+            const mp = monthsPlan[i];
+            send('progress', {
+              phase: 'month_start',
+              monthIndex: i,
+              monthLabel: mp.label,
+              totalMonths: duration,
+            });
+
+            const { system, user: userPrompt, segments } = buildCalendarPrompt(project, strategyText, mp.month0, mp.year);
+            const expectedPosts = segments.reduce((sum, segment) => sum + segment.postsQuota, 0);
+
+            let normalizedPosts: ReturnType<typeof normalizeCalendarPosts> = [];
+
+            for (let attempt = 0; attempt < 2; attempt++) {
+              if (signal.aborted) { aborted = true; break; }
+
+              const retryHint =
+                attempt > 0
+                  ? `\n\n---\nREINTENTO OBLIGATORIO: La respuesta anterior no tenía exactamente ${expectedPosts} publicaciones válidas (formato y content_type deben ser exactamente uno de los valores permitidos, sin variantes en inglés ni acentos distintos a los canónicos: format story|carrusel|publicacion|reel; content_type educativo|inspiracional|comercial|entretenimiento|personal|corporativo). Devuelve de nuevo el JSON completo con EXACTAMENTE ${expectedPosts} posts en el array "posts" y total_posts=${expectedPosts}.`
+                  : '';
+
+              const aiResponse = await callAI<CalendarGeneration>(system, userPrompt + retryHint, {
+                agentKey: 'generate_calendar',
+                userId: user.id,
+              });
+
+              if (aiResponse.usage) {
+                totalUsage = totalUsage
+                  ? {
+                      prompt_tokens: (totalUsage.prompt_tokens ?? 0) + (aiResponse.usage.prompt_tokens ?? 0),
+                      completion_tokens: (totalUsage.completion_tokens ?? 0) + (aiResponse.usage.completion_tokens ?? 0),
+                      total_tokens: (totalUsage.total_tokens ?? 0) + (aiResponse.usage.total_tokens ?? 0),
+                    }
+                  : { ...aiResponse.usage };
+              }
+
+              if (!aiResponse.data?.posts || !Array.isArray(aiResponse.data.posts)) {
+                throw new Error('La IA no devolvió un calendario válido (falta el array de publicaciones)');
+              }
+
+              normalizedPosts = normalizeCalendarPosts(aiResponse.data.posts, expectedPosts);
+              if (normalizedPosts.length === expectedPosts) break;
+            }
+
+            if (aborted) break;
+
+            const minAcceptable = Math.max(1, expectedPosts - Math.ceil(expectedPosts * 0.1));
+            if (normalizedPosts.length < minAcceptable) {
+              throw new Error(
+                `La IA devolvió ${normalizedPosts.length} publicaciones válidas tras reintento, pero se esperaban al menos ${minAcceptable} (cupo: ${expectedPosts}). Vuelve a generar.`
+              );
+            }
+
+            redistributeCalendarPostsBySegments(normalizedPosts, segments);
+
+            const monthStart = toYmd(mp.year, mp.month0, 1);
+            const monthEnd = toYmd(mp.year, mp.month0, lastDayInMonth(mp.year, mp.month0));
+
+            const postsToInsert = normalizedPosts.map(post => ({
+              project_id,
+              strategy_id: strategy?.id || null,
+              scheduled_date: post.scheduled_date,
+              content_type: post.content_type,
+              format: post.format,
+              idea: post.idea,
+              copy: post.copy,
+              cta: post.cta,
+              post_goal: post.post_goal,
+              hashtags: post.hashtags || [],
+              platforms: post.platforms || ['instagram'],
+              production_specs: post.production_specs,
+              status: 'draft' as const,
+            }));
+
+            const filtered = postsToInsert.filter(p => p.scheduled_date >= monthStart && p.scheduled_date <= monthEnd);
+
+            const { data: inserted, error: insertError } = await supabase
+              .from('content_items')
+              .insert(filtered)
+              .select();
+
+            if (insertError) {
+              console.error('[generate-calendar] Insert error:', insertError);
+              throw new Error('Error al guardar el calendario');
+            }
+
+            const insertedCount = inserted?.length ?? 0;
+            grandTotalInserted += insertedCount;
+
+            const formatCounts: Record<string, number> = {};
+            const typeCounts: Record<string, number> = {};
+            const dates: string[] = [];
+            for (const p of filtered) {
+              formatCounts[p.format] = (formatCounts[p.format] || 0) + 1;
+              typeCounts[p.content_type] = (typeCounts[p.content_type] || 0) + 1;
+              if (!dates.includes(p.scheduled_date)) dates.push(p.scheduled_date);
+            }
+
+            send('progress', {
+              phase: 'month_done',
+              monthIndex: i,
+              monthLabel: mp.label,
+              totalMonths: duration,
+              postsInserted: insertedCount,
+              postsExpected: expectedPosts,
+              grandTotalInserted,
+              totalExpectedPosts,
+              dates: dates.sort(),
+              formatCounts,
+              typeCounts,
+              usage: totalUsage,
+            });
+          }
+
+          if (!aborted) {
+            await supabase.from('projects').update({ status: 'ready' }).eq('id', project_id);
+          }
+
+          const firstLabel = `${getMonthName(targetMonth)} ${targetYear}`;
+          const rangeLabel =
+            duration === 1 ? firstLabel : `${firstLabel} – ${getMonthName(lastPeriod.month0)} ${lastPeriod.year}`;
+
+          send(aborted ? 'cancelled' : 'complete', {
+            totalPosts: grandTotalInserted,
+            totalMonths: duration,
+            monthsCompleted: aborted ? monthsPlan.findIndex((_, idx) => idx >= duration || signal.aborted) : duration,
+            rangeLabel,
+            usage: totalUsage,
+          });
+        } catch (error: unknown) {
+          await markProjectPipelineError(supabase, projectId);
+          console.error('[generate-calendar] Error:', error);
+          const message = error instanceof Error ? error.message : 'Error interno';
+          send('error', { error: message, totalInsertedBeforeError: grandTotalInserted });
+        }
+
+        try { controller.close(); } catch { /* already closed */ }
       },
-      usage: totalUsage,
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
     });
   } catch (error: unknown) {
-    if (markErrorOnFailure) await markProjectPipelineError(supabase, projectId);
+    await markProjectPipelineError(supabase, projectId);
     console.error('[generate-calendar] Error:', error);
     const message = error instanceof Error ? error.message : 'Error interno';
     return NextResponse.json({ error: message }, { status: 500 });

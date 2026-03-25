@@ -3,7 +3,7 @@ import { createServerSupabase, markProjectPipelineError } from '@/lib/supabase/s
 import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
 import { getScrapingProvider } from '@/lib/scraping';
 import { fetchSerpContextForBusinessAnalysis, hasGoogleSerpRestKey } from '@/lib/scraping/serp';
-import { captureWebScreenshotsToStorage } from '@/lib/scraping/screenshots-puppeteer';
+import { captureWebScreenshotsToStorage, type ScreenshotResult } from '@/lib/scraping/screenshots-puppeteer';
 import { callAI, buildBusinessAnalysisPrompt } from '@/lib/ai';
 import type { BusinessAnalysis, Json } from '@/types';
 
@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
     // 1. Scraping real: descubrir y scrapear páginas de la web del cliente
     const scraper = getScrapingProvider();
     let scrapedPages: any[] = [];
+    let screenshotInfo: Pick<ScreenshotResult, 'attempted' | 'succeeded' | 'skipped_reason' | 'errors'> = {
+      attempted: 0, succeeded: 0, skipped_reason: null, errors: [],
+    };
 
     if (project.url) {
       await supabase
@@ -59,14 +62,20 @@ export async function POST(request: NextRequest) {
 
       const validPages = pages.filter(page => !page.content.startsWith('[No se pudo'));
 
-      const screenshotByUrl = await captureWebScreenshotsToStorage(
+      const ssResult = await captureWebScreenshotsToStorage(
         validPages.map(p => p.url),
         project_id,
         { maxPages: 3 }
       );
+      screenshotInfo = {
+        attempted: ssResult.attempted,
+        succeeded: ssResult.succeeded,
+        skipped_reason: ssResult.skipped_reason,
+        errors: ssResult.errors,
+      };
 
       const insertData = validPages.map(page => {
-        const shot = screenshotByUrl.get(page.url);
+        const shot = ssResult.screenshots.get(page.url);
         return {
           project_id,
           url: page.url,
@@ -178,6 +187,12 @@ export async function POST(request: NextRequest) {
       analysis: aiResponse.data,
       usage: aiResponse.usage,
       pages_scraped: scrapedPages.length,
+      screenshots: {
+        attempted: screenshotInfo.attempted,
+        succeeded: screenshotInfo.succeeded,
+        skipped_reason: screenshotInfo.skipped_reason,
+        errors: screenshotInfo.errors.slice(0, 5),
+      },
     });
   } catch (error: any) {
     if (pipelineStarted) await markProjectPipelineError(supabase, projectId);
