@@ -91,6 +91,7 @@ async function processOneVisual(
   const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
     agentKey: 'generate_visual_briefs',
     userId,
+    maxTokens: 4096,
   });
 
   const vPrompt = clip(aiResponse.data?.visual_prompt);
