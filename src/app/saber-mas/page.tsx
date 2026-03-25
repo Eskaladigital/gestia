@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ESKALA_MARKETING_DIGITAL } from '@/lib/utils';
-import { MarketingNavLinks, MarketingNavActions } from '@/components/layout/MarketingNav';
+import { MarketingNavCenter, MarketingNavActions } from '@/components/layout/MarketingNav';
 
 export default function SaberMasPage() {
   return (
@@ -10,8 +10,8 @@ export default function SaberMasPage() {
         <Link href="/" className="flex items-center">
           <img src="/images/logo/logo_gestia.png" alt="GestIA" className="h-9 w-auto" />
         </Link>
-        <div className="flex justify-center">
-          <MarketingNavLinks />
+        <div className="flex justify-center min-w-0">
+          <MarketingNavCenter />
         </div>
         <MarketingNavActions />
       </nav>
