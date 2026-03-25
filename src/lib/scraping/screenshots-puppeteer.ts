@@ -61,7 +61,7 @@ async function dismissCookieBanners(page: import('puppeteer').Page) {
     for (const b of nodes) {
       const t = (b.textContent || '').replace(/\s+/g, ' ').trim();
       if (texts.some(x => t === x || t.startsWith(`${x} `))) {
-        b.click();
+        (b as HTMLElement).click();
         return;
       }
     }

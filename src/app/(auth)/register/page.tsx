@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -16,7 +16,7 @@ const PLAN_LABELS: Record<string, string> = {
   agency_elite: 'Agencia Elite',
 };
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedPlan = searchParams.get('plan');
@@ -155,5 +155,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-surface-50 text-surface-500 text-sm">
+          Cargando…
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

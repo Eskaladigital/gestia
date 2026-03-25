@@ -81,12 +81,12 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       const contentW = pageW - margin * 2;
       let y = 0;
 
-      const BRAND = [41, 98, 255]; // #2962ff
-      const BRAND_LIGHT = [240, 244, 255]; // very light blue
-      const DARK = [30, 41, 59]; // slate-800
-      const GRAY = [100, 116, 139]; // slate-500
-      const LIGHT_BG = [248, 250, 252]; // slate-50
-      const BORDER = [226, 232, 240]; // slate-200
+      const BRAND: [number, number, number] = [41, 98, 255]; // #2962ff
+      const BRAND_LIGHT: [number, number, number] = [240, 244, 255]; // very light blue
+      const DARK: [number, number, number] = [30, 41, 59]; // slate-800
+      const GRAY: [number, number, number] = [100, 116, 139]; // slate-500
+      const LIGHT_BG: [number, number, number] = [248, 250, 252]; // slate-50
+      const BORDER: [number, number, number] = [226, 232, 240]; // slate-200
 
       const dateStr = new Date().toLocaleDateString('es-ES', {
         year: 'numeric',
