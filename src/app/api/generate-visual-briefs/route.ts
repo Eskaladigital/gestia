@@ -8,6 +8,8 @@ export const maxDuration = 300;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const PARALLEL_VISUALS = 3;
+
 function clip(text: unknown, max = 6000): string {
   const s = typeof text === 'string' ? text.trim() : '';
   return s.length > max ? s.slice(0, max) : s;
@@ -61,6 +63,67 @@ function buildVisualQueue(posts: ContentItem[]): VisualJob[] {
   }
 
   return queue;
+}
+
+interface VisualResult {
+  contentItemId: string;
+  visualIndex: number;
+  label: string;
+  totalVisualsForPost: number;
+  prompt: string;
+  brief: string;
+}
+
+async function processOneVisual(
+  job: VisualJob,
+  project: any,
+  userId: string,
+  supabase: any,
+): Promise<VisualResult | null> {
+  const { system, user: userPrompt } = buildSingleVisualPrompt(project, {
+    post: job.post,
+    visualIndex: job.visualIndex,
+    totalVisuals: job.totalVisualsForPost,
+    label: job.label,
+    slideContext: job.slideContext,
+  });
+
+  const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
+    agentKey: 'generate_visual_briefs',
+    userId,
+  });
+
+  const vPrompt = clip(aiResponse.data?.visual_prompt);
+  const vBrief = clip(aiResponse.data?.visual_brief);
+
+  if (!vPrompt) {
+    console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId}[${job.visualIndex}]`);
+    return null;
+  }
+
+  try {
+    await supabase
+      .from('content_item_visuals')
+      .upsert({
+        content_item_id: job.contentItemId,
+        visual_index: job.visualIndex,
+        label: job.label,
+        visual_prompt: vPrompt,
+        visual_brief: vBrief || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'content_item_id,visual_index' });
+  } catch (e) {
+    console.warn('[generate-visual-briefs] upsert to content_item_visuals failed (table may not exist yet):', e);
+  }
+
+  return {
+    contentItemId: job.contentItemId,
+    visualIndex: job.visualIndex,
+    label: job.label,
+    totalVisualsForPost: job.totalVisualsForPost,
+    prompt: vPrompt,
+    brief: vBrief,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -150,107 +213,84 @@ export async function POST(request: NextRequest) {
         let aborted = false;
 
         const postVisualResults = new Map<string, Array<{ index: number; label: string; brief: string; prompt: string }>>();
+        const completedPostIds = new Set<string>();
 
         try {
-          for (const job of visualQueue) {
+          for (let i = 0; i < visualQueue.length; i += PARALLEL_VISUALS) {
             if (signal.aborted) { aborted = true; break; }
+
+            const batch = visualQueue.slice(i, i + PARALLEL_VISUALS);
 
             send('progress', {
               phase: 'visual_start',
               visualsDone,
               totalVisuals: visualQueue.length,
-              postIdea: job.postIdea.slice(0, 80),
-              postFormat: job.postFormat,
-              label: job.label,
-              visualIndex: job.visualIndex,
-              totalVisualsForPost: job.totalVisualsForPost,
+              postIdea: batch[0].postIdea.slice(0, 80),
+              postFormat: batch[0].postFormat,
+              label: batch.map(b => b.label).join(', '),
+              batchSize: batch.length,
             });
 
-            const { system, user: userPrompt } = buildSingleVisualPrompt(project, {
-              post: job.post,
-              visualIndex: job.visualIndex,
-              totalVisuals: job.totalVisualsForPost,
-              label: job.label,
-              slideContext: job.slideContext,
-            });
-
-            const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
-              agentKey: 'generate_visual_briefs',
-              userId: user.id,
-            });
+            const results = await Promise.allSettled(
+              batch.map(job => processOneVisual(job, project, user.id, supabase))
+            );
 
             if (signal.aborted) { aborted = true; break; }
 
-            if (aiResponse.usage) {
-              totalUsage = totalUsage
-                ? {
-                    prompt_tokens: (totalUsage.prompt_tokens ?? 0) + (aiResponse.usage.prompt_tokens ?? 0),
-                    completion_tokens: (totalUsage.completion_tokens ?? 0) + (aiResponse.usage.completion_tokens ?? 0),
-                    total_tokens: (totalUsage.total_tokens ?? 0) + (aiResponse.usage.total_tokens ?? 0),
-                  }
-                : { ...aiResponse.usage };
+            for (let j = 0; j < results.length; j++) {
+              const result = results[j];
+              const job = batch[j];
+
+              if (result.status === 'fulfilled' && result.value) {
+                const r = result.value;
+
+                if (!postVisualResults.has(r.contentItemId)) {
+                  postVisualResults.set(r.contentItemId, []);
+                }
+                postVisualResults.get(r.contentItemId)!.push({
+                  index: r.visualIndex,
+                  label: r.label,
+                  brief: r.brief,
+                  prompt: r.prompt,
+                });
+
+                visualsDone++;
+              } else if (result.status === 'rejected') {
+                console.error(`[generate-visual-briefs] Failed visual ${job.contentItemId}[${job.visualIndex}]:`, result.reason);
+                visualsDone++;
+              } else {
+                visualsDone++;
+              }
             }
 
-            const vPrompt = clip(aiResponse.data?.visual_prompt);
-            const vBrief = clip(aiResponse.data?.visual_brief);
+            for (const job of batch) {
+              if (completedPostIds.has(job.contentItemId)) continue;
 
-            if (!vPrompt) {
-              console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId} visual ${job.visualIndex}`);
-              visualsDone++;
-              send('progress', {
-                phase: 'visual_done',
-                visualsDone,
-                totalVisuals: visualQueue.length,
-                label: job.label,
-                warning: 'La IA devolvió un prompt vacío para este visual',
-              });
-              continue;
-            }
+              const allVisualsForPost = visualQueue.filter(v => v.contentItemId === job.contentItemId);
+              const doneForPost = postVisualResults.get(job.contentItemId)?.length || 0;
 
-            const { error: upsertError } = await supabase
-              .from('content_item_visuals')
-              .upsert({
-                content_item_id: job.contentItemId,
-                visual_index: job.visualIndex,
-                label: job.label,
-                visual_prompt: vPrompt,
-                visual_brief: vBrief || null,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: 'content_item_id,visual_index' });
+              if (doneForPost >= allVisualsForPost.length) {
+                const postResults = postVisualResults.get(job.contentItemId) || [];
+                postResults.sort((a, b) => a.index - b.index);
 
-            if (upsertError) {
-              console.error(`[generate-visual-briefs] upsert error for ${job.contentItemId}[${job.visualIndex}]:`, upsertError);
-            }
+                const combinedBrief = postResults.map(r => `### ${r.label}\n${r.brief}`).join('\n\n');
+                const combinedPrompt = postResults.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
 
-            if (!postVisualResults.has(job.contentItemId)) {
-              postVisualResults.set(job.contentItemId, []);
-            }
-            postVisualResults.get(job.contentItemId)!.push({
-              index: job.visualIndex,
-              label: job.label,
-              brief: vBrief,
-              prompt: vPrompt,
-            });
+                const { error: updateErr } = await supabase
+                  .from('content_items')
+                  .update({
+                    visual_brief: clip(combinedBrief),
+                    visual_prompt: clip(combinedPrompt),
+                  })
+                  .eq('id', job.contentItemId);
 
-            visualsDone++;
+                if (updateErr) {
+                  console.error(`[generate-visual-briefs] update content_items error for ${job.contentItemId}:`, updateErr);
+                }
 
-            const isLastVisualForPost = job.visualIndex === job.totalVisualsForPost - 1;
-            if (isLastVisualForPost) {
-              const results = postVisualResults.get(job.contentItemId) || [];
-              results.sort((a, b) => a.index - b.index);
-
-              const combinedBrief = results.map(r => `### ${r.label}\n${r.brief}`).join('\n\n');
-              const combinedPrompt = results.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
-
-              await supabase
-                .from('content_items')
-                .update({
-                  visual_brief: clip(combinedBrief),
-                  visual_prompt: clip(combinedPrompt),
-                })
-                .eq('id', job.contentItemId);
-
-              postsCompleted++;
+                completedPostIds.add(job.contentItemId);
+                postsCompleted++;
+              }
             }
 
             send('progress', {
@@ -259,9 +299,8 @@ export async function POST(request: NextRequest) {
               totalVisuals: visualQueue.length,
               postsCompleted,
               totalPosts: posts.length,
-              label: job.label,
-              postIdea: job.postIdea.slice(0, 80),
-              usage: totalUsage,
+              label: batch.map(b => b.label).join(', '),
+              postIdea: batch[0].postIdea.slice(0, 80),
             });
           }
 
