@@ -300,10 +300,10 @@ export async function POST(request: NextRequest) {
         let aborted = false;
 
         try {
-          for (let i = 0; i < duration; i++) {
+          const processMonth = async (i: number) => {
             if (signal.aborted) {
               aborted = true;
-              break;
+              return;
             }
 
             const mp = monthsPlan[i];
@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
               if (normalizedPosts.length === expectedPosts) break;
             }
 
-            if (aborted) break;
+            if (aborted) return;
 
             const minAcceptable = Math.max(1, expectedPosts - Math.ceil(expectedPosts * 0.1));
             if (normalizedPosts.length < minAcceptable) {
@@ -432,7 +432,10 @@ export async function POST(request: NextRequest) {
               typeCounts,
               usage: totalUsage,
             });
-          }
+          };
+
+          // Ejecutar todos los meses en paralelo
+          await Promise.all(monthsPlan.map((_, i) => processMonth(i)));
 
           if (!aborted) {
             await supabase.from('projects').update({ status: 'ready' }).eq('id', project_id);
