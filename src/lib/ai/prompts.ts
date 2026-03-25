@@ -827,3 +827,148 @@ INSTRUCCIONES FINALES:
 }
 
 export { buildProjectContext, buildToneContext, buildStyleContext };
+
+// ============================================================
+// 7. PROMPT: Visual individual (1 llamada IA = 1 imagen)
+// ============================================================
+
+export interface SingleVisualInput {
+  post: VisualBriefInput;
+  visualIndex: number;
+  totalVisuals: number;
+  label: string;
+  slideContext?: string;
+}
+
+const ASPECT_RATIOS: Record<string, string> = {
+  story: '9:16',
+  reel: '9:16',
+  publicacion: '4:5',
+  carrusel: '4:5',
+};
+
+export function buildSingleVisualPrompt(
+  project: Project,
+  input: SingleVisualInput
+): { system: string; user: string } {
+  const { post, visualIndex, totalVisuals, label, slideContext } = input;
+  const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
+  const isVideo = post.production_specs?.media_type === 'video';
+
+  return {
+    system: `Eres un fotógrafo editorial de renombre internacional y director de arte especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN con la precisión de un director de fotografía profesional que prepara un shooting real.
+
+TU ENTREGA TIENE DOS PARTES:
+
+═══════════════════════════════════════════
+1. "visual_prompt" — PROMPT PARA IA GENERATIVA
+═══════════════════════════════════════════
+
+Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E, Ideogram o Sora. Debe ser autosuficiente.
+
+ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
+
+**Escena:** Descripción general inmersiva de la situación, el entorno y el contexto. Mínimo 3 frases. Incluye la hora del día, la estación, el lugar concreto (no genérico). Ejemplo: "Fotografía de stock editorial. Un primer plano íntimo de varias macetas de terracota que contienen cactus Trichocereus, prosperando en un invernadero lleno de luz natural matutina de primavera."
+
+**Composición:** Relación de aspecto (${ar}). Tipo de plano exacto (primer plano, plano medio, plano general, cenital, contrapicado, etc.). Ángulo de cámara. Disposición precisa de los elementos en el encuadre (qué hay en primer plano, medio plano, fondo). Cómo se crea profundidad. Mínimo 3 frases.
+
+**Sujetos:** Descripción física MINUCIOSA de los protagonistas u objetos principales. Texturas específicas (rugoso, brillante, mate, translúcido). Colores con precisión (no "verde" sino "verde azulado con matices grisáceos"). Si hay personas: edad aproximada, ropa, pose, expresión, dirección de la mirada, qué sostienen. Si hay objetos: material, estado (nuevo, desgastado, antiguo), tamaño relativo. Mínimo 3 frases.
+
+**Luz y Atmósfera:** Tipo de iluminación con detalle técnico (luz natural cenital, contraluz, luz difusa de ventanal norte, golden hour lateral, etc.). Cómo incide la luz en los sujetos: qué zonas ilumina, dónde caen las sombras, si hay reflejos o brillos. Temperatura de color percibida. El mood o sensación emocional que transmite. Mínimo 3 frases.
+
+**Fondo:** Qué hay exactamente detrás del sujeto principal. Nivel de nitidez (enfoque nítido, desenfoque suave, bokeh cremoso con formas circulares, etc.). Colores predominantes del fondo y su contraste con el primer plano. Elementos secundarios visibles en el fondo. Mínimo 2 frases.
+
+**Estilo:** Estética visual concreta (fotografía editorial de producto, fotografía documental, ilustración flat vector, 3D render hiperrealista, etc.). Texturas de la imagen (grano de película, aspecto digital limpio, halación, etc.). Características de lente simuladas (apertura amplia f/1.8, profundidad de campo reducida, lente macro, teleobjetivo comprimido, etc.). Referencia a estilo de fotógrafo o revista si aplica. Mínimo 2 frases.
+
+REGLAS ESTRICTAS DEL VISUAL_PROMPT:
+- NO incluir texto literal en la descripción (el texto se añade en postproducción)
+- El prompt COMPLETO debe tener AL MENOS 150 palabras
+- CADA sección debe tener al menos 2-3 frases completas y descriptivas
+- Usar lenguaje sensorial y táctil (texturas, temperaturas, sensaciones)
+- Ser ESPECÍFICO, no genérico: no "un jardín bonito" sino "jardín de estilo mediterráneo con grava blanca, lavanda en flor y un olivo centenario de tronco retorcido"
+- Incluir --ar ${ar} al final de la sección Composición
+
+═══════════════════════════════════════════
+2. "visual_brief" — INSTRUCCIONES DE PRODUCCIÓN
+═══════════════════════════════════════════
+
+Instrucciones concretas para un diseñador gráfico o equipo de producción:
+- Qué se necesita producir exactamente para esta imagen
+- Si hay texto overlay: texto LITERAL, posición exacta (tercio superior/inferior, centrado), tipografía recomendada, color del texto
+- Colores de marca a usar y DÓNDE (fondo, acentos, textos)
+- Referencias de estilo o mood board si aplica
+- Indicaciones de postproducción${isVideo ? '\n- Para vídeo: describir el fotograma clave (key frame) más representativo de esta escena' : ''}
+
+Responde en español.
+Devuelve SOLO JSON válido con exactamente estos dos campos:
+{
+  "visual_prompt": "...",
+  "visual_brief": "..."
+}`,
+
+    user: `Genera el prompt visual detallado para esta imagen.
+
+## IDENTIDAD DE MARCA
+${buildBrandContext(project)}
+
+## CONTEXTO DEL NEGOCIO
+${buildProjectContext(project, { includeAiRules: true })}
+
+## PUBLICACIÓN
+- Formato: ${post.format || 'No especificado'}
+- Tipo de contenido: ${post.content_type}
+- Idea del post: ${post.idea}
+- Copy: ${(post.copy || '').slice(0, 400)}
+- CTA: ${post.cta || 'N/A'}
+- Objetivo: ${post.post_goal || 'N/A'}
+- Aspect ratio: ${ar}
+
+## IMAGEN A GENERAR
+- ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta imagen según el calendario: ${slideContext}` : ''}${isVideo ? '\n- NOTA: Este visual es un fotograma clave (key frame) representativo de un vídeo' : ''}
+
+INSTRUCCIONES FINALES:
+- Concéntrate EXCLUSIVAMENTE en esta imagen. No pienses en las demás.
+- El visual_prompt DEBE tener al menos 150 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
+- Cada sección debe tener AL MENOS 2-3 frases completas con detalles sensoriales y técnicos.
+- NO uses descripciones vagas como "ambiente agradable", "escena bonita" o "plano general". Sé CONCRETO y ESPECÍFICO.
+- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- El resultado debe ser tan detallado que al copiarlo en Midjourney o DALL-E, la imagen generada sea exactamente lo que describes.`,
+  };
+}
+
+/**
+ * Descompone un post en la lista de visuales individuales a generar.
+ * - Carrusel → 1 visual por slide
+ * - Publicación/Story imagen → 1 visual
+ * - Reel/Story vídeo → 1 visual (key frame)
+ */
+export function decomposePostIntoVisuals(post: VisualBriefInput): Array<{ label: string; slideContext?: string }> {
+  const format = post.format || 'publicacion';
+  const specs = post.production_specs;
+
+  if (format === 'carrusel') {
+    const numSlides = specs?.num_slides || 5;
+    const sceneParts = (specs?.scene_summary || '').split(/Slide\s*\d+\s*:/i).filter(s => s.trim());
+    const visuals: Array<{ label: string; slideContext?: string }> = [];
+
+    for (let i = 0; i < numSlides; i++) {
+      const isFirst = i === 0;
+      const isLast = i === numSlides - 1;
+      let slideLabel = `Slide ${i + 1}`;
+      if (isFirst) slideLabel += ' (Gancho)';
+      if (isLast) slideLabel += ' (CTA)';
+
+      visuals.push({
+        label: slideLabel,
+        slideContext: sceneParts[i]?.trim() || undefined,
+      });
+    }
+    return visuals;
+  }
+
+  if (format === 'reel' || (format === 'story' && specs?.media_type === 'video')) {
+    return [{ label: 'Fotograma clave (key frame)', slideContext: specs?.scene_summary || undefined }];
+  }
+
+  return [{ label: 'Imagen principal', slideContext: specs?.scene_summary || undefined }];
+}

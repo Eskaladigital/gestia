@@ -379,3 +379,19 @@ export interface VisualBriefPost {
 export interface VisualBriefGeneration {
   briefs: VisualBriefPost[];
 }
+
+export interface ContentItemVisual {
+  id: string;
+  content_item_id: string;
+  visual_index: number;
+  label: string | null;
+  visual_prompt: string;
+  visual_brief: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SingleVisualAIResponse {
+  visual_prompt: string;
+  visual_brief: string;
+}

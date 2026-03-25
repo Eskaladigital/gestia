@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { ContentItem, ContentItemStatus } from '@/types';
+import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types';
 import { PostEditor } from './PostEditor';
 import { ProductionSpecsDisplay } from './ProductionSpecsDisplay';
 
@@ -92,8 +92,40 @@ export function CalendarTable({
 }: CalendarTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedBrief, setExpandedBrief] = useState<string | null>(null);
+  const [visualsCache, setVisualsCache] = useState<Record<string, ContentItemVisual[]>>({});
+  const [visualsLoading, setVisualsLoading] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  const fetchVisuals = useCallback(async (contentItemId: string) => {
+    if (visualsCache[contentItemId]) return;
+    setVisualsLoading(contentItemId);
+    const { data } = await supabase
+      .from('content_item_visuals')
+      .select('*')
+      .eq('content_item_id', contentItemId)
+      .order('visual_index', { ascending: true });
+    if (data) {
+      setVisualsCache(prev => ({ ...prev, [contentItemId]: data as ContentItemVisual[] }));
+    }
+    setVisualsLoading(null);
+  }, [supabase, visualsCache]);
+
+  const handleToggleBrief = useCallback((itemId: string) => {
+    if (expandedBrief === itemId) {
+      setExpandedBrief(null);
+    } else {
+      setExpandedBrief(itemId);
+      fetchVisuals(itemId);
+    }
+  }, [expandedBrief, fetchVisuals]);
+
+  const handleCopyPrompt = useCallback((text: string, visualId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(visualId);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
 
   const weekGroups = useMemo(() => {
     const groups: Record<string, { items: ContentItem[]; monday: Date }> = {};
@@ -216,7 +248,7 @@ export function CalendarTable({
                             {item.visual_brief ? (
                               <button
                                 type="button"
-                                onClick={() => setExpandedBrief(expandedBrief === item.id ? null : item.id)}
+                                onClick={() => handleToggleBrief(item.id)}
                                 className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border-2 border-surface-900 hover:bg-emerald-200 hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                               >
                                 🎨 Brief {expandedBrief === item.id ? '▲' : '▼'}
@@ -285,44 +317,92 @@ export function CalendarTable({
 
                         {expandedBrief === item.id && item.visual_brief && (
                           <div className="mt-4 border-t-2 border-surface-900 pt-4 space-y-4">
-                            <div>
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-surface-900 text-white px-2 py-0.5">Brief Creativo</span>
-                                  <span className="text-[10px] text-surface-500 font-mono">para diseñador / equipo</span>
-                                </div>
-                                {onGenerateBriefForPost && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onGenerateBriefForPost(item.id)}
-                                    disabled={generatingBrief}
-                                    className="text-[10px] font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-2 py-0.5 hover:bg-brand-700 hover:translate-x-[1px] hover:translate-y-[1px] shadow-brutal-sm hover:shadow-none transition-all disabled:opacity-50"
-                                  >
-                                    Regenerar
-                                  </button>
-                                )}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-surface-900 text-white px-2 py-0.5">Prompts Visuales</span>
+                                <span className="text-[10px] text-surface-500 font-mono">
+                                  {visualsCache[item.id]?.length || '...'} {(visualsCache[item.id]?.length || 0) === 1 ? 'imagen' : 'imágenes'}
+                                </span>
                               </div>
+                              {onGenerateBriefForPost && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setVisualsCache(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                                    onGenerateBriefForPost(item.id);
+                                  }}
+                                  disabled={generatingBrief}
+                                  className="text-[10px] font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-2 py-0.5 hover:bg-brand-700 hover:translate-x-[1px] hover:translate-y-[1px] shadow-brutal-sm hover:shadow-none transition-all disabled:opacity-50"
+                                >
+                                  Regenerar
+                                </button>
+                              )}
+                            </div>
+
+                            {visualsLoading === item.id && (
+                              <div className="flex items-center gap-2 py-3">
+                                <div className="w-2 h-2 bg-surface-900 animate-brutal-pop" style={{ animationIterationCount: 'infinite', animationDuration: '1s' }} />
+                                <span className="text-xs text-surface-500 font-mono">Cargando visuals...</span>
+                              </div>
+                            )}
+
+                            {visualsCache[item.id] && visualsCache[item.id].length > 0 && (
+                              <div className="space-y-3">
+                                {visualsCache[item.id].map((visual) => (
+                                  <div key={visual.id} className="border-2 border-surface-900 overflow-hidden">
+                                    <div className="flex items-center justify-between bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-widest text-surface-700">
+                                        {visual.label || `Visual ${visual.visual_index + 1}`}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyPrompt(visual.visual_prompt, visual.id)}
+                                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                          copiedId === visual.id
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-white text-surface-900 hover:bg-surface-100'
+                                        }`}
+                                      >
+                                        {copiedId === visual.id ? 'Copiado' : 'Copiar prompt'}
+                                      </button>
+                                    </div>
+                                    {visual.visual_brief && (
+                                      <div className="bg-white px-3 py-2 text-xs text-surface-700 leading-relaxed whitespace-pre-wrap border-b border-surface-200">
+                                        {visual.visual_brief}
+                                      </div>
+                                    )}
+                                    <div className="bg-surface-900 text-emerald-300 px-3 py-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                                      {visual.visual_prompt}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {visualsCache[item.id] && visualsCache[item.id].length === 0 && (
                               <div className="bg-white border-2 border-surface-900 p-4 text-sm text-surface-800 leading-relaxed whitespace-pre-wrap shadow-brutal-sm">
                                 {item.visual_brief}
-                              </div>
-                            </div>
-                            {item.visual_prompt && (
-                              <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-emerald-600 text-white px-2 py-0.5">Prompt IA Generativa</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(item.visual_prompt!);
-                                    }}
-                                    className="text-[10px] font-bold uppercase tracking-wider text-surface-900 bg-white border-2 border-surface-900 px-2 py-0.5 hover:bg-surface-100 hover:translate-x-[1px] hover:translate-y-[1px] shadow-brutal-sm hover:shadow-none transition-all"
-                                  >
-                                    Copiar
-                                  </button>
-                                </div>
-                                <div className="bg-surface-900 text-emerald-300 border-2 border-surface-700 p-4 text-xs font-mono leading-relaxed whitespace-pre-wrap shadow-brutal-sm">
-                                  {item.visual_prompt}
-                                </div>
+                                {item.visual_prompt && (
+                                  <div className="mt-3 pt-3 border-t border-surface-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-emerald-600 text-white px-2 py-0.5">Prompt</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyPrompt(item.visual_prompt!, `legacy-${item.id}`)}
+                                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                          copiedId === `legacy-${item.id}`
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-white text-surface-900'
+                                        }`}
+                                      >
+                                        {copiedId === `legacy-${item.id}` ? 'Copiado' : 'Copiar'}
+                                      </button>
+                                    </div>
+                                    <div className="bg-surface-900 text-emerald-300 border-2 border-surface-700 p-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                                      {item.visual_prompt}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

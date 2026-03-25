@@ -22,9 +22,11 @@ export function BriefsProgressModal({
   const [mounted, setMounted] = useState(false);
   const [phase, setPhase] = useState<Phase>('connecting');
   const [totalPosts, setTotalPosts] = useState(0);
-  const [totalBatches, setTotalBatches] = useState(0);
-  const [currentBatchIdx, setCurrentBatchIdx] = useState(-1);
-  const [totalUpdated, setTotalUpdated] = useState(0);
+  const [totalVisuals, setTotalVisuals] = useState(0);
+  const [visualsDone, setVisualsDone] = useState(0);
+  const [postsCompleted, setPostsCompleted] = useState(0);
+  const [currentLabel, setCurrentLabel] = useState('');
+  const [currentPostIdea, setCurrentPostIdea] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsed, setElapsed] = useState(0);
 
@@ -116,36 +118,43 @@ export function BriefsProgressModal({
             switch (eventName) {
               case 'init':
                 setTotalPosts(data.totalPosts || 0);
-                setTotalBatches(data.totalBatches || 0);
+                setTotalVisuals(data.totalVisuals || 0);
                 break;
 
               case 'progress':
-                if (data.phase === 'batch_start') {
-                  setCurrentBatchIdx(data.batchIndex);
-                } else if (data.phase === 'batch_done') {
-                  setCurrentBatchIdx(data.batchIndex);
-                  setTotalUpdated(data.totalUpdated || 0);
+                if (data.phase === 'visual_start') {
+                  setCurrentLabel(data.label || '');
+                  setCurrentPostIdea(data.postIdea || '');
+                } else if (data.phase === 'visual_done') {
+                  setVisualsDone(data.visualsDone || 0);
+                  if (data.postsCompleted !== undefined) {
+                    setPostsCompleted(data.postsCompleted);
+                  }
+                  setCurrentLabel(data.label || '');
+                  if (data.postIdea) setCurrentPostIdea(data.postIdea);
                 }
                 break;
 
               case 'complete':
-                setTotalUpdated(data.totalUpdated || 0);
+                setPostsCompleted(data.totalUpdated || 0);
+                setVisualsDone(data.visualsDone || 0);
                 if (data.message && data.totalUpdated === 0) {
-                  // Caso sin posts pendientes
                   setTotalPosts(0);
-                  setTotalBatches(0);
+                  setTotalVisuals(0);
                 }
                 setPhase('complete');
                 break;
 
               case 'cancelled':
-                setTotalUpdated(data.totalUpdated || 0);
+                setPostsCompleted(data.totalUpdated || 0);
+                setVisualsDone(data.visualsDone || 0);
                 setPhase('cancelled');
                 break;
 
               case 'error':
                 setErrorMsg(data.error || 'Error desconocido');
-                setTotalUpdated(data.totalUpdated || 0);
+                setPostsCompleted(data.totalUpdated || 0);
+                setVisualsDone(data.visualsDone || 0);
                 setPhase('error');
                 break;
             }
@@ -167,8 +176,7 @@ export function BriefsProgressModal({
   }, [projectId, contentItemIds]);
 
   const isTerminal = phase === 'complete' || phase === 'cancelled' || phase === 'error';
-  // Si no hay posts (0), 100%. Si no, usar posts / total o batches / total.
-  const progressPct = totalPosts > 0 ? Math.round((totalUpdated / totalPosts) * 100) : phase === 'complete' ? 100 : 0;
+  const progressPct = totalVisuals > 0 ? Math.round((visualsDone / totalVisuals) * 100) : phase === 'complete' ? 100 : 0;
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -194,21 +202,21 @@ export function BriefsProgressModal({
         className="bg-white border-2 border-surface-900 shadow-brutal-lg w-full max-w-lg flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-surface-900 px-5 py-4">
           <div>
             <h4 id="briefs-progress-title" className="font-display font-bold text-surface-900 text-lg leading-tight">
-              {phase === 'complete' ? 'Briefs generados' : phase === 'cancelled' ? 'Generación cancelada' : phase === 'error' ? 'Error' : 'Generando briefs visuales'}
+              {phase === 'complete' ? 'Briefs generados' : phase === 'cancelled' ? 'Generación cancelada' : phase === 'error' ? 'Error' : 'Generando prompts visuales'}
             </h4>
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-surface-400 mt-0.5">
-              {totalPosts} {totalPosts === 1 ? 'publicación' : 'publicaciones'} &middot; {formatTime(elapsed)}
+              {totalPosts} {totalPosts === 1 ? 'publicación' : 'publicaciones'} &middot; {totalVisuals} {totalVisuals === 1 ? 'imagen' : 'imágenes'} &middot; {formatTime(elapsed)}
             </p>
           </div>
           {isTerminal && (
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-lg p-2 text-surface-600 hover:bg-surface-100 hover:text-surface-900"
+              className="p-2 text-surface-600 hover:bg-surface-100 hover:text-surface-900"
               aria-label="Cerrar"
             >
               <X className="h-5 w-5" strokeWidth={2} />
@@ -216,8 +224,8 @@ export function BriefsProgressModal({
           )}
         </div>
 
-        {/* ── Body ── */}
-        <div className="px-5 py-6 space-y-6">
+        {/* Body */}
+        <div className="px-5 py-6 space-y-5">
           {/* Progress bar */}
           <div>
             <div className="flex items-baseline justify-between mb-1.5">
@@ -229,50 +237,51 @@ export function BriefsProgressModal({
                 className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out border-r-2 border-surface-900 ${
                   isTerminal ? 'bg-accent-emerald' : 'bg-brand-500 animate-progress-stripe'
                 }`}
-                style={{ 
+                style={{
                   width: `${progressPct}%`,
                   backgroundImage: !isTerminal ? 'linear-gradient(45deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent)' : 'none',
                   backgroundSize: '2rem 2rem'
                 }}
               />
             </div>
-            <p className="text-xs text-surface-500 mt-2 font-medium">
-              {totalUpdated} / {totalPosts} briefs procesados
-              {!isTerminal && currentBatchIdx >= 0 && totalBatches > 1 && (
-                <> &middot; Lote <strong className="text-surface-900">{currentBatchIdx + 1}</strong> de {totalBatches}</>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-surface-500 font-medium">
+                {visualsDone} / {totalVisuals} imágenes generadas &middot; {postsCompleted} / {totalPosts} posts completos
+              </p>
+              {!isTerminal && currentPostIdea && (
+                <p className="text-xs text-surface-700 font-mono truncate">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-surface-400 mr-1">{currentLabel}:</span>
+                  {currentPostIdea}
+                </p>
               )}
-            </p>
+            </div>
           </div>
 
-          {/* Animación "pensando" estilo brutalista si está corriendo */}
           {phase === 'running' && (
-            <div className="flex justify-center py-4">
-               <div className="flex gap-2">
-                 <div className="w-3 h-3 bg-surface-900 animate-brutal-pop" style={{ animationDelay: '0s', animationIterationCount: 'infinite', animationDuration: '1s' }} />
-                 <div className="w-3 h-3 bg-brand-500 animate-brutal-pop" style={{ animationDelay: '0.2s', animationIterationCount: 'infinite', animationDuration: '1s' }} />
-                 <div className="w-3 h-3 bg-accent-amber animate-brutal-pop" style={{ animationDelay: '0.4s', animationIterationCount: 'infinite', animationDuration: '1s' }} />
-               </div>
+            <div className="flex justify-center py-3">
+              <div className="flex gap-2">
+                <div className="w-3 h-3 bg-surface-900 animate-brutal-pop" style={{ animationDelay: '0s', animationIterationCount: 'infinite', animationDuration: '1s' }} />
+                <div className="w-3 h-3 bg-brand-500 animate-brutal-pop" style={{ animationDelay: '0.2s', animationIterationCount: 'infinite', animationDuration: '1s' }} />
+                <div className="w-3 h-3 bg-accent-amber animate-brutal-pop" style={{ animationDelay: '0.4s', animationIterationCount: 'infinite', animationDuration: '1s' }} />
+              </div>
             </div>
           )}
 
-          {/* Error message */}
           {phase === 'error' && errorMsg && (
             <div className="bg-red-50 border-2 border-surface-900 text-red-700 px-4 py-3 text-xs font-bold">
               {errorMsg}
             </div>
           )}
 
-          {/* Cancelled message */}
           {phase === 'cancelled' && (
             <div className="bg-amber-50 border-2 border-surface-900 text-amber-800 px-4 py-3 text-xs font-bold">
-              Proceso cancelado. {totalUpdated > 0 ? `Se conservan ${totalUpdated} briefs ya generados.` : 'No se guardó ningún brief.'}
+              Proceso cancelado. {visualsDone > 0 ? `Se conservan ${visualsDone} imágenes ya generadas.` : 'No se guardó ninguna imagen.'}
             </div>
           )}
 
-          {/* Complete message */}
           {phase === 'complete' && totalPosts > 0 && (
             <div className="bg-emerald-50 border-2 border-surface-900 text-emerald-800 px-4 py-3 text-xs font-bold">
-              ¡Listo! Se han generado los briefs visuales y prompts para {totalUpdated} publicaciones en {formatTime(elapsed)}.
+              {visualsDone} prompts visuales generados para {postsCompleted} publicaciones en {formatTime(elapsed)}.
             </div>
           )}
           {phase === 'complete' && totalPosts === 0 && (
@@ -282,7 +291,7 @@ export function BriefsProgressModal({
           )}
         </div>
 
-        {/* ── Footer ── */}
+        {/* Footer */}
         <div className="flex items-center justify-end gap-3 border-t-2 border-surface-900 px-5 py-4">
           {!isTerminal && (
             <button
