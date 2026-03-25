@@ -1,5 +1,11 @@
 import { createServiceSupabase } from '@/lib/supabase/server';
 import type { Browser, Page } from 'puppeteer-core';
+/**
+ * Node-native require invisible al bundler (Turbopack no resuelve serverExternalPackages
+ * correctamente — vercel/next.js#65828). eval('require') evita el análisis estático.
+ */
+// eslint-disable-next-line no-eval
+const nativeRequire: NodeRequire = eval('require');
 
 const BUCKET = 'screenshots';
 
@@ -47,12 +53,11 @@ const isVercel = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 async function launchBrowser(): Promise<Browser> {
   if (isVercel) {
-    const chromiumMod = await import('@sparticuz/chromium');
-    const chromium: any = chromiumMod.default;
-    const puppeteerCore = await import('puppeteer-core');
+    const chromium: any = nativeRequire('@sparticuz/chromium');
+    const puppeteerCore: any = nativeRequire('puppeteer-core');
     chromium.setHeadlessMode = true;
     chromium.setGraphicsMode = false;
-    return puppeteerCore.default.launch({
+    return puppeteerCore.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport ?? { width: 1400, height: 900 },
       executablePath: await chromium.executablePath(),
@@ -60,8 +65,8 @@ async function launchBrowser(): Promise<Browser> {
     }) as unknown as Browser;
   }
 
-  const puppeteer = await import('puppeteer');
-  return puppeteer.default.launch({
+  const puppeteer: any = nativeRequire('puppeteer');
+  return puppeteer.launch({
     headless: true,
     args: [
       '--no-sandbox',
@@ -130,6 +135,10 @@ export async function captureWebScreenshotsToStorage(
   projectId: string,
   options?: { maxPages?: number }
 ): Promise<ScreenshotResult> {
+  console.log(`[screenshots] ▶ captureWebScreenshotsToStorage llamada con ${urls.length} URLs, projectId=${projectId}`);
+  console.log(`[screenshots]   URLs recibidas:`, urls.slice(0, 5));
+  console.log(`[screenshots]   ENV: DISABLE=${process.env.DISABLE_PUPPETEER_SCREENSHOTS || '(no)'}, SERVICE_KEY=${process.env.SUPABASE_SERVICE_ROLE_KEY ? 'sí (' + process.env.SUPABASE_SERVICE_ROLE_KEY.length + ' chars)' : 'NO'}, isVercel=${isVercel}`);
+
   const result: ScreenshotResult = {
     screenshots: new Map(),
     attempted: 0,
@@ -142,6 +151,7 @@ export async function captureWebScreenshotsToStorage(
 
   if (list.length === 0) {
     result.skipped_reason = 'No hay URLs para capturar';
+    console.warn('[screenshots] ⚠ list vacía tras filter(Boolean). URLs originales:', urls);
     return result;
   }
   if (process.env.DISABLE_PUPPETEER_SCREENSHOTS === '1') {

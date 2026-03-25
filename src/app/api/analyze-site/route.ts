@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
 
       const validPages = pages.filter(page => !page.content.startsWith('[No se pudo'));
 
+      console.log(`[analyze-site] Scraping completado: ${pages.length} páginas descubiertas, ${validPages.length} válidas`);
+      console.log(`[analyze-site] URLs para screenshots:`, validPages.map(p => p.url));
+
       const ssResult = await captureWebScreenshotsToStorage(
         validPages.map(p => p.url),
         project_id,
@@ -73,6 +76,7 @@ export async function POST(request: NextRequest) {
         skipped_reason: ssResult.skipped_reason,
         errors: ssResult.errors,
       };
+      console.log(`[analyze-site] Screenshots resultado: ${ssResult.succeeded}/${ssResult.attempted} OK`, ssResult.skipped_reason ? `(skip: ${ssResult.skipped_reason})` : '', ssResult.errors.length ? `errors: ${ssResult.errors.join('; ')}` : '');
 
       const insertData = validPages.map(page => {
         const shot = ssResult.screenshots.get(page.url);
