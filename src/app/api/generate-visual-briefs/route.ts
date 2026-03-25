@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
         let postsCompleted = 0;
         let aborted = false;
 
-        const postVisualResults = new Map<string, Array<{ index: number; label: string; brief: string; prompt: string }>>();
+        const postVisualResults = new Map<string, Array<{ index: number; label: string; prompt: string }>>();
         const completedPostIds = new Set<string>();
 
         try {
