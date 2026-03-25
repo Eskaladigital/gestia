@@ -111,14 +111,23 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          {pendingBriefsCount > 0 && (
+            <button
+              onClick={() => handleGenerateVisualBriefs()}
+              className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full sm:w-auto"
+            >
+              Generar briefs ({pendingBriefsCount})
+            </button>
+          )}
           <button
-            onClick={() => handleGenerateVisualBriefs()}
-            disabled={pendingBriefsCount === 0}
-            className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+            onClick={() => {
+              const allIds = localItems.map(i => i.id);
+              handleGenerateVisualBriefs(allIds);
+            }}
+            disabled={localItems.length === 0}
+            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 bg-white border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
           >
-            {pendingBriefsCount === 0
-                ? 'Briefs completados'
-                : `Generar briefs visuales (${pendingBriefsCount})`}
+            Regenerar todos los briefs
           </button>
           <button
             onClick={handleExportJSON}
