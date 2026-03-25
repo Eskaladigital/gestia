@@ -5,7 +5,7 @@ import type { Browser, Page } from 'puppeteer-core';
  * correctamente — vercel/next.js#65828). eval('require') evita el análisis estático.
  */
 // eslint-disable-next-line no-eval
-const nativeRequire: NodeRequire = eval('require');
+
 
 const BUCKET = 'screenshots';
 
@@ -53,8 +53,8 @@ const isVercel = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 async function launchBrowser(): Promise<Browser> {
   if (isVercel) {
-    const chromium: any = nativeRequire('@sparticuz/chromium');
-    const puppeteerCore: any = nativeRequire('puppeteer-core');
+    const chromium: any = require('@sparticuz/chromium');
+    const puppeteerCore: any = require('puppeteer-core');
     chromium.setHeadlessMode = true;
     chromium.setGraphicsMode = false;
     return puppeteerCore.launch({
@@ -65,7 +65,7 @@ async function launchBrowser(): Promise<Browser> {
     }) as unknown as Browser;
   }
 
-  const puppeteer: any = nativeRequire('puppeteer');
+  const puppeteer: any = require('puppeteer');
   return puppeteer.launch({
     headless: true,
     args: [
