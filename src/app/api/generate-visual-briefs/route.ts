@@ -6,6 +6,7 @@ import type { VisualBriefGeneration, ContentItem } from '@/types';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const BATCH_SIZE = 10;
 

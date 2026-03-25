@@ -12,6 +12,7 @@ import type { CalendarGeneration } from '@/types';
 
 export const maxDuration = 300;
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const ALLOWED_DURATION = new Set([1, 3, 6, 9]);
 const ALLOWED_FORMATS = new Set(['story', 'carrusel', 'publicacion', 'reel']);
@@ -260,20 +261,6 @@ export async function POST(request: NextRequest) {
     const rangeStart = toYmd(targetYear, targetMonth, 1);
     const rangeEnd = toYmd(lastPeriod.year, lastPeriod.month0, lastDayInMonth(lastPeriod.year, lastPeriod.month0));
 
-    if (mode === 'replace') {
-      const { error: delErr } = await supabase
-        .from('content_items')
-        .delete()
-        .eq('project_id', project_id)
-        .gte('scheduled_date', rangeStart)
-        .lte('scheduled_date', rangeEnd);
-
-      if (delErr) {
-        console.error('[generate-calendar] Delete error:', delErr);
-        return NextResponse.json({ error: 'No se pudo vaciar el calendario del rango seleccionado' }, { status: 500 });
-      }
-    }
-
     const monthsPlan: Array<{ monthIndex: number; year: number; month0: number; label: string; expectedPosts: number; totalDays: number }> = [];
     for (let i = 0; i < duration; i++) {
       const { year: y, month0: m0 } = addCalendarMonths(targetYear, targetMonth, i);
@@ -394,6 +381,20 @@ export async function POST(request: NextRequest) {
             }));
 
             const filtered = postsToInsert.filter(p => p.scheduled_date >= monthStart && p.scheduled_date <= monthEnd);
+
+            if (mode === 'replace') {
+              const { error: delErr } = await supabase
+                .from('content_items')
+                .delete()
+                .eq('project_id', project_id)
+                .gte('scheduled_date', monthStart)
+                .lte('scheduled_date', monthEnd);
+
+              if (delErr) {
+                console.error('[generate-calendar] Delete error for month:', delErr);
+                throw new Error('No se pudo vaciar el calendario del mes antes de insertar los nuevos');
+              }
+            }
 
             const { data: inserted, error: insertError } = await supabase
               .from('content_items')
