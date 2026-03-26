@@ -29,10 +29,22 @@ function isRetriable(err: unknown): boolean {
   return s === 429 || s === 503;
 }
 
+const PER_CALL_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms = PER_CALL_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout: la llamada a la IA tardó más de ${ms / 1000}s`)), ms);
+    promise.then(
+      v => { clearTimeout(timer); resolve(v); },
+      e => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      return await fn();
+      return await withTimeout(fn());
     } catch (err) {
       if (isRetriable(err) && attempt < maxAttempts - 1) {
         await sleep(1500 * (attempt + 1));
