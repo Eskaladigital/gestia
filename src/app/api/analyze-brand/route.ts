@@ -10,7 +10,7 @@ import {
 } from '@/lib/scraping/provider';
 import type { BrandColorEntry, BrandFontEntry, BrandIdentityDetail } from '@/types';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const runtime = 'nodejs';
 
 interface BrandAnalysisResult {

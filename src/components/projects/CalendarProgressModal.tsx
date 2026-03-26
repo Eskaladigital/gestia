@@ -119,114 +119,142 @@ export function CalendarProgressModal({
     return () => window.removeEventListener('keydown', handler);
   }, [phase, onClose]);
 
+  const cancelledRef = useRef(false);
+
   const handleCancel = useCallback(() => {
+    cancelledRef.current = true;
     abortRef.current?.abort();
   }, []);
 
-  // SSE connection
-  useEffect(() => {
+  const runOneMonth = useCallback(async (monthIndex: number, accInserted: number): Promise<{ hasMore: boolean; nextMonthIndex: number; inserted: number }> => {
     const controller = new AbortController();
     abortRef.current = controller;
+
+    const res = await fetch('/api/generate-calendar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: projectId,
+        calendar_mode: mode,
+        duration_months: durationMonths,
+        month,
+        year,
+        batch_month_index: monthIndex,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      let msg = `Error HTTP ${res.status}`;
+      try { const j = JSON.parse(text); if (j.error) msg = j.error; } catch { /* */ }
+      throw new Error(msg);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Sin stream de respuesta');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let hasMore = false;
+    let nextMonthIndex = 0;
+    let batchInserted = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        let eventName = '';
+        let dataStr = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+          if (line.startsWith('data: ')) dataStr = line.slice(6);
+        }
+        if (!eventName || !dataStr) continue;
+
+        let data: any;
+        try { data = JSON.parse(dataStr); } catch { continue; }
+
+        switch (eventName) {
+          case 'init':
+            setMonths(data.months || []);
+            setTotalExpected(data.totalExpectedPosts || 0);
+            break;
+
+          case 'progress':
+            if (data.phase === 'month_start') {
+              setCurrentMonthIdx(data.monthIndex);
+            } else if (data.phase === 'month_done') {
+              setCurrentMonthIdx(data.monthIndex);
+              batchInserted = data.grandTotalInserted || 0;
+              setTotalInserted(accInserted + batchInserted);
+              setResults(prev => {
+                const next = new Map(prev);
+                next.set(data.monthIndex, {
+                  postsInserted: data.postsInserted,
+                  dates: data.dates || [],
+                  formatCounts: data.formatCounts || {},
+                  typeCounts: data.typeCounts || {},
+                });
+                return next;
+              });
+            }
+            break;
+
+          case 'complete':
+            batchInserted = data.totalPosts || 0;
+            setTotalInserted(accInserted + batchInserted);
+            hasMore = data.hasMoreMonths || false;
+            nextMonthIndex = data.nextMonthIndex || 0;
+            break;
+
+          case 'cancelled':
+            batchInserted = data.totalPosts || 0;
+            setTotalInserted(accInserted + batchInserted);
+            hasMore = false;
+            break;
+
+          case 'error':
+            throw new Error(data.error || 'Error desconocido');
+        }
+      }
+    }
+
+    return { hasMore, nextMonthIndex, inserted: batchInserted };
+  }, [projectId, mode, durationMonths, month, year]);
+
+  useEffect(() => {
+    cancelledRef.current = false;
     startTimeRef.current = Date.now();
 
     (async () => {
       try {
-        const res = await fetch('/api/generate-calendar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: projectId,
-            calendar_mode: mode,
-            duration_months: durationMonths,
-            month,
-            year,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          let msg = `Error HTTP ${res.status}`;
-          try { const j = JSON.parse(text); if (j.error) msg = j.error; } catch { /* */ }
-          setErrorMsg(msg);
-          setPhase('error');
-          return;
-        }
-
-        const reader = res.body?.getReader();
-        if (!reader) { setErrorMsg('Sin stream de respuesta'); setPhase('error'); return; }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
         setPhase('running');
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        if (durationMonths <= 1) {
+          const { } = await runOneMonth(0, 0);
+        } else {
+          let monthIdx = 0;
+          let accInserted = 0;
 
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split('\n\n');
-          buffer = parts.pop() || '';
+          while (true) {
+            if (cancelledRef.current) { setPhase('cancelled'); return; }
 
-          for (const part of parts) {
-            const lines = part.split('\n');
-            let eventName = '';
-            let dataStr = '';
-            for (const line of lines) {
-              if (line.startsWith('event: ')) eventName = line.slice(7).trim();
-              if (line.startsWith('data: ')) dataStr = line.slice(6);
-            }
-            if (!eventName || !dataStr) continue;
+            const { hasMore, nextMonthIndex, inserted } = await runOneMonth(monthIdx, accInserted);
+            accInserted += inserted;
 
-            let data: any;
-            try { data = JSON.parse(dataStr); } catch { continue; }
-
-            switch (eventName) {
-              case 'init':
-                setMonths(data.months || []);
-                setTotalExpected(data.totalExpectedPosts || 0);
-                break;
-
-              case 'progress':
-                if (data.phase === 'month_start') {
-                  setCurrentMonthIdx(data.monthIndex);
-                } else if (data.phase === 'month_done') {
-                  setCurrentMonthIdx(data.monthIndex);
-                  setTotalInserted(data.grandTotalInserted || 0);
-                  setResults(prev => {
-                    const next = new Map(prev);
-                    next.set(data.monthIndex, {
-                      postsInserted: data.postsInserted,
-                      dates: data.dates || [],
-                      formatCounts: data.formatCounts || {},
-                      typeCounts: data.typeCounts || {},
-                    });
-                    return next;
-                  });
-                }
-                break;
-
-              case 'complete':
-                setTotalInserted(data.totalPosts || 0);
-                setPhase('complete');
-                break;
-
-              case 'cancelled':
-                setTotalInserted(data.totalPosts || 0);
-                setPhase('cancelled');
-                break;
-
-              case 'error':
-                setErrorMsg(data.error || 'Error desconocido');
-                setTotalInserted(data.totalInsertedBeforeError || 0);
-                setPhase('error');
-                break;
-            }
+            if (!hasMore || cancelledRef.current) break;
+            monthIdx = nextMonthIndex;
           }
         }
 
-        // If we exit the read loop without a terminal event, mark complete
-        setPhase(prev => (prev === 'running' ? 'complete' : prev));
+        setPhase(cancelledRef.current ? 'cancelled' : 'complete');
       } catch (err: any) {
         if (err.name === 'AbortError') {
           setPhase('cancelled');
@@ -237,8 +265,11 @@ export function CalendarProgressModal({
       }
     })();
 
-    return () => { controller.abort(); };
-  }, [projectId, mode, durationMonths, month, year]);
+    return () => {
+      cancelledRef.current = true;
+      abortRef.current?.abort();
+    };
+  }, [durationMonths, runOneMonth]);
 
   const isTerminal = phase === 'complete' || phase === 'cancelled' || phase === 'error';
   const progressPct = totalExpected > 0 ? Math.round((totalInserted / totalExpected) * 100) : 0;
@@ -314,8 +345,8 @@ export function CalendarProgressModal({
             </div>
             <p className="text-xs text-surface-500 mt-1 font-medium">
               {totalInserted} / {totalExpected} publicaciones
-              {!isTerminal && months.length > 0 && (
-                <> &middot; Generando <strong className="text-surface-900">{months.length} {months.length === 1 ? 'mes' : 'meses'} en paralelo</strong></>
+              {!isTerminal && months.length > 0 && currentMonthIdx >= 0 && (
+                <> &middot; Mes <strong className="text-surface-900">{currentMonthIdx + 1} de {months.length}</strong></>
               )}
             </p>
           </div>

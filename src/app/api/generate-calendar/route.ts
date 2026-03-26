@@ -277,6 +277,12 @@ export async function POST(request: NextRequest) {
     }
 
     const totalExpectedPosts = monthsPlan.reduce((s, m) => s + m.expectedPosts, 0);
+
+    const batchMonthIdx = typeof body.batch_month_index === 'number' ? body.batch_month_index : null;
+    const monthsToProcess = batchMonthIdx !== null
+      ? monthsPlan.filter(m => m.monthIndex === batchMonthIdx)
+      : monthsPlan;
+
     const signal = request.signal;
 
     const encoder = new TextEncoder();
@@ -293,6 +299,7 @@ export async function POST(request: NextRequest) {
           totalExpectedPosts,
           months: monthsPlan.map(m => ({ label: m.label, expectedPosts: m.expectedPosts, totalDays: m.totalDays })),
           mode,
+          batchMonthIndex: batchMonthIdx,
         });
 
         let grandTotalInserted = 0;
@@ -300,13 +307,11 @@ export async function POST(request: NextRequest) {
         let aborted = false;
 
         try {
-          const processMonth = async (i: number) => {
-            if (signal.aborted) {
-              aborted = true;
-              return;
-            }
+          for (const mp of monthsToProcess) {
+            if (signal.aborted) { aborted = true; break; }
 
-            const mp = monthsPlan[i];
+            const i = mp.monthIndex;
+
             send('progress', {
               phase: 'month_start',
               monthIndex: i,
@@ -350,7 +355,7 @@ export async function POST(request: NextRequest) {
               if (normalizedPosts.length === expectedPosts) break;
             }
 
-            if (aborted) return;
+            if (aborted) break;
 
             const minAcceptable = Math.max(1, expectedPosts - Math.ceil(expectedPosts * 0.1));
             if (normalizedPosts.length < minAcceptable) {
@@ -432,12 +437,12 @@ export async function POST(request: NextRequest) {
               typeCounts,
               usage: totalUsage,
             });
-          };
+          }
 
-          // Ejecutar todos los meses en paralelo
-          await Promise.all(monthsPlan.map((_, i) => processMonth(i)));
+          const isFullRun = batchMonthIdx === null;
+          const allMonthsDone = isFullRun || (batchMonthIdx !== null && batchMonthIdx >= duration - 1);
 
-          if (!aborted) {
+          if (!aborted && allMonthsDone) {
             await supabase.from('projects').update({ status: 'ready' }).eq('id', project_id);
           }
 
@@ -445,12 +450,16 @@ export async function POST(request: NextRequest) {
           const rangeLabel =
             duration === 1 ? firstLabel : `${firstLabel} – ${getMonthName(lastPeriod.month0)} ${lastPeriod.year}`;
 
+          const hasMoreMonths = batchMonthIdx !== null && batchMonthIdx < duration - 1;
+
           send(aborted ? 'cancelled' : 'complete', {
             totalPosts: grandTotalInserted,
             totalMonths: duration,
-            monthsCompleted: aborted ? monthsPlan.findIndex((_, idx) => idx >= duration || signal.aborted) : duration,
+            monthsCompleted: monthsToProcess.length,
             rangeLabel,
             usage: totalUsage,
+            hasMoreMonths,
+            nextMonthIndex: hasMoreMonths ? batchMonthIdx + 1 : null,
           });
         } catch (error: unknown) {
           await markProjectPipelineError(supabase, projectId);
