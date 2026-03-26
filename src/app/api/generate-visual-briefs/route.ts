@@ -267,6 +267,7 @@ export async function POST(request: NextRequest) {
 
         let visualsDone = 0;
         let postsCompleted = 0;
+        let globalPostsCompleted = 0;
         let aborted = false;
 
         const postVisualResults = new Map<string, Array<{ index: number; label: string; prompt: string }>>();
@@ -340,11 +341,23 @@ export async function POST(request: NextRequest) {
             );
             postsCompleted += newlyCompleted.length;
 
+            if (newlyCompleted.length > 0) {
+              try {
+                const { count } = await supabase
+                  .from('content_items')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('project_id', posts[0]?.project_id)
+                  .not('visual_prompt', 'is', null)
+                  .neq('visual_prompt', '');
+                if (count !== null) globalPostsCompleted = count;
+              } catch { globalPostsCompleted = postsCompleted; }
+            }
+
             send('progress', {
               phase: 'visual_done',
               visualsDone: offset + visualsDone,
               totalVisuals: fullQueue.length,
-              postsCompleted,
+              postsCompleted: globalPostsCompleted || postsCompleted,
               totalPosts: posts.length,
               label: job.label,
               postIdea: job.postIdea.slice(0, 80),
@@ -354,8 +367,19 @@ export async function POST(request: NextRequest) {
           const nextOffset = offset + visualsDone;
           const hasMore = nextOffset < fullQueue.length;
 
+          let globalPostsCompleted = postsCompleted;
+          try {
+            const { count } = await supabase
+              .from('content_items')
+              .select('*', { count: 'exact', head: true })
+              .eq('project_id', posts[0]?.project_id)
+              .not('visual_prompt', 'is', null)
+              .neq('visual_prompt', '');
+            if (count !== null) globalPostsCompleted = count;
+          } catch { /* fallback to local count */ }
+
           send(aborted ? 'cancelled' : 'batch_complete', {
-            totalUpdated: postsCompleted,
+            totalUpdated: globalPostsCompleted,
             totalExpected: posts.length,
             totalVisuals: fullQueue.length,
             batchVisualsDone: visualsDone,
