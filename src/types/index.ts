@@ -26,7 +26,7 @@ export type UserRole = 'admin' | 'agency' | 'user';
 export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'trial';
 
 export type AIProvider = 'openai' | 'anthropic' | 'google';
-export type AgentKey = 'analyze_site' | 'analyze_competitors' | 'generate_strategy' | 'generate_calendar' | 'brand_recognition' | 'generate_visual_briefs';
+export type AgentKey = 'analyze_site' | 'analyze_competitors' | 'generate_strategy' | 'generate_calendar' | 'brand_recognition' | 'generate_visual_briefs' | 'visual_briefs_story' | 'visual_briefs_video' | 'visual_briefs_carousel' | 'visual_briefs_feed';
 
 // ---- AI Agent Config ----
 

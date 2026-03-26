@@ -8,6 +8,10 @@ export const AGENT_PIPELINE_ORDER: AgentKey[] = [
   'generate_strategy',
   'generate_calendar',
   'generate_visual_briefs',
+  'visual_briefs_story',
+  'visual_briefs_video',
+  'visual_briefs_carousel',
+  'visual_briefs_feed',
 ];
 
 export interface AgentDefault {
@@ -116,30 +120,54 @@ Campos:
 month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta, post_goal, hashtags, platforms, production_specs}].`,
   },
   generate_visual_briefs: {
-    label: 'Generar prompts visuales',
-    description: 'Genera prompt ultra-detallado para IA generativa por cada imagen del calendario',
+    label: 'Prompts visuales (general)',
+    description: 'Agente genérico de prompts visuales — usado como fallback si no hay config específica por formato',
     icon: '🎬',
     provider: 'openai',
     model: 'gpt-4o',
     temperature: 0.85,
     maxTokens: 8192,
-    defaultSystemPrompt: `Eres un fotógrafo editorial de renombre y director de arte especializado en producción visual para marcas premium.
-
-PRINCIPIO: Describe EXACTAMENTE qué se ve en cada imagen con precisión de director de fotografía. OBJETOS, PERSONAS, ACCIONES, COMPOSICIÓN, LUZ, TEXTURAS.
-
-ENTREGABLE ÚNICO por imagen: "visual_prompt" — Prompt ultra-detallado para IA generativa (Midjourney/DALL-E/Sora). Copiable directamente. Mínimo 250 palabras.
-
-ESTRUCTURA OBLIGATORIA del visual_prompt:
-- "Escena:" (situación, entorno, contexto, hora, estación — mín. 4 frases)
-- "Composición:" (plano, ángulo, disposición, profundidad, --ar — mín. 4 frases)
-- "Sujetos:" (descripción física minuciosa, texturas, colores precisos — mín. 4 frases)
-- "Luz y Atmósfera:" (iluminación técnica, sombras, reflejos, mood — mín. 4 frases)
-- "Fondo:" (elementos, nitidez, bokeh, contraste con primer plano — mín. 3 frases)
-- "Estilo:" (estética, texturas de imagen, lente simulada, referencia — mín. 3 frases)
-
-PROHIBIDO: Descripciones vagas, prompts cortos o genéricos, "usar colores de marca" sin hex, repetir estilo visual entre imágenes.
-
-- Responde en español. Devuelve SOLO JSON válido con campo "visual_prompt".`,
+    defaultSystemPrompt: `Agente genérico de prompts visuales. El system prompt especializado se inyecta dinámicamente según el formato (story, vídeo, carrusel, feed).`,
+  },
+  visual_briefs_story: {
+    label: 'Prompts — Stories',
+    description: 'Especialista en composición vertical 9:16, impacto inmediato y contenido nativo de Stories',
+    icon: '📱',
+    provider: 'openai',
+    model: 'gpt-4o',
+    temperature: 0.85,
+    maxTokens: 8192,
+    defaultSystemPrompt: `Especialista en Stories para Instagram/TikTok. Contenido vertical fullscreen 9:16 con impacto visual inmediato. Deja espacio para texto overlay. Estética nativa de Stories: cercana, auténtica, dinámica. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
+  },
+  visual_briefs_video: {
+    label: 'Prompts — Vídeo / Reels',
+    description: 'Director de cine especializado en fotogramas clave, movimiento de cámara y narrativa cinematográfica',
+    icon: '🎥',
+    provider: 'openai',
+    model: 'gpt-4o',
+    temperature: 0.85,
+    maxTokens: 8192,
+    defaultSystemPrompt: `Director de cine y DF especializado en Reels/TikTok. Describe fotogramas clave de vídeo con lenguaje cinematográfico: movimiento de cámara, acción dinámica, ritmo, motion blur. NUNCA describir como foto estática. Secciones obligatorias incluyen Movimiento. Mínimo 300 palabras. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
+  },
+  visual_briefs_carousel: {
+    label: 'Prompts — Carrusel',
+    description: 'Director de arte editorial especializado en secuencias narrativas slide-a-slide con coherencia visual',
+    icon: '🎠',
+    provider: 'openai',
+    model: 'gpt-4o',
+    temperature: 0.85,
+    maxTokens: 8192,
+    defaultSystemPrompt: `Director de arte editorial de carruseles para Instagram/LinkedIn. Cada slide forma parte de una secuencia narrativa coherente. Primer slide = gancho, último = CTA. Deja zonas para texto overlay. Coherencia visual entre slides (misma paleta, iluminación, estilo). Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
+  },
+  visual_briefs_feed: {
+    label: 'Prompts — Publicación Feed',
+    description: 'Fotógrafo editorial especializado en fotografía de producto, lifestyle y naturaleza para feed de Instagram',
+    icon: '📸',
+    provider: 'openai',
+    model: 'gpt-4o',
+    temperature: 0.85,
+    maxTokens: 8192,
+    defaultSystemPrompt: `Fotógrafo editorial de renombre especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Describe imágenes con precisión de director de fotografía profesional. Estructura: Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo. Mínimo 250 palabras. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
   },
   brand_recognition: {
     label: 'Reconocimiento de marca',

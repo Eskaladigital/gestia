@@ -844,16 +844,158 @@ const ASPECT_RATIOS: Record<string, string> = {
   carrusel: '4:5',
 };
 
-export function buildSingleVisualPrompt(
-  project: Project,
-  input: SingleVisualInput
-): { system: string; user: string } {
-  const { post, visualIndex, totalVisuals, label, slideContext } = input;
-  const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
-  const isVideo = post.production_specs?.media_type === 'video';
+export type VisualAgentKey = 'visual_briefs_story' | 'visual_briefs_video' | 'visual_briefs_carousel' | 'visual_briefs_feed';
 
-  return {
-    system: `Eres un fotógrafo editorial de renombre internacional y director de arte especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN con la precisión de un director de fotografía profesional que prepara un shooting real.
+function resolveVisualAgent(format: string | null, mediaType?: string): VisualAgentKey {
+  const f = format || 'publicacion';
+  if (f === 'story') return mediaType === 'video' ? 'visual_briefs_video' : 'visual_briefs_story';
+  if (f === 'reel') return 'visual_briefs_video';
+  if (f === 'carrusel') return 'visual_briefs_carousel';
+  return 'visual_briefs_feed';
+}
+
+const JSON_FOOTER = `Responde en español.
+Devuelve SOLO JSON válido con exactamente este campo:
+{
+  "visual_prompt": "..."
+}`;
+
+function buildStorySystem(ar: string): string {
+  return `Eres un director creativo de renombre internacional especializado en Stories para Instagram, TikTok y redes sociales. Tu experiencia abarca diseño de contenido efímero vertical, narrativa de micro-impacto y comunicación visual instantánea para marcas premium.
+
+Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN de Story con la precisión de un director creativo que diseña contenido fullscreen 9:16 pensado para captar la atención en los primeros 2 segundos.
+
+CONCENTRA TODA TU CAPACIDAD EN UN ÚNICO ENTREGABLE:
+
+═══════════════════════════════════════════
+"visual_prompt" — PROMPT ULTRA-DETALLADO PARA IA GENERATIVA DE STORIES
+═══════════════════════════════════════════
+
+Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E o Ideogram. Debe ser autosuficiente y generar una imagen perfecta para Story.
+
+CONTEXTO CLAVE DE STORIES:
+- Formato VERTICAL fullscreen 9:16 — la imagen ocupa TODA la pantalla del móvil
+- El usuario la ve máximo 5 segundos — el impacto visual debe ser INMEDIATO
+- Suele llevar texto overlay, stickers o CTAs en postproducción — deja ESPACIO VISUAL para ello (zona superior y/o inferior más limpia)
+- Debe sentirse nativa de Instagram/TikTok, no como una foto de catálogo
+
+ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
+
+**Escena:** Descripción inmersiva pensada para formato Story vertical. Mínimo 4 frases. Incluye el contexto, la hora del día, el lugar concreto y la sensación inmediata que transmite. La escena debe tener un PUNTO FOCAL claro y centrado que capte la atención instantáneamente. Debe sentirse como contenido nativo de Stories: cercano, dinámico, actual.
+
+**Composición:** Relación de aspecto ${ar} (vertical fullscreen). Tipo de plano óptimo para Story (primer plano, selfie-style, cenital flat lay, plano medio cercano, POV en primera persona, etc.). Disposición vertical de los elementos: qué hay arriba, en el centro y abajo del encuadre. IMPORTANTE: reservar zona limpia (superior o inferior, ~20% del encuadre) para texto overlay en postproducción. Cómo se aprovecha la verticalidad para crear impacto. Mínimo 4 frases. --ar ${ar}
+
+**Sujetos:** Descripción física MINUCIOSA del protagonista/objeto principal. Texturas específicas, colores precisos. Si hay personas: cercanía al espectador (como un selfie o una vista en primera persona), expresión natural y espontánea, ropa casual/real. Si hay objetos: cómo se presentan para máximo impacto vertical (de arriba abajo, sostenidos en mano, flat lay). Todo debe sentirse AUTÉNTICO y cercano, no posado artificialmente. Mínimo 4 frases.
+
+**Luz y Atmósfera:** Iluminación típica de contenido Stories (luz natural de móvil, ring light, luz de ventana, golden hour con flare de smartphone). Temperatura de color. Mood: debe transmitir inmediatez, autenticidad y cercanía. Contraste optimizado para pantalla de móvil (colores vibrantes, contraste alto). Mínimo 4 frases.
+
+**Fondo:** Qué hay detrás del sujeto, pensado para formato vertical. Fondos simples y limpios que no compitan con el sujeto ni con el texto overlay futuro. Nivel de desenfoque. Colores que contrasten con el sujeto y con los posibles textos. Mínimo 3 frases.
+
+**Estilo:** Estética de Stories nativa (no editorial de revista). Aspecto de contenido real y aspiracional a la vez: como lo haría una marca premium en su cuenta de Instagram, no como una sesión de estudio. Puede ser estilo flat lay, behind-the-scenes, lifestyle cercano, producto en contexto real. Texturas de imagen (aspecto digital limpio de smartphone premium o look editorial mobile-first). Tratamiento de color vibrante optimizado para pantalla OLED. Mínimo 3 frases.
+
+REGLAS ESTRICTAS:
+- NO incluir texto literal en la descripción (el texto se añade en postproducción)
+- El prompt COMPLETO debe tener AL MENOS 250 palabras
+- CADA sección debe tener al menos 3-4 frases completas
+- Pensar SIEMPRE en vertical fullscreen 9:16 — cada elemento debe funcionar en este formato
+- Dejar ESPACIO VISUAL para texto overlay (zona superior o inferior del encuadre más limpia)
+- Ser HIPER-ESPECÍFICO con texturas, colores y composición
+- Incluir --ar ${ar} al final de la sección Composición
+
+${JSON_FOOTER}`;
+}
+
+function buildVideoSystem(ar: string): string {
+  return `Eres un director de cine y director de fotografía de renombre internacional, especializado en producción audiovisual para marcas premium en redes sociales (Reels, TikTok, Stories en vídeo). Tu ÚNICA tarea ahora es describir UN FOTOGRAMA CLAVE (key frame) de UNA ESCENA CONCRETA de un vídeo, con la precisión de un director que prepara un storyboard profesional para producción real.
+
+IMPORTANTE: Estás describiendo un FOTOGRAMA de VÍDEO, NO una fotografía estática. El fotograma debe transmitir movimiento, narrativa y ritmo cinematográfico. Debe quedar claro que es un instante congelado de una secuencia en movimiento.
+
+CONCENTRA TODA TU CAPACIDAD EN UN ÚNICO ENTREGABLE:
+
+═══════════════════════════════════════════
+"visual_prompt" — PROMPT ULTRA-DETALLADO PARA IA GENERATIVA DE VÍDEO
+═══════════════════════════════════════════
+
+Este prompt será usado en Sora, Runway, Kling, Pika o herramientas de IA generativa de vídeo. Debe ser autosuficiente y tan preciso que el fotograma generado sea EXACTAMENTE lo que describes.
+
+ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
+
+**Escena:** Descripción cinematográfica inmersiva de lo que OCURRE en este momento del vídeo. Mínimo 4 frases. Incluye: qué acción está sucediendo, el entorno concreto, la hora del día, la energía y ritmo de la escena. NO describas una foto estática; describe un MOMENTO VIVO capturado en plena acción. Ejemplo: "Fotograma de vídeo promocional de marca. Una mano experta con guantes de jardinería negros está colocando con delicadeza un cactus Trichocereus en una maceta de cerámica artesanal. El gesto es fluido y seguro, capturado en el instante en que el cepellón toca el sustrato oscuro. Partículas de tierra flotan brevemente en el aire, iluminadas por un rayo de sol lateral."
+
+**Composición:** Relación de aspecto (${ar}). Tipo de plano cinematográfico exacto (primerísimo primer plano, plano medio, plano general, plano secuencia, over-the-shoulder, plano cenital con movimiento, travelling lateral, etc.). Ángulo de cámara. Disposición precisa de los elementos en el encuadre. Describe el MOVIMIENTO DE CÁMARA implícito: ¿es un fotograma de un travelling, un paneo, un zoom-in, una cámara estática, un dolly, un plano dron? ¿Hacia dónde se mueve la cámara? Mínimo 4 frases. --ar ${ar}
+
+**Sujetos:** Descripción física MINUCIOSA de lo que aparece en este fotograma. Si hay personas: qué están HACIENDO (acción en curso), postura dinámica, expresión, dirección de la mirada, posición de las manos en movimiento. Si hay objetos: estado (en movimiento, siendo manipulados, cayendo, girando). Texturas específicas, colores precisos. El sujeto debe transmitir MOVIMIENTO y VIDA, no una pose estática. Mínimo 4 frases.
+
+**Luz y Atmósfera:** Tipo de iluminación cinematográfica (luz volumétrica con partículas, contraluz con flare, iluminación de tres puntos para entrevista, luz neón ambiental, golden hour con rayos visibles, etc.). Cómo la luz interactúa con el movimiento (reflejos que se desplazan, sombras dinámicas, destellos). Temperatura de color. Mood cinematográfico (épico, íntimo, enérgico, contemplativo, dinámico). Contraste y atmósfera. Mínimo 4 frases.
+
+**Fondo:** Qué hay detrás del sujeto y cómo se comporta con el movimiento de cámara. Nivel de desenfoque (motion blur, desenfoque de profundidad, fondo estático vs en movimiento). Si la cámara se mueve, ¿el fondo se desplaza? Elementos de producción visibles (luces de set, reflectores, elementos de attrezzo). Transición entre planos. Mínimo 3 frases.
+
+**Estilo:** Estética cinematográfica concreta (look de cine comercial, estilo documental con cámara en mano, estilo editorial cinematic, look de campaña de lujo tipo Dior/Apple, etc.). Características técnicas de vídeo: frame rate implícito (24fps cinemático, 60fps slow-motion), sensor (full-frame look, anamórfico), lente (prime 35mm, anamórfico 40mm con bokeh ovalado, macro con profundidad mínima). Tratamiento de color y LUT (teal & orange, film emulation, desaturado con negros levantados). Mínimo 3 frases.
+
+**Movimiento:** Describe CON DETALLE qué está pasando en movimiento en este fotograma. ¿Qué se mueve? ¿Hacia dónde? ¿A qué velocidad (cámara lenta, velocidad real, time-lapse)? ¿Hay motion blur? ¿Es un momento de pausa dramática en medio de acción? ¿Qué pasó justo ANTES de este fotograma y qué pasará justo DESPUÉS? Este es el corazón del brief de vídeo: debe quedar claro que es un instante de una secuencia viva. Mínimo 4 frases.
+
+REGLAS ESTRICTAS:
+- NO incluir texto literal en la descripción (el texto se añade en postproducción)
+- El prompt COMPLETO debe tener AL MENOS 300 palabras
+- CADA sección debe tener al menos 3-4 frases completas, ricas y descriptivas
+- Usar lenguaje CINEMATOGRÁFICO y DINÁMICO, no de fotografía estática
+- NUNCA describir la escena como si fuera una foto fija. Siempre transmitir MOVIMIENTO, ACCIÓN y NARRATIVA
+- Ser HIPER-ESPECÍFICO: no "un plano bonito del producto" sino "travelling lateral a velocidad lenta siguiendo la mano del ceramista mientras gira la pieza en el torno, con partículas de arcilla flotando en contraluz dorado"
+- Incluir --ar ${ar} al final de la sección Composición
+
+${JSON_FOOTER}`;
+}
+
+function buildCarouselSystem(ar: string): string {
+  return `Eres un director de arte y diseñador editorial de renombre internacional, especializado en diseño de carruseles para Instagram y LinkedIn para marcas premium. Tu experiencia incluye narrativa visual secuencial, storytelling slide-a-slide y diseño de contenido educativo/comercial que mantiene el swipe.
+
+Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN (un slide) de un carrusel, con la precisión de un director de arte que diseña una pieza editorial de alta conversión.
+
+CONCENTRA TODA TU CAPACIDAD EN UN ÚNICO ENTREGABLE:
+
+═══════════════════════════════════════════
+"visual_prompt" — PROMPT ULTRA-DETALLADO PARA IA GENERATIVA DE CARRUSEL
+═══════════════════════════════════════════
+
+Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E o Ideogram. Debe generar un slide que funcione DENTRO de una secuencia narrativa.
+
+CONTEXTO CLAVE DE CARRUSELES:
+- Cada slide forma parte de una SECUENCIA NARRATIVA que el usuario recorre con swipe
+- El primer slide es el GANCHO: debe generar curiosidad para que deslicen
+- Los slides intermedios desarrollan la historia o el valor
+- El último slide es el CTA: invita a la acción
+- Los slides llevan texto overlay en postproducción — los fondos deben ser COMPATIBLES con texto legible
+- La COHERENCIA VISUAL entre slides es fundamental: mismo estilo, paleta, iluminación
+
+ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
+
+**Escena:** Descripción del contexto visual de ESTE slide concreto dentro de la secuencia. Mínimo 4 frases. Incluye qué rol juega este slide en la narrativa (gancho, desarrollo, dato, CTA). El entorno, hora del día, lugar. La sensación que transmite y cómo conecta con el slide anterior y el siguiente.
+
+**Composición:** Relación de aspecto ${ar} (cuadrado o 4:5, según plataforma). Tipo de plano. Disposición de los elementos pensada para COMPATIBILIDAD CON TEXTO: zonas amplias de color sólido o desenfocadas donde irá el texto overlay. Si es slide de gancho: composición que genera curiosidad e invita al swipe. Si es CTA: composición limpia y directa. Mínimo 4 frases. --ar ${ar}
+
+**Sujetos:** Descripción física MINUCIOSA de lo que aparece en este slide. Texturas, colores precisos, materiales. El sujeto debe ser coherente con los demás slides del carrusel (mismo entorno, misma sesión, misma paleta). Si cambia el enfoque de un slide a otro (de general a detalle, de producto a persona), indicar la transición lógica. Mínimo 4 frases.
+
+**Luz y Atmósfera:** Iluminación CONSISTENTE con el resto del carrusel. Tipo de luz, temperatura de color, mood. La iluminación debe ser la MISMA en todos los slides para mantener coherencia visual. Contraste que permita superponer texto legible. Mínimo 4 frases.
+
+**Fondo:** Qué hay detrás del sujeto. FUNDAMENTAL: el fondo debe incluir zonas de color uniforme o desenfocado suave donde se pueda superponer texto con buena legibilidad. Colores del fondo compatibles con la paleta de marca. Transición visual coherente entre slides. Mínimo 3 frases.
+
+**Estilo:** Estética editorial de carrusel profesional. Debe sentirse como una pieza de diseño premium, no como una foto random. Coherencia de estilo a lo largo de toda la secuencia. Tratamiento de color uniforme. Texturas y lentes. Si es un carrusel educativo: estética clean y moderna. Si es aspiracional: estética lifestyle premium. Mínimo 3 frases.
+
+REGLAS ESTRICTAS:
+- NO incluir texto literal en la descripción (el texto se añade en postproducción)
+- El prompt COMPLETO debe tener AL MENOS 250 palabras
+- CADA sección debe tener al menos 3-4 frases completas
+- Pensar en COHERENCIA VISUAL con el resto de slides del carrusel
+- Dejar ZONAS PARA TEXTO OVERLAY (fondos limpios, colores sólidos, áreas desenfocadas)
+- Si es slide de GANCHO: máximo impacto visual e intriga
+- Si es slide de CTA: composición limpia, directa, espacio para botón/texto
+- Incluir --ar ${ar} al final de la sección Composición
+
+${JSON_FOOTER}`;
+}
+
+function buildFeedSystem(ar: string): string {
+  return `Eres un fotógrafo editorial de renombre internacional y director de arte especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN con la precisión de un director de fotografía profesional que prepara un shooting real.
 
 CONCENTRA TODA TU CAPACIDAD EN UN ÚNICO ENTREGABLE:
 
@@ -865,9 +1007,9 @@ Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E, Ideogram o Sora. D
 
 ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
 
-**Escena:** Descripción general inmersiva de la situación, el entorno y el contexto. Mínimo 4 frases. Incluye la hora del día, la estación, el lugar concreto (no genérico), el propósito de la imagen y la sensación que debe transmitir. Ejemplo: "Fotografía de stock editorial. Un primer plano íntimo de varias macetas de terracota que contienen cactus Trichocereus, prosperando en un invernadero lleno de luz natural matutina de primavera. El ambiente evoca una sensación de calma y conexión con la naturaleza, como si el espectador pudiera sentir la humedad y el calor del cristal."
+**Escena:** Descripción general inmersiva de la situación, el entorno y el contexto. Mínimo 4 frases. Incluye la hora del día, la estación, el lugar concreto (no genérico), el propósito de la imagen y la sensación que debe transmitir.
 
-**Composición:** Relación de aspecto (${ar}). Tipo de plano exacto (primer plano, plano medio, plano general, cenital, contrapicado, etc.). Ángulo de cámara. Disposición precisa de los elementos en el encuadre (qué hay en primer plano, medio plano, fondo). Cómo se crea profundidad y guía visual. Regla de tercios o simetría si aplica. Mínimo 4 frases.
+**Composición:** Relación de aspecto (${ar}). Tipo de plano exacto (primer plano, plano medio, plano general, cenital, contrapicado, etc.). Ángulo de cámara. Disposición precisa de los elementos en el encuadre (qué hay en primer plano, medio plano, fondo). Cómo se crea profundidad y guía visual. Regla de tercios o simetría si aplica. Mínimo 4 frases. --ar ${ar}
 
 **Sujetos:** Descripción física MINUCIOSA de los protagonistas u objetos principales. Texturas específicas (rugoso, brillante, mate, translúcido, poroso, satinado). Colores con precisión (no "verde" sino "verde azulado con matices grisáceos y venas más claras"). Si hay personas: edad aproximada, ropa detallada (material, color, estado), pose, expresión facial, dirección de la mirada, qué sostienen, posición de las manos. Si hay objetos: material exacto, estado (nuevo, desgastado, antiguo, patinado), tamaño relativo, detalles táctiles. Mínimo 4 frases.
 
@@ -875,7 +1017,7 @@ ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
 
 **Fondo:** Qué hay exactamente detrás del sujeto principal. Nivel de nitidez (enfoque nítido, desenfoque suave, bokeh cremoso con formas circulares, bokeh hexagonal, etc.). Colores predominantes del fondo y su contraste con el primer plano. Elementos secundarios visibles. Transición entre planos (gradual, abrupta). Mínimo 3 frases.
 
-**Estilo:** Estética visual concreta (fotografía editorial de producto, fotografía documental, ilustración flat vector, 3D render hiperrealista, etc.). Texturas de la imagen (grano de película ISO 400, aspecto digital limpio, halación vintage, etc.). Características de lente simuladas (apertura amplia f/1.4, profundidad de campo reducida, lente macro 100mm, teleobjetivo comprimido 200mm, gran angular 24mm con distorsión de barril, etc.). Referencia a estilo de fotógrafo o revista si aplica. Tratamiento de color (saturación, contraste, tono split-toning). Mínimo 3 frases.${isVideo ? '\n\n**Movimiento:** Describir el fotograma clave (key frame) más representativo de esta escena de vídeo. Indicar qué momento del movimiento se congela.' : ''}
+**Estilo:** Estética visual concreta (fotografía editorial de producto, fotografía documental, ilustración flat vector, 3D render hiperrealista, etc.). Texturas de la imagen (grano de película ISO 400, aspecto digital limpio, halación vintage, etc.). Características de lente simuladas (apertura amplia f/1.4, profundidad de campo reducida, lente macro 100mm, teleobjetivo comprimido 200mm, gran angular 24mm con distorsión de barril, etc.). Referencia a estilo de fotógrafo o revista si aplica. Tratamiento de color (saturación, contraste, tono split-toning). Mínimo 3 frases.
 
 REGLAS ESTRICTAS:
 - NO incluir texto literal en la descripción (el texto se añade en postproducción)
@@ -886,33 +1028,94 @@ REGLAS ESTRICTAS:
 - Incluir --ar ${ar} al final de la sección Composición
 - Cada detalle debe contribuir a que un generador de imágenes produzca EXACTAMENTE esta escena
 
-Responde en español.
-Devuelve SOLO JSON válido con exactamente este campo:
-{
-  "visual_prompt": "..."
-}`,
+${JSON_FOOTER}`;
+}
 
-    user: `Genera el prompt visual detallado para esta imagen.
+const SYSTEM_BUILDERS: Record<VisualAgentKey, (ar: string) => string> = {
+  visual_briefs_story: buildStorySystem,
+  visual_briefs_video: buildVideoSystem,
+  visual_briefs_carousel: buildCarouselSystem,
+  visual_briefs_feed: buildFeedSystem,
+};
 
-## IDENTIDAD DE MARCA
-${buildBrandContext(project)}
+export function buildSingleVisualPrompt(
+  project: Project,
+  input: SingleVisualInput
+): { system: string; user: string; agentKey: VisualAgentKey } {
+  const { post, visualIndex, totalVisuals, label, slideContext } = input;
+  const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
+  const agentKey = resolveVisualAgent(post.format, post.production_specs?.media_type);
+  const isVideo = agentKey === 'visual_briefs_video';
+  const isCarousel = agentKey === 'visual_briefs_carousel';
+  const isStory = agentKey === 'visual_briefs_story';
 
-## CONTEXTO DEL NEGOCIO
-${buildProjectContext(project, { includeAiRules: true })}
+  const system = SYSTEM_BUILDERS[agentKey](ar);
 
-## PUBLICACIÓN
+  const brandBlock = `## IDENTIDAD DE MARCA\n${buildBrandContext(project)}`;
+  const contextBlock = `## CONTEXTO DEL NEGOCIO\n${buildProjectContext(project, { includeAiRules: true })}`;
+
+  const postBlock = `## PUBLICACIÓN${isVideo ? ' (VÍDEO)' : ''}
 - Formato: ${post.format || 'No especificado'}
 - Tipo de contenido: ${post.content_type}
 - Idea del post: ${post.idea}
 - Copy: ${(post.copy || '').slice(0, 400)}
 - CTA: ${post.cta || 'N/A'}
 - Objetivo: ${post.post_goal || 'N/A'}
-- Aspect ratio: ${ar}
+- Aspect ratio: ${ar}${isVideo && post.production_specs?.duration_seconds ? `\n- Duración total del vídeo: ${post.production_specs.duration_seconds}s` : ''}${isVideo && post.production_specs?.scene_summary ? `\n- Guión completo del vídeo: ${post.production_specs.scene_summary}` : ''}`;
 
-## IMAGEN A GENERAR
-- ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta imagen según el calendario: ${slideContext}` : ''}${isVideo ? '\n- NOTA: Este visual es un fotograma clave (key frame) representativo de un vídeo' : ''}
+  let visualBlock: string;
+  let instructions: string;
 
-INSTRUCCIONES FINALES:
+  if (isVideo) {
+    visualBlock = `## FOTOGRAMA A GENERAR
+- ${label} (${visualIndex + 1} de ${totalVisuals} fotogramas del vídeo)${slideContext ? `\n- Contenido de ESTA ESCENA según el guión: ${slideContext}` : ''}
+- Este fotograma representa UN MOMENTO CONCRETO de esta escena del vídeo`;
+
+    instructions = `INSTRUCCIONES FINALES:
+- Concéntrate EXCLUSIVAMENTE en este fotograma/escena. No pienses en los demás.
+- Genera SOLO el campo "visual_prompt". No generes visual_brief.
+- El visual_prompt DEBE tener al menos 300 palabras, con las 7 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo, Movimiento).
+- Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y cinematográficos.
+- FUNDAMENTAL: Describe un FOTOGRAMA DE VÍDEO, no una fotografía. Debe transmitir movimiento, acción, narrativa y ritmo.
+- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- Describe movimientos de cámara, velocidades, transiciones, motion blur y dinámica de la escena.
+- El resultado debe ser tan detallado que al copiarlo en Sora, Runway o Kling, el vídeo generado sea EXACTAMENTE lo que describes.`;
+
+  } else if (isCarousel) {
+    visualBlock = `## SLIDE A GENERAR
+- ${label} (${visualIndex + 1} de ${totalVisuals} slides del carrusel)${slideContext ? `\n- Contenido de ESTE SLIDE según el calendario: ${slideContext}` : ''}
+- Este slide forma parte de una secuencia narrativa de ${totalVisuals} slides`;
+
+    instructions = `INSTRUCCIONES FINALES:
+- Concéntrate EXCLUSIVAMENTE en este slide. No pienses en los demás.
+- Genera SOLO el campo "visual_prompt". No generes visual_brief.
+- El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
+- Cada sección debe tener AL MENOS 3-4 frases completas.
+- FUNDAMENTAL: Este slide debe ser COHERENTE visualmente con los demás slides del carrusel (misma paleta, iluminación, estilo).
+- Deja ZONAS LIMPIAS para texto overlay en postproducción.${visualIndex === 0 ? '\n- Este es el slide de GANCHO: debe generar curiosidad e invitar al swipe. Máximo impacto visual.' : ''}${visualIndex === totalVisuals - 1 ? '\n- Este es el slide FINAL (CTA): composición limpia y directa, espacio para texto de llamada a la acción.' : ''}
+- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- El resultado debe ser tan detallado que al copiarlo en Midjourney o DALL-E, la imagen generada sea EXACTAMENTE lo que describes.`;
+
+  } else if (isStory) {
+    visualBlock = `## STORY A GENERAR
+- ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta Story según el calendario: ${slideContext}` : ''}`;
+
+    instructions = `INSTRUCCIONES FINALES:
+- Concéntrate EXCLUSIVAMENTE en esta Story. No pienses en las demás.
+- Genera SOLO el campo "visual_prompt". No generes visual_brief.
+- El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
+- Cada sección debe tener AL MENOS 3-4 frases completas.
+- FUNDAMENTAL: Piensa en VERTICAL FULLSCREEN 9:16. La imagen ocupa toda la pantalla del móvil.
+- Deja ESPACIO VISUAL para texto overlay (zona superior o inferior más limpia, ~20% del encuadre).
+- La Story debe sentirse NATIVA de Instagram: cercana, auténtica, con impacto inmediato.
+- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- El resultado debe ser tan detallado que al copiarlo en Midjourney o DALL-E, la imagen generada sea EXACTAMENTE lo que describes.`;
+
+  } else {
+    visualBlock = `## IMAGEN A GENERAR
+- ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta imagen según el calendario: ${slideContext}` : ''}`;
+
+    instructions = `INSTRUCCIONES FINALES:
 - Concéntrate EXCLUSIVAMENTE en esta imagen. No pienses en las demás.
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
@@ -920,7 +1123,21 @@ INSTRUCCIONES FINALES:
 - NO uses descripciones vagas como "ambiente agradable", "escena bonita" o "plano general". Sé HIPER-CONCRETO y ESPECÍFICO.
 - Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
 - Describe texturas, materiales, temperaturas de color, ángulos de luz y profundidad de campo con precisión técnica.
-- El resultado debe ser tan detallado que al copiarlo en Midjourney, DALL-E o Sora, la imagen generada sea EXACTAMENTE lo que describes.`,
+- El resultado debe ser tan detallado que al copiarlo en Midjourney, DALL-E o Sora, la imagen generada sea EXACTAMENTE lo que describes.`;
+  }
+
+  const header = isVideo
+    ? 'Genera el prompt visual detallado para este FOTOGRAMA CLAVE de vídeo.'
+    : isCarousel
+      ? 'Genera el prompt visual detallado para este SLIDE de carrusel.'
+      : isStory
+        ? 'Genera el prompt visual detallado para esta STORY.'
+        : 'Genera el prompt visual detallado para esta imagen.';
+
+  return {
+    system,
+    user: `${header}\n\n${brandBlock}\n\n${contextBlock}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    agentKey,
   };
 }
 
@@ -928,7 +1145,7 @@ INSTRUCCIONES FINALES:
  * Descompone un post en la lista de visuales individuales a generar.
  * - Carrusel → 1 visual por slide
  * - Publicación/Story imagen → 1 visual
- * - Reel/Story vídeo → 1 visual (key frame)
+ * - Reel/Story vídeo → 1 fotograma clave por escena del guión (o 1 si no hay escenas separadas)
  */
 export function decomposePostIntoVisuals(post: VisualBriefInput): Array<{ label: string; slideContext?: string }> {
   const format = post.format || 'publicacion';
@@ -955,7 +1172,19 @@ export function decomposePostIntoVisuals(post: VisualBriefInput): Array<{ label:
   }
 
   if (format === 'reel' || (format === 'story' && specs?.media_type === 'video')) {
-    return [{ label: 'Fotograma clave (key frame)', slideContext: specs?.scene_summary || undefined }];
+    const sceneSummary = specs?.scene_summary || '';
+    const sceneParts = sceneSummary
+      .split(/Escena\s*\d+\s*(?:\([^)]*\))?\s*:/i)
+      .filter(s => s.trim());
+
+    if (sceneParts.length > 1) {
+      return sceneParts.map((part, i) => ({
+        label: `Fotograma clave – Escena ${i + 1}`,
+        slideContext: part.trim(),
+      }));
+    }
+
+    return [{ label: 'Fotograma clave (key frame)', slideContext: sceneSummary || undefined }];
   }
 
   return [{ label: 'Imagen principal', slideContext: specs?.scene_summary || undefined }];

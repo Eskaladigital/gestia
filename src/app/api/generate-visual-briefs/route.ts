@@ -80,7 +80,7 @@ async function processOneVisual(
   userId: string,
   supabase: any,
 ): Promise<VisualResult | null> {
-  const { system, user: userPrompt } = buildSingleVisualPrompt(project, {
+  const { system, user: userPrompt, agentKey } = buildSingleVisualPrompt(project, {
     post: job.post,
     visualIndex: job.visualIndex,
     totalVisuals: job.totalVisualsForPost,
@@ -89,7 +89,7 @@ async function processOneVisual(
   });
 
   const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
-    agentKey: 'generate_visual_briefs',
+    agentKey,
     userId,
     maxTokens: 4096,
   });

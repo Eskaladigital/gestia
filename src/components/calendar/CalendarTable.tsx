@@ -321,7 +321,12 @@ export function CalendarTable({
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-surface-900 text-white px-2 py-0.5">Prompts Visuales</span>
                                 <span className="text-[10px] text-surface-500 font-mono">
-                                  {visualsCache[item.id]?.length || '...'} {(visualsCache[item.id]?.length || 0) === 1 ? 'imagen' : 'imágenes'}
+                                  {visualsCache[item.id]?.length || '...'} {(() => {
+                                    const count = visualsCache[item.id]?.length || 0;
+                                    const isVid = item.production_specs?.media_type === 'video';
+                                    if (isVid) return count === 1 ? 'fotograma' : 'fotogramas';
+                                    return count === 1 ? 'imagen' : 'imágenes';
+                                  })()}
                                 </span>
                               </div>
                               {onGenerateBriefForPost && (
