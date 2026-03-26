@@ -94,7 +94,7 @@ async function processOneVisual(
     maxTokens: 4096,
   });
 
-  const rawData = aiResponse.data as Record<string, unknown> | null;
+  const rawData = aiResponse.data as unknown as Record<string, unknown> | null;
 
   let vPrompt = clip(rawData?.visual_prompt);
 
