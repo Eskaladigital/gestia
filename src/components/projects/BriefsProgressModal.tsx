@@ -6,6 +6,8 @@ import { X } from 'lucide-react';
 
 type Phase = 'connecting' | 'running' | 'complete' | 'cancelled' | 'error';
 
+const BATCH_SIZE = 10;
+
 export interface BriefsProgressModalProps {
   projectId: string;
   contentItemIds?: string[];
@@ -29,9 +31,11 @@ export function BriefsProgressModal({
   const [currentPostIdea, setCurrentPostIdea] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const [batchNum, setBatchNum] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   const startTimeRef = useRef(Date.now());
+  const cancelledRef = useRef(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -58,110 +62,142 @@ export function BriefsProgressModal({
   }, [phase, onClose, onComplete]);
 
   const handleCancel = useCallback(() => {
+    cancelledRef.current = true;
     abortRef.current?.abort();
   }, []);
 
-  useEffect(() => {
+  const runOneBatch = useCallback(async (offset: number): Promise<{ hasMore: boolean; nextOffset: number }> => {
     const controller = new AbortController();
     abortRef.current = controller;
+
+    const res = await fetch('/api/generate-visual-briefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_id: projectId,
+        content_item_ids: contentItemIds,
+        batch_offset: offset,
+        batch_size: BATCH_SIZE,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      let msg = `Error HTTP ${res.status}`;
+      try { const j = JSON.parse(text); if (j.error) msg = j.error; } catch { /* */ }
+      throw new Error(msg);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Sin stream de respuesta');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let hasMore = false;
+    let nextOffset = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        let eventName = '';
+        let dataStr = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+          if (line.startsWith('data: ')) dataStr = line.slice(6);
+        }
+        if (!eventName || !dataStr) continue;
+
+        let data: any;
+        try { data = JSON.parse(dataStr); } catch { continue; }
+
+        switch (eventName) {
+          case 'init':
+            setTotalPosts(data.totalPosts || 0);
+            setTotalVisuals(data.totalVisuals || 0);
+            break;
+
+          case 'progress':
+            if (data.phase === 'visual_start') {
+              setCurrentLabel(data.label || '');
+              setCurrentPostIdea(data.postIdea || '');
+            } else if (data.phase === 'visual_done') {
+              setVisualsDone(data.visualsDone || 0);
+              if (data.postsCompleted !== undefined) {
+                setPostsCompleted(prev => Math.max(prev, data.postsCompleted));
+              }
+              setCurrentLabel(data.label || '');
+              if (data.postIdea) setCurrentPostIdea(data.postIdea);
+            }
+            break;
+
+          case 'batch_complete':
+            setVisualsDone(data.visualsDone || 0);
+            if (data.totalUpdated !== undefined) {
+              setPostsCompleted(prev => Math.max(prev, data.totalUpdated));
+            }
+            hasMore = data.hasMore || false;
+            nextOffset = data.nextOffset || 0;
+            break;
+
+          case 'complete':
+            setPostsCompleted(data.totalUpdated || 0);
+            setVisualsDone(data.visualsDone || 0);
+            if (data.message && data.totalUpdated === 0) {
+              setTotalPosts(0);
+              setTotalVisuals(0);
+            }
+            hasMore = false;
+            break;
+
+          case 'cancelled':
+            setPostsCompleted(data.totalUpdated || 0);
+            setVisualsDone(data.visualsDone || 0);
+            hasMore = false;
+            break;
+
+          case 'error':
+            throw new Error(data.error || 'Error desconocido');
+        }
+      }
+    }
+
+    return { hasMore, nextOffset };
+  }, [projectId, contentItemIds]);
+
+  useEffect(() => {
+    cancelledRef.current = false;
     startTimeRef.current = Date.now();
 
     (async () => {
       try {
-        const res = await fetch('/api/generate-visual-briefs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: projectId,
-            content_item_ids: contentItemIds,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          let msg = `Error HTTP ${res.status}`;
-          try { const j = JSON.parse(text); if (j.error) msg = j.error; } catch { /* */ }
-          setErrorMsg(msg);
-          setPhase('error');
-          return;
-        }
-
-        const reader = res.body?.getReader();
-        if (!reader) { setErrorMsg('Sin stream de respuesta'); setPhase('error'); return; }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
+        let offset = 0;
+        let batch = 0;
         setPhase('running');
 
         while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split('\n\n');
-          buffer = parts.pop() || '';
-
-          for (const part of parts) {
-            const lines = part.split('\n');
-            let eventName = '';
-            let dataStr = '';
-            for (const line of lines) {
-              if (line.startsWith('event: ')) eventName = line.slice(7).trim();
-              if (line.startsWith('data: ')) dataStr = line.slice(6);
-            }
-            if (!eventName || !dataStr) continue;
-
-            let data: any;
-            try { data = JSON.parse(dataStr); } catch { continue; }
-
-            switch (eventName) {
-              case 'init':
-                setTotalPosts(data.totalPosts || 0);
-                setTotalVisuals(data.totalVisuals || 0);
-                break;
-
-              case 'progress':
-                if (data.phase === 'visual_start') {
-                  setCurrentLabel(data.label || '');
-                  setCurrentPostIdea(data.postIdea || '');
-                } else if (data.phase === 'visual_done') {
-                  setVisualsDone(data.visualsDone || 0);
-                  if (data.postsCompleted !== undefined) {
-                    setPostsCompleted(data.postsCompleted);
-                  }
-                  setCurrentLabel(data.label || '');
-                  if (data.postIdea) setCurrentPostIdea(data.postIdea);
-                }
-                break;
-
-              case 'complete':
-                setPostsCompleted(data.totalUpdated || 0);
-                setVisualsDone(data.visualsDone || 0);
-                if (data.message && data.totalUpdated === 0) {
-                  setTotalPosts(0);
-                  setTotalVisuals(0);
-                }
-                setPhase('complete');
-                break;
-
-              case 'cancelled':
-                setPostsCompleted(data.totalUpdated || 0);
-                setVisualsDone(data.visualsDone || 0);
-                setPhase('cancelled');
-                break;
-
-              case 'error':
-                setErrorMsg(data.error || 'Error desconocido');
-                setPostsCompleted(data.totalUpdated || 0);
-                setVisualsDone(data.visualsDone || 0);
-                setPhase('error');
-                break;
-            }
+          if (cancelledRef.current) {
+            setPhase('cancelled');
+            return;
           }
+
+          batch++;
+          setBatchNum(batch);
+
+          const { hasMore, nextOffset } = await runOneBatch(offset);
+
+          if (!hasMore || cancelledRef.current) break;
+          offset = nextOffset;
         }
 
-        setPhase(prev => (prev === 'running' ? 'complete' : prev));
+        setPhase(cancelledRef.current ? 'cancelled' : 'complete');
       } catch (err: any) {
         if (err.name === 'AbortError') {
           setPhase('cancelled');
@@ -172,8 +208,11 @@ export function BriefsProgressModal({
       }
     })();
 
-    return () => { controller.abort(); };
-  }, [projectId, contentItemIds]);
+    return () => {
+      cancelledRef.current = true;
+      abortRef.current?.abort();
+    };
+  }, [runOneBatch]);
 
   const isTerminal = phase === 'complete' || phase === 'cancelled' || phase === 'error';
   const progressPct = totalVisuals > 0 ? Math.round((visualsDone / totalVisuals) * 100) : phase === 'complete' ? 100 : 0;
@@ -210,6 +249,7 @@ export function BriefsProgressModal({
             </h4>
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-surface-400 mt-0.5">
               {totalPosts} {totalPosts === 1 ? 'publicación' : 'publicaciones'} &middot; {totalVisuals} {totalVisuals === 1 ? 'imagen' : 'imágenes'} &middot; {formatTime(elapsed)}
+              {!isTerminal && batchNum > 0 && <span> &middot; lote {batchNum}</span>}
             </p>
           </div>
           {isTerminal && (

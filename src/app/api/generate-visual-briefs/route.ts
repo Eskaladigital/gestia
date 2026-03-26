@@ -8,7 +8,7 @@ export const maxDuration = 300;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Sequential processing: one visual at a time (like an n8n workflow)
+const BATCH_SIZE = 10;
 
 function clip(text: unknown, max = 6000): string {
   const s = typeof text === 'string' ? text.trim() : '';
@@ -136,6 +136,46 @@ async function processOneVisual(
   };
 }
 
+async function finalizeCompletedPosts(
+  batchJobs: VisualJob[],
+  postVisualResults: Map<string, Array<{ index: number; label: string; prompt: string }>>,
+  postVisualsAttempted: Map<string, number>,
+  completedPostIds: Set<string>,
+  fullQueue: VisualJob[],
+  supabase: any,
+): Promise<string[]> {
+  const newlyCompleted: string[] = [];
+
+  const postIds = new Set(batchJobs.map(j => j.contentItemId));
+  for (const postId of postIds) {
+    if (completedPostIds.has(postId)) continue;
+
+    const totalVisualsForPost = fullQueue.filter(v => v.contentItemId === postId).length;
+    const attemptedForPost = postVisualsAttempted.get(postId) || 0;
+
+    if (attemptedForPost >= totalVisualsForPost) {
+      const postResults = postVisualResults.get(postId) || [];
+      postResults.sort((a, b) => a.index - b.index);
+
+      if (postResults.length > 0) {
+        const combinedPrompt = postResults.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
+        const { error: updateErr } = await supabase
+          .from('content_items')
+          .update({ visual_brief: null, visual_prompt: clip(combinedPrompt) })
+          .eq('id', postId);
+        if (updateErr) {
+          console.error(`[generate-visual-briefs] update content_items error for ${postId}:`, updateErr);
+        }
+      }
+
+      completedPostIds.add(postId);
+      newlyCompleted.push(postId);
+    }
+  }
+
+  return newlyCompleted;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase();
 
@@ -149,9 +189,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { project_id, content_item_ids } = body as {
+    const { project_id, content_item_ids, batch_offset, batch_size } = body as {
       project_id?: string;
       content_item_ids?: string[];
+      batch_offset?: number;
+      batch_size?: number;
     };
 
     if (!project_id) {
@@ -186,7 +228,7 @@ export async function POST(request: NextRequest) {
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         start(controller) {
-          controller.enqueue(encoder.encode(sseMessage('complete', { totalUpdated: 0, totalExpected: 0, totalVisuals: 0, message: 'No hay publicaciones pendientes de brief visual' })));
+          controller.enqueue(encoder.encode(sseMessage('complete', { totalUpdated: 0, totalExpected: 0, totalVisuals: 0, visualsDone: 0, message: 'No hay publicaciones pendientes de brief visual' })));
           controller.close();
         }
       });
@@ -200,7 +242,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const visualQueue = buildVisualQueue(posts);
+    const fullQueue = buildVisualQueue(posts);
+    const offset = batch_offset ?? 0;
+    const size = batch_size ?? BATCH_SIZE;
+    const batchQueue = fullQueue.slice(offset, offset + size);
+
     const signal = request.signal;
     const encoder = new TextEncoder();
 
@@ -214,10 +260,11 @@ export async function POST(request: NextRequest) {
 
         send('init', {
           totalPosts: posts.length,
-          totalVisuals: visualQueue.length,
+          totalVisuals: fullQueue.length,
+          batchOffset: offset,
+          batchSize: batchQueue.length,
         });
 
-        let totalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
         let visualsDone = 0;
         let postsCompleted = 0;
         let aborted = false;
@@ -226,20 +273,43 @@ export async function POST(request: NextRequest) {
         const postVisualsAttempted = new Map<string, number>();
         const completedPostIds = new Set<string>();
 
+        // Load existing results from previous batches for posts that span batches
+        const postIdsInBatch = new Set(batchQueue.map(j => j.contentItemId));
+        for (const postId of postIdsInBatch) {
+          try {
+            const { data: existingVisuals } = await supabase
+              .from('content_item_visuals')
+              .select('visual_index, label, visual_prompt')
+              .eq('content_item_id', postId)
+              .not('visual_prompt', 'is', null);
+
+            if (existingVisuals && existingVisuals.length > 0) {
+              const results = existingVisuals.map((v: any) => ({
+                index: v.visual_index,
+                label: v.label || `Visual ${v.visual_index + 1}`,
+                prompt: v.visual_prompt,
+              }));
+              postVisualResults.set(postId, results);
+              postVisualsAttempted.set(postId, results.length);
+            }
+          } catch { /* ignore */ }
+        }
+
         try {
-          for (let i = 0; i < visualQueue.length; i++) {
+          for (let i = 0; i < batchQueue.length; i++) {
             if (signal.aborted) { aborted = true; break; }
 
-            const job = visualQueue[i];
+            const job = batchQueue[i];
+            const globalIndex = offset + i;
 
             send('progress', {
               phase: 'visual_start',
-              visualsDone,
-              totalVisuals: visualQueue.length,
+              visualsDone: offset + visualsDone,
+              totalVisuals: fullQueue.length,
               postIdea: job.postIdea.slice(0, 80),
               postFormat: job.postFormat,
               label: job.label,
-              current: i + 1,
+              current: globalIndex + 1,
             });
 
             let result: VisualResult | null = null;
@@ -265,39 +335,15 @@ export async function POST(request: NextRequest) {
               });
             }
 
-            if (!completedPostIds.has(job.contentItemId)) {
-              const totalVisualsForPost = visualQueue.filter(v => v.contentItemId === job.contentItemId).length;
-              const attemptedForPost = postVisualsAttempted.get(job.contentItemId) || 0;
-
-              if (attemptedForPost >= totalVisualsForPost) {
-                const postResults = postVisualResults.get(job.contentItemId) || [];
-                postResults.sort((a, b) => a.index - b.index);
-
-                if (postResults.length > 0) {
-                  const combinedPrompt = postResults.map(r => `--- ${r.label} ---\n${r.prompt}`).join('\n\n');
-
-                  const { error: updateErr } = await supabase
-                    .from('content_items')
-                    .update({
-                      visual_brief: null,
-                      visual_prompt: clip(combinedPrompt),
-                    })
-                    .eq('id', job.contentItemId);
-
-                  if (updateErr) {
-                    console.error(`[generate-visual-briefs] update content_items error for ${job.contentItemId}:`, updateErr);
-                  }
-                }
-
-                completedPostIds.add(job.contentItemId);
-                postsCompleted++;
-              }
-            }
+            const newlyCompleted = await finalizeCompletedPosts(
+              [job], postVisualResults, postVisualsAttempted, completedPostIds, fullQueue, supabase
+            );
+            postsCompleted += newlyCompleted.length;
 
             send('progress', {
               phase: 'visual_done',
-              visualsDone,
-              totalVisuals: visualQueue.length,
+              visualsDone: offset + visualsDone,
+              totalVisuals: fullQueue.length,
               postsCompleted,
               totalPosts: posts.length,
               label: job.label,
@@ -305,18 +351,23 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          send(aborted ? 'cancelled' : 'complete', {
+          const nextOffset = offset + visualsDone;
+          const hasMore = nextOffset < fullQueue.length;
+
+          send(aborted ? 'cancelled' : 'batch_complete', {
             totalUpdated: postsCompleted,
             totalExpected: posts.length,
-            totalVisuals: visualQueue.length,
-            visualsDone,
-            usage: totalUsage,
+            totalVisuals: fullQueue.length,
+            batchVisualsDone: visualsDone,
+            visualsDone: offset + visualsDone,
+            hasMore,
+            nextOffset: hasMore ? nextOffset : null,
           });
 
         } catch (error: unknown) {
           console.error('[generate-visual-briefs] Error in stream:', error);
           const message = error instanceof Error ? error.message : 'Error interno';
-          send('error', { error: message, totalUpdated: postsCompleted, visualsDone });
+          send('error', { error: message, totalUpdated: postsCompleted, visualsDone: offset + visualsDone });
         }
 
         try { controller.close(); } catch { /* ignore */ }
