@@ -10,7 +10,8 @@ import {
 } from '@/lib/projects/pipeline';
 import type { CalendarGeneration } from '@/types';
 
-export const maxDuration = 300;
+/** Pro/Enterprise: hasta 800s en Vercel; necesario si varios meses tardan >90s cada uno en la IA. */
+export const maxDuration = 800;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +77,40 @@ function clipText(value: unknown, max = 2000): string {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text) return '';
   return text.length > max ? text.slice(0, max) : text;
+}
+
+const MAX_PRIOR_DIGEST_LINES = 85;
+const MAX_PRIOR_DIGEST_CHARS = 7500;
+
+/** Líneas compactas para que la IA no repita ángulos al generar el siguiente mes del mismo periodo. */
+function formatPriorMonthsDigestForPrompt(
+  rows: Array<{
+    scheduled_date: string;
+    idea: string | null;
+    content_type: string | null;
+    format: string | null;
+    cta: string | null;
+  }> | null
+): string {
+  if (!rows?.length) return '';
+  const lines: string[] = [];
+  for (const r of rows) {
+    if (lines.length >= MAX_PRIOR_DIGEST_LINES) break;
+    const idea = clipText(r.idea, 100);
+    const cta = clipText(r.cta, 70);
+    const meta = [r.scheduled_date, r.format, r.content_type].filter(Boolean).join(' · ');
+    const detail = [idea ? `idea: ${idea}` : '', cta ? `CTA: ${cta}` : ''].filter(Boolean).join(' · ');
+    lines.push(detail ? `- ${meta} — ${detail}` : `- ${meta}`);
+  }
+  let out = lines.join('\n');
+  const omitted = rows.length - lines.length;
+  if (omitted > 0) {
+    out += `\n(…y ${omitted} publicación(es) más ya planificadas en meses anteriores del periodo: evita temas y ganchos demasiado parecidos.)`;
+  }
+  if (out.length > MAX_PRIOR_DIGEST_CHARS) {
+    out = `${out.slice(0, MAX_PRIOR_DIGEST_CHARS).trimEnd()}\n(…digest truncado por tamaño; prioriza máxima variedad temática.)`;
+  }
+  return out;
 }
 
 function cleanStringArray(value: unknown, maxItems: number, maxLen: number, prefix = ''): string[] {
@@ -319,7 +354,30 @@ export async function POST(request: NextRequest) {
               totalMonths: duration,
             });
 
-            const { system, user: userPrompt, segments } = buildCalendarPrompt(project, strategyText, mp.month0, mp.year);
+            const monthStartYmd = toYmd(mp.year, mp.month0, 1);
+            let priorMonthsDigest = '';
+            if (mp.monthIndex > 0) {
+              const { data: priorRows, error: priorErr } = await supabase
+                .from('content_items')
+                .select('scheduled_date, idea, content_type, format, cta')
+                .eq('project_id', project_id)
+                .gte('scheduled_date', rangeStart)
+                .lt('scheduled_date', monthStartYmd)
+                .order('scheduled_date', { ascending: true });
+              if (priorErr) {
+                console.warn('[generate-calendar] digest meses previos:', priorErr);
+              } else {
+                priorMonthsDigest = formatPriorMonthsDigestForPrompt(priorRows);
+              }
+            }
+
+            const { system, user: userPrompt, segments } = buildCalendarPrompt(
+              project,
+              strategyText,
+              mp.month0,
+              mp.year,
+              priorMonthsDigest ? { priorMonthsDigest } : undefined
+            );
             const expectedPosts = segments.reduce((sum, segment) => sum + segment.postsQuota, 0);
 
             let normalizedPosts: ReturnType<typeof normalizeCalendarPosts> = [];

@@ -367,7 +367,7 @@ export async function POST(request: NextRequest) {
           const nextOffset = offset + visualsDone;
           const hasMore = nextOffset < fullQueue.length;
 
-          let globalPostsCompleted = postsCompleted;
+          globalPostsCompleted = postsCompleted;
           try {
             const { count } = await supabase
               .from('content_items')
@@ -376,7 +376,7 @@ export async function POST(request: NextRequest) {
               .not('visual_prompt', 'is', null)
               .neq('visual_prompt', '');
             if (count !== null) globalPostsCompleted = count;
-          } catch { /* fallback to local count */ }
+          } catch { /* fallback: se mantiene postsCompleted */ }
 
           send(aborted ? 'cancelled' : 'batch_complete', {
             totalUpdated: globalPostsCompleted,

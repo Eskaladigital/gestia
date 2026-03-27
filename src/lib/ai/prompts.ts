@@ -430,11 +430,17 @@ Genera una estrategia que sea coherente con todos los parámetros definidos, esp
 // 4. PROMPT: Generación de calendario
 // ============================================================
 
+export type BuildCalendarPromptOptions = {
+  /** Resumen de posts ya generados en meses anteriores del mismo periodo multi-mes (anti-duplicados). */
+  priorMonthsDigest?: string;
+};
+
 export function buildCalendarPrompt(
   project: Project,
   strategy: string,
   monthIndex: number,
-  year: number
+  year: number,
+  opts?: BuildCalendarPromptOptions
 ): { system: string; user: string; segments: CalendarMonthWeekSegment[] } {
   const dist = getWeeklyDistribution(project);
   const weeklyTotal = getWeeklyTotal(dist);
@@ -485,6 +491,7 @@ REGLAS CRÍTICAS:
 - Incluye CTAs relevantes
 - Los hashtags deben ser reales y relevantes para el sector
 - Mantén variedad temática: evita repetir el mismo ángulo, la misma promesa o el mismo CTA varias veces
+${opts?.priorMonthsDigest?.trim() ? '- Si hay sección "CONTINUIDAD CON EL PERIODO YA GENERADO", trátala como memoria obligatoria: nuevos ángulos y CTAs, sin reescribir ni parafrasear de forma estrecha lo ya cubierto' : ''}
 - Cada idea debe sentirse publicable para Instagram sin depender de contexto externo no proporcionado
 - "platforms" debe incluir "instagram"
 - Las fechas deben ser del mes de ${month} ${year}
@@ -541,7 +548,17 @@ FORMATO DE RESPUESTA JSON:
 ${buildProjectContext(project, { includeAiRules: true })}
 
 ## ESTRATEGIA APROBADA
-${strategy}
+${strategy}${opts?.priorMonthsDigest?.trim() ? `
+
+## CONTINUIDAD CON EL PERIODO YA GENERADO
+Este mes forma parte de un calendario multi-mes. Ya hay publicaciones planificadas en meses anteriores **del mismo rango** (misma generación / mismo proyecto).
+
+Tu trabajo para **${month} ${year}**:
+- Mantén coherencia de voz y estrategia con lo anterior, pero **sin repetir** el mismo tema, gancho, estructura narrativa, promesa central ni CTA equivalente.
+- Explora **otras** líneas de los pilares y de las líneas temáticas; busca huecos editoriales que aún no se hayan tocado.
+
+Resumen compacto de lo ya cubierto (referencia anti-duplicados; **no** copies estos textos literalmente):
+${opts.priorMonthsDigest.trim()}` : ''}
 
 Genera EXACTAMENTE ${totalPosts} posts repartidos en las semanas indicadas (no más, no menos).
 Copies completos y listos para publicar. Cada copy debe ser único, relevante y coherente con la estrategia.`,

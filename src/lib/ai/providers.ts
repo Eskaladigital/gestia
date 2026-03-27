@@ -29,7 +29,8 @@ function isRetriable(err: unknown): boolean {
   return s === 429 || s === 503;
 }
 
-const PER_CALL_TIMEOUT_MS = 90_000;
+/** Límite por petición al proveedor (calendarios grandes pueden tardar >90s en generar JSON). */
+const PER_CALL_TIMEOUT_MS = 240_000;
 
 function withTimeout<T>(promise: Promise<T>, ms = PER_CALL_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
