@@ -380,6 +380,8 @@ export interface VisualBriefGeneration {
   briefs: VisualBriefPost[];
 }
 
+export type ImageGenerationStatus = 'pending' | 'generating' | 'ready' | 'error';
+
 export interface ContentItemVisual {
   id: string;
   content_item_id: string;
@@ -387,6 +389,9 @@ export interface ContentItemVisual {
   label: string | null;
   visual_prompt: string;
   visual_brief: string | null;
+  image_url: string | null;
+  image_status: ImageGenerationStatus;
+  image_error: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -120,6 +120,9 @@ async function processOneVisual(
         label: job.label,
         visual_prompt: vPrompt,
         visual_brief: null,
+        image_status: 'pending',
+        image_url: null,
+        image_error: null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'content_item_id,visual_index' });
   } catch (e) {

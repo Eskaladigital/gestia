@@ -95,6 +95,7 @@ export function CalendarTable({
   const [visualsCache, setVisualsCache] = useState<Record<string, ContentItemVisual[]>>({});
   const [visualsLoading, setVisualsLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -125,6 +126,42 @@ export function CalendarTable({
     navigator.clipboard.writeText(text);
     setCopiedId(visualId);
     setTimeout(() => setCopiedId(null), 2000);
+  }, []);
+
+  const handleGenerateImage = useCallback(async (visualId: string, contentItemId: string) => {
+    setGeneratingImageId(visualId);
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visual_id: visualId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Error generando imagen');
+      setVisualsCache(prev => {
+        const list = prev[contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [contentItemId]: list.map(v =>
+            v.id === visualId ? { ...v, image_url: json.image_url, image_status: 'ready' as const, image_error: null } : v
+          ),
+        };
+      });
+    } catch (err: any) {
+      setVisualsCache(prev => {
+        const list = prev[contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [contentItemId]: list.map(v =>
+            v.id === visualId ? { ...v, image_status: 'error' as const, image_error: err?.message || 'Error desconocido' } : v
+          ),
+        };
+      });
+    } finally {
+      setGeneratingImageId(null);
+    }
   }, []);
 
   const weekGroups = useMemo(() => {
@@ -353,29 +390,92 @@ export function CalendarTable({
 
                             {visualsCache[item.id] && visualsCache[item.id].length > 0 && (
                               <div className="space-y-3">
-                                {visualsCache[item.id].map((visual) => (
-                                  <div key={visual.id} className="border-2 border-surface-900 overflow-hidden">
-                                    <div className="flex items-center justify-between bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
-                                      <span className="text-[10px] font-bold uppercase tracking-widest text-surface-700">
-                                        {visual.label || `Visual ${visual.visual_index + 1}`}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCopyPrompt(visual.visual_prompt, visual.id)}
-                                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                          copiedId === visual.id
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-white text-surface-900 hover:bg-surface-100'
-                                        }`}
-                                      >
-                                        {copiedId === visual.id ? 'Copiado' : 'Copiar prompt'}
-                                      </button>
+                                {visualsCache[item.id].map((visual) => {
+                                  const isGen = generatingImageId === visual.id;
+                                  const hasImage = visual.image_status === 'ready' && visual.image_url;
+                                  const hasError = visual.image_status === 'error';
+                                  return (
+                                    <div key={visual.id} className="border-2 border-surface-900 overflow-hidden">
+                                      <div className="flex items-center justify-between bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-surface-700">
+                                          {visual.label || `Visual ${visual.visual_index + 1}`}
+                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyPrompt(visual.visual_prompt, visual.id)}
+                                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                              copiedId === visual.id
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-white text-surface-900 hover:bg-surface-100'
+                                            }`}
+                                          >
+                                            {copiedId === visual.id ? 'Copiado' : 'Copiar prompt'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleGenerateImage(visual.id, item.id)}
+                                            disabled={isGen}
+                                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 disabled:cursor-wait ${
+                                              hasImage
+                                                ? 'bg-violet-600 text-white hover:bg-violet-700'
+                                                : 'bg-brand-600 text-white hover:bg-brand-700'
+                                            }`}
+                                          >
+                                            {isGen ? 'Generando…' : hasImage ? 'Regenerar' : '🖼️ Generar imagen'}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {hasImage && (
+                                        <div className="bg-surface-50 border-b-2 border-surface-900 p-3">
+                                          <div className="relative group">
+                                            <img
+                                              src={visual.image_url!}
+                                              alt={visual.label || `Visual ${visual.visual_index + 1}`}
+                                              className="w-full max-h-[300px] object-cover border-2 border-surface-200"
+                                              loading="lazy"
+                                            />
+                                            <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <a
+                                                href={visual.image_url!}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-[10px] font-bold uppercase tracking-wider bg-white text-surface-900 border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                                              >
+                                                Abrir
+                                              </a>
+                                              <a
+                                                href={visual.image_url!}
+                                                download
+                                                className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                                              >
+                                                Descargar
+                                              </a>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {isGen && (
+                                        <div className="bg-brand-50 border-b-2 border-surface-900 px-3 py-3 flex items-center gap-2">
+                                          <div className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                                          <span className="text-xs text-brand-700 font-mono">Generando imagen con gpt-image-1.5… puede tardar 30-60s</span>
+                                        </div>
+                                      )}
+
+                                      {hasError && !isGen && (
+                                        <div className="bg-red-50 border-b-2 border-surface-900 px-3 py-2">
+                                          <span className="text-xs text-red-700 font-mono">Error: {visual.image_error || 'Error desconocido'}</span>
+                                        </div>
+                                      )}
+
+                                      <div className="bg-surface-900 text-emerald-300 px-3 py-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                                        {visual.visual_prompt}
+                                      </div>
                                     </div>
-                                    <div className="bg-surface-900 text-emerald-300 px-3 py-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                                      {visual.visual_prompt}
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import type { ContentItem, ContentItemStatus, ProductionSpecs } from '@/types';
+import { useState, useEffect, useCallback } from 'react';
+import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual, ImageGenerationStatus } from '@/types';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 
 function buildProductionSpecs(
@@ -57,6 +58,11 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   const [visualBrief, setVisualBrief] = useState('');
   const [visualPrompt, setVisualPrompt] = useState('');
 
+  const [visuals, setVisuals] = useState<ContentItemVisual[]>([]);
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const supabase = createClient();
+
   useEffect(() => {
     setIdea(item.idea);
     setCopy(item.copy || '');
@@ -80,6 +86,44 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   useEffect(() => {
     setStatus(item.status);
   }, [item.id, item.status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('content_item_visuals')
+      .select('*')
+      .eq('content_item_id', item.id)
+      .order('visual_index', { ascending: true })
+      .then(({ data }) => {
+        if (!cancelled && data) setVisuals(data as ContentItemVisual[]);
+      });
+    return () => { cancelled = true; };
+  }, [item.id, supabase]);
+
+  const handleGenerateImage = useCallback(async (visualId: string) => {
+    setGeneratingImageId(visualId);
+    setImageError(null);
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visual_id: visualId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Error generando imagen');
+      setVisuals(prev => prev.map(v =>
+        v.id === visualId ? { ...v, image_url: json.image_url, image_status: 'ready' as ImageGenerationStatus, image_error: null } : v
+      ));
+    } catch (err: any) {
+      const msg = err?.message || 'Error desconocido';
+      setImageError(msg);
+      setVisuals(prev => prev.map(v =>
+        v.id === visualId ? { ...v, image_status: 'error' as ImageGenerationStatus, image_error: msg } : v
+      ));
+    } finally {
+      setGeneratingImageId(null);
+    }
+  }, []);
 
   async function handleDeleteClick() {
     if (!onDelete) return;
@@ -333,6 +377,88 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                 className="w-full px-3 sm:px-4 py-2.5 rounded-xl border border-surface-200 bg-white text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 resize-y text-sm leading-relaxed whitespace-pre-wrap"
               />
             </div>
+
+            {visuals.length > 0 && (
+              <div className="border-t border-surface-100 pt-4 mt-2 space-y-3">
+                <h4 className="text-sm font-bold text-surface-800 uppercase tracking-wider">Imágenes generadas</h4>
+                <p className="text-xs text-surface-500 -mt-2">
+                  Genera la imagen de cada visual usando gpt-image-1.5. Puedes descargarla o regenerarla.
+                </p>
+                {visuals.map(visual => {
+                  const isGen = generatingImageId === visual.id;
+                  const hasImage = visual.image_status === 'ready' && visual.image_url;
+                  const hasError = visual.image_status === 'error';
+                  return (
+                    <div key={visual.id} className="border border-surface-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between bg-surface-50 px-3 py-2 border-b border-surface-200">
+                        <span className="text-xs font-bold text-surface-700 uppercase tracking-wider">
+                          {visual.label || `Visual ${visual.visual_index + 1}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateImage(visual.id)}
+                          disabled={isGen}
+                          className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait ${
+                            hasImage
+                              ? 'bg-violet-600 text-white hover:bg-violet-700'
+                              : 'bg-brand-600 text-white hover:bg-brand-700'
+                          }`}
+                        >
+                          {isGen ? 'Generando…' : hasImage ? 'Regenerar imagen' : 'Generar imagen'}
+                        </button>
+                      </div>
+
+                      {isGen && (
+                        <div className="bg-brand-50 px-3 py-3 flex items-center gap-2 border-b border-surface-200">
+                          <div className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-brand-700 font-mono">Generando con gpt-image-1.5… puede tardar 30-60s</span>
+                        </div>
+                      )}
+
+                      {hasError && !isGen && (
+                        <div className="bg-red-50 px-3 py-2 border-b border-surface-200">
+                          <span className="text-xs text-red-700 font-mono">Error: {visual.image_error || 'Error desconocido'}</span>
+                        </div>
+                      )}
+
+                      {hasImage && (
+                        <div className="p-3 bg-white">
+                          <div className="relative group">
+                            <img
+                              src={visual.image_url!}
+                              alt={visual.label || `Visual ${visual.visual_index + 1}`}
+                              className="w-full max-h-[280px] object-cover rounded-lg border border-surface-200"
+                              loading="lazy"
+                            />
+                            <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <a
+                                href={visual.image_url!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-bold uppercase tracking-wider bg-white/90 backdrop-blur text-surface-900 border border-surface-300 px-2 py-1 rounded-lg hover:bg-white transition-colors"
+                              >
+                                Abrir
+                              </a>
+                              <a
+                                href={visual.image_url!}
+                                download
+                                className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"
+                              >
+                                Descargar
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-surface-900 text-emerald-300 px-3 py-2 text-[11px] font-mono leading-relaxed whitespace-pre-wrap max-h-[120px] overflow-y-auto">
+                        {visual.visual_prompt.slice(0, 300)}{visual.visual_prompt.length > 300 ? '…' : ''}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
