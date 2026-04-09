@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ContentItem, ContentItemStatus } from '@/types';
+import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types';
 import { CalendarTable } from './CalendarTable';
 import { CalendarGrid } from './CalendarGrid';
 import { PostEditor } from './PostEditor';
+import { ImageCostConfirmModal } from './ImageCostConfirmModal';
 import { createClient } from '@/lib/supabase/client';
 import { BriefsProgressModal } from '../projects/BriefsProgressModal';
 
@@ -65,8 +66,11 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
   }
 
   const [briefsModalIds, setBriefsModalIds] = useState<string[] | null>(null);
+  const [allImagesConfirm, setAllImagesConfirm] = useState<ContentItemVisual[] | null>(null);
+  const [allImagesProgress, setAllImagesProgress] = useState<{ done: number; total: number } | null>(null);
 
   const pendingBriefsCount = localItems.filter(i => !i.visual_prompt?.trim()).length;
+  const itemsWithBriefs = localItems.filter(i => i.visual_prompt?.trim());
 
   const refreshCalendarItems = useCallback(async () => {
     const { data } = await supabase
@@ -80,6 +84,36 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
   const handleGenerateVisualBriefs = useCallback((itemIds?: string[]) => {
     setBriefsModalIds(itemIds || []);
   }, []);
+
+  const handleGenerateAllImages = useCallback(async () => {
+    const itemIds = itemsWithBriefs.map(i => i.id);
+    if (itemIds.length === 0) return;
+    const { data: visuals } = await supabase
+      .from('content_item_visuals')
+      .select('*')
+      .in('content_item_id', itemIds)
+      .order('visual_index', { ascending: true });
+    if (!visuals || visuals.length === 0) return;
+    setAllImagesConfirm(visuals as ContentItemVisual[]);
+  }, [itemsWithBriefs, supabase]);
+
+  const handleConfirmAllImages = useCallback(async () => {
+    if (!allImagesConfirm) return;
+    const queue = allImagesConfirm;
+    setAllImagesConfirm(null);
+    setAllImagesProgress({ done: 0, total: queue.length });
+    for (let i = 0; i < queue.length; i++) {
+      try {
+        await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visual_id: queue[i].id }),
+        });
+      } catch {}
+      setAllImagesProgress({ done: i + 1, total: queue.length });
+    }
+    setAllImagesProgress(null);
+  }, [allImagesConfirm]);
 
   return (
     <div>
@@ -129,6 +163,17 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           >
             Regenerar todos los briefs
           </button>
+          {itemsWithBriefs.length > 0 && (
+            <button
+              onClick={handleGenerateAllImages}
+              disabled={!!allImagesProgress}
+              className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-violet-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 w-full sm:w-auto"
+            >
+              {allImagesProgress
+                ? `Generando ${allImagesProgress.done}/${allImagesProgress.total}…`
+                : 'Generar todas las imágenes'}
+            </button>
+          )}
           <button
             onClick={handleExportJSON}
             className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full sm:w-auto"
@@ -177,6 +222,31 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           onClose={() => setBriefsModalIds(null)}
           onComplete={() => refreshCalendarItems()}
         />
+      )}
+
+      {allImagesConfirm && (
+        <ImageCostConfirmModal
+          imageCount={allImagesConfirm.length}
+          onConfirm={handleConfirmAllImages}
+          onCancel={() => setAllImagesConfirm(null)}
+        />
+      )}
+
+      {allImagesProgress && (
+        <div className="fixed bottom-4 right-4 z-50 bg-white border-2 border-surface-900 shadow-brutal px-4 py-3 flex items-center gap-3 min-w-[280px]">
+          <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-surface-900 uppercase tracking-wider">
+              Generando imágenes {allImagesProgress.done}/{allImagesProgress.total}
+            </div>
+            <div className="w-full bg-surface-200 h-1.5 mt-1">
+              <div
+                className="bg-violet-600 h-full transition-all duration-500"
+                style={{ width: `${(allImagesProgress.done / allImagesProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

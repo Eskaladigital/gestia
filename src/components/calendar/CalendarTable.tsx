@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types';
 import { PostEditor } from './PostEditor';
 import { ProductionSpecsDisplay } from './ProductionSpecsDisplay';
+import { ImageCostConfirmModal } from './ImageCostConfirmModal';
 
 interface CalendarTableProps {
   items: ContentItem[];
@@ -13,6 +14,7 @@ interface CalendarTableProps {
   onItemsChange: (next: ContentItem[]) => void;
   onGenerateBriefForPost?: (contentItemId: string) => void | Promise<void>;
   generatingBrief?: boolean;
+  onGenerateAllImages?: () => void;
 }
 
 const typeColors: Record<string, string> = {
@@ -89,6 +91,7 @@ export function CalendarTable({
   onItemsChange,
   onGenerateBriefForPost,
   generatingBrief,
+  onGenerateAllImages,
 }: CalendarTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedBrief, setExpandedBrief] = useState<string | null>(null);
@@ -96,6 +99,9 @@ export function CalendarTable({
   const [visualsLoading, setVisualsLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [imageGenQueue, setImageGenQueue] = useState<Array<{ visualId: string; contentItemId: string }>>([]);
+  const [imageGenProgress, setImageGenProgress] = useState<{ done: number; total: number } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ visuals: Array<{ visualId: string; contentItemId: string }>} | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -180,6 +186,73 @@ export function CalendarTable({
       setGeneratingImageId(null);
     }
   }, []);
+
+  const generateImageSequential = useCallback(async (queue: Array<{ visualId: string; contentItemId: string }>) => {
+    setImageGenProgress({ done: 0, total: queue.length });
+    for (let i = 0; i < queue.length; i++) {
+      const { visualId, contentItemId } = queue[i];
+      setGeneratingImageId(visualId);
+      try {
+        const res = await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visual_id: visualId }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Error generando imagen');
+        setVisualsCache(prev => {
+          const list = prev[contentItemId];
+          if (!list) return prev;
+          return {
+            ...prev,
+            [contentItemId]: list.map(v =>
+              v.id === visualId ? { ...v, image_url: json.image_url, image_status: 'ready' as const, image_error: null } : v
+            ),
+          };
+        });
+      } catch (err: any) {
+        setVisualsCache(prev => {
+          const list = prev[contentItemId];
+          if (!list) return prev;
+          return {
+            ...prev,
+            [contentItemId]: list.map(v =>
+              v.id === visualId ? { ...v, image_status: 'error' as const, image_error: err?.message || 'Error' } : v
+            ),
+          };
+        });
+      }
+      setImageGenProgress({ done: i + 1, total: queue.length });
+    }
+    setGeneratingImageId(null);
+    setImageGenProgress(null);
+  }, []);
+
+  const requestImageGeneration = useCallback((visuals: Array<{ visualId: string; contentItemId: string }>) => {
+    if (visuals.length === 0) return;
+    setConfirmModal({ visuals });
+  }, []);
+
+  const handleConfirmGeneration = useCallback(() => {
+    if (!confirmModal) return;
+    const queue = confirmModal.visuals;
+    setConfirmModal(null);
+    generateImageSequential(queue);
+  }, [confirmModal, generateImageSequential]);
+
+  const handleGeneratePostImages = useCallback((contentItemId: string) => {
+    const visuals = visualsCache[contentItemId];
+    if (!visuals || visuals.length === 0) return;
+    const pending = visuals
+      .filter(v => v.image_status !== 'ready' || !v.image_url)
+      .map(v => ({ visualId: v.id, contentItemId }));
+    if (pending.length === 0) {
+      const all = visuals.map(v => ({ visualId: v.id, contentItemId }));
+      requestImageGeneration(all);
+    } else {
+      requestImageGeneration(pending);
+    }
+  }, [visualsCache, requestImageGeneration]);
 
   const weekGroups = useMemo(() => {
     const groups: Record<string, { items: ContentItem[]; monday: Date }> = {};
@@ -383,19 +456,31 @@ export function CalendarTable({
                                   })()}
                                 </span>
                               </div>
-                              {onGenerateBriefForPost && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setVisualsCache(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-                                    onGenerateBriefForPost(item.id);
-                                  }}
-                                  disabled={generatingBrief}
-                                  className="text-[10px] font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-2 py-0.5 hover:bg-brand-700 hover:translate-x-[1px] hover:translate-y-[1px] shadow-brutal-sm hover:shadow-none transition-all disabled:opacity-50"
-                                >
-                                  Regenerar
-                                </button>
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                {visualsCache[item.id] && visualsCache[item.id].length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleGeneratePostImages(item.id)}
+                                    disabled={!!imageGenProgress}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-white bg-violet-600 border-2 border-surface-900 px-2 py-0.5 hover:bg-violet-700 hover:translate-x-[1px] hover:translate-y-[1px] shadow-brutal-sm hover:shadow-none transition-all disabled:opacity-50"
+                                  >
+                                    Generar {visualsCache[item.id].length} imágenes
+                                  </button>
+                                )}
+                                {onGenerateBriefForPost && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setVisualsCache(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                                      onGenerateBriefForPost(item.id);
+                                    }}
+                                    disabled={generatingBrief}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-2 py-0.5 hover:bg-brand-700 hover:translate-x-[1px] hover:translate-y-[1px] shadow-brutal-sm hover:shadow-none transition-all disabled:opacity-50"
+                                  >
+                                    Regenerar prompts
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {visualsLoading === item.id && (
@@ -431,8 +516,8 @@ export function CalendarTable({
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleGenerateImage(visual.id, item.id)}
-                                            disabled={isGen}
+                                            onClick={() => requestImageGeneration([{ visualId: visual.id, contentItemId: item.id }])}
+                                            disabled={isGen || !!imageGenProgress}
                                             className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 disabled:cursor-wait ${
                                               hasImage
                                                 ? 'bg-violet-600 text-white hover:bg-violet-700'
@@ -528,6 +613,31 @@ export function CalendarTable({
           );
         })}
       </div>
+
+      {imageGenProgress && (
+        <div className="fixed bottom-4 right-4 z-50 bg-white border-2 border-surface-900 shadow-brutal px-4 py-3 flex items-center gap-3 min-w-[280px]">
+          <div className="w-4 h-4 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-surface-900 uppercase tracking-wider">
+              Generando imágenes {imageGenProgress.done}/{imageGenProgress.total}
+            </div>
+            <div className="w-full bg-surface-200 h-1.5 mt-1">
+              <div
+                className="bg-brand-600 h-full transition-all duration-500"
+                style={{ width: `${(imageGenProgress.done / imageGenProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal && (
+        <ImageCostConfirmModal
+          imageCount={confirmModal.visuals.length}
+          onConfirm={handleConfirmGeneration}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
 
       {editingId && (
         <PostEditor
