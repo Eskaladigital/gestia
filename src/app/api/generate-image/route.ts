@@ -3,6 +3,11 @@ import OpenAI from 'openai';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 
 const BUCKET = 'visual-assets';
+const TEXT_MODEL = 'gpt-4o';
+const BUILDER_TEMPERATURE = 0.32;
+const REFINER_TEMPERATURE = 0.18;
+const BUILDER_MAX_TOKENS = 900;
+const REFINER_MAX_TOKENS = 900;
 
 // Coletilla final de realismo fotográfico (adaptada del doc "agente generador de imágenes.txt").
 // Se concatena SIEMPRE al prompt antes de enviarlo a gpt-image-1.5.
@@ -30,8 +35,211 @@ const TOXIC_WORDS = [
   'magical', 'dreamy', 'ethereal', 'stunning', 'breathtaking',
   'luxurious', 'perfect', 'mágico', 'mágica', 'onírico', 'onírica',
   'etéreo', 'etérea', 'impresionante', 'perfecto', 'perfección',
-  'lujoso', 'lujosa', 'soñador', 'soñadora',
+  'lujoso', 'lujosa', 'soñador', 'soñadora', 'instagramable',
+  'instagrammable', 'epico', 'epica', 'de ensueño', 'de ensueno',
 ];
+
+const PROMPT_BUILDER_SYSTEM = `
+Eres un agente senior: director de arte + location scout + especialista en prompts para generacion de imagenes fotorrealistas. Recibes un DOSSIER COMPLETO sobre un contenido de marketing (post, story, carrusel, reel o publicacion). Tu UNICA salida es UN parrafo en espanol que el modelo de imagen usara tal cual.
+
+ANTES de escribir (mentalmente, no lo imprimas):
+1. Elige la escena visual mas especifica y honesta con el dossier, no una escena generica.
+2. Conecta contexto, uso, materiales, publico y posicionamiento real del contenido.
+3. Elige UNA luz creible de dia coherente con la escena.
+4. Añade 2-4 sustantivos concretos de textura o material, no adjetivos vacios.
+5. Si hay conflicto entre campos, prima idea + copy + visual brief + scene summary + contexto de proyecto.
+6. Piensa como si un fotografo profesional estuviera capturando una foto editorial real para una portada o una pieza de campaña.
+
+REGLAS DURAS:
+- No inventes elementos que contradigan el dossier.
+- Si hay personas, pocas, naturales y no posadas; rostros no protagonistas salvo necesidad clara.
+- Si las personas no son necesarias, prioriza entorno, objeto, materiales o accion real.
+- Prohibido texto legible, logotipos, marcas, interfaces falsas, carteles hero, tipografia incrustada.
+- Evita look IA: cielos irreales, piel de plastico, simetria excesiva, oversaturacion, glow, render 3D, pintura digital, ilustracion, perfeccion plastica, HDR agresivo, composicion imposible.
+
+FORMATO DE SALIDA:
+- Exactamente UN parrafo en espanol.
+- Sin comillas, sin markdown, sin listas, sin saltos de linea.
+- Debe empezar con: Fotografia hiperrealista y cinematografica de
+- Debe sonar a encargo fotografico premium real.
+`.trim();
+
+const REALISM_REFINER_SYSTEM = `
+Eres un editor fotografico obsesionado con el hiperrealismo. Recibiras:
+1) un DOSSIER del elemento
+2) un primer prompt ya redactado
+
+Tu tarea es REESCRIBIR ese prompt para que parezca todavia mas una fotografia real tomada por un fotografo profesional en una localizacion autentica o en un contexto de producto real.
+
+Prioridades:
+- La imagen debe parecer una FOTO REAL, no arte generativo.
+- Si el borrador suena demasiado bonito, demasiado escenificado, demasiado de catalogo falso o demasiado de IA, rebajalo.
+- Da prioridad a materiales concretos, luz existente, detalle real, imperfecciones creibles y composicion editorial sobria.
+- Si las personas no son imprescindibles, reduce su protagonismo.
+- Evita fantasia, exceso de color, glow, suavizado plastico, simetria artificial, postureo publicitario falso.
+- Corrige cualquier tendencia a parecer poster, render o postal de IA.
+
+Reglas:
+- Mantén coherencia absoluta con el dossier.
+- Devuelve exactamente un parrafo en espanol.
+- Debe empezar por "Fotografia hiperrealista y cinematografica de".
+- Sin explicaciones extra.
+`.trim();
+
+function clip(text: unknown, max = 2800): string {
+  const s = typeof text === 'string' ? text.trim() : '';
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+function listText(value: unknown, maxItems = 10): string {
+  if (!Array.isArray(value)) return '';
+  return value
+    .map(v => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean)
+    .slice(0, maxItems)
+    .join('; ');
+}
+
+function inferSeason(dateValue?: string | null): string {
+  if (!dateValue) return 'sin datos';
+  const date = new Date(dateValue);
+  const month = Number.isNaN(date.getTime()) ? NaN : date.getMonth() + 1;
+  if (!month) return 'sin datos';
+  if (month >= 3 && month <= 5) return 'primavera';
+  if (month >= 6 && month <= 8) return 'verano';
+  if (month >= 9 && month <= 11) return 'otono';
+  return 'invierno';
+}
+
+function buildProductionSpecsText(specs: any): string {
+  if (!specs || typeof specs !== 'object') return '';
+  const bits: string[] = [];
+  if (typeof specs.num_slides === 'number') bits.push(`Slides: ${specs.num_slides}`);
+  if (typeof specs.duration_seconds === 'number') bits.push(`Duracion: ${specs.duration_seconds}s`);
+  if (typeof specs.media_type === 'string') bits.push(`Tipo de medio: ${specs.media_type}`);
+  if (typeof specs.scene_summary === 'string' && specs.scene_summary.trim()) {
+    bits.push(`Scene summary: ${clip(specs.scene_summary, 1200)}`);
+  }
+  return bits.join('\n');
+}
+
+function buildDossier(visual: any): string {
+  const item = visual.content_items || {};
+  const project = item.projects || {};
+  const visualLabel = visual.label || `Visual ${Number(visual.visual_index || 0) + 1}`;
+  const hashtags = listText(item.hashtags, 12);
+  const platforms = listText(item.platforms, 8);
+  const projectName = clip(project.name, 200) || 'Proyecto sin nombre';
+  const projectSector = clip(project.sector, 200) || 'sin sector';
+  const projectLocation = clip(project.location, 200) || 'sin ubicacion';
+  const projectDescription = clip(project.description, 1800) || 'sin descripcion';
+  const itemIdea = clip(item.idea, 400);
+  const itemCopy = clip(item.copy, 2400);
+  const itemGoal = clip(item.post_goal, 400);
+  const itemCta = clip(item.cta, 400);
+  const contentType = clip(item.content_type, 120);
+  const format = clip(item.format, 120);
+  const visualBrief = clip(visual.visual_brief || item.visual_brief, 2400);
+  const basePrompt = clip(visual.visual_prompt, 2400);
+  const season = inferSeason(item.scheduled_date);
+  const productionSpecs = buildProductionSpecsText(item.production_specs);
+
+  return `
+=== DOSSIER DEL ELEMENTO (usalo entero; prioriza coherencia tematica y contextual) ===
+Tu salida final sera SOLO el parrafo-prompt para el modelo de imagen, no resumenes de este dossier.
+
+Titulo: ${itemIdea || 'sin idea'}
+Resumen / copy:
+${itemCopy || 'sin copy'}
+
+--- Contexto del proyecto ---
+Proyecto: ${projectName}
+Sector: ${projectSector}
+Lugar / mercado: ${projectLocation}
+Descripcion del proyecto:
+${projectDescription}
+
+--- Contexto del post ---
+Fecha: ${item.scheduled_date || 'sin fecha'}
+Estacion inferida: ${season}
+Tipo de contenido: ${contentType || 'sin tipo'}
+Formato: ${format || 'sin formato'}
+Objetivo: ${itemGoal || 'sin objetivo'}
+CTA: ${itemCta || 'sin CTA'}
+Plataformas: ${platforms || 'sin plataformas'}
+Hashtags: ${hashtags || 'sin hashtags'}
+
+--- Visual concreto ---
+Visual: ${visualLabel}
+Indice visual: ${Number(visual.visual_index || 0) + 1}
+Brief visual:
+${visualBrief || 'sin brief visual'}
+
+Prompt visual base:
+${basePrompt}
+
+--- Especificaciones de produccion ---
+${productionSpecs || 'sin production_specs'}
+
+--- Elementos visibles que SI pueden aparecer ---
+${visualBrief || itemIdea || projectDescription}
+
+--- Elementos que NO deben protagonizar la escena ---
+Texto legible, logotipos, interfaces, carteles, iconos flotantes, poses artificiales, luz falsa, look render, estetica de ilustracion o CGI.
+`.trim();
+}
+
+async function callTextPass(
+  openai: OpenAI,
+  system: string,
+  user: string,
+  temperature: number,
+  maxTokens: number,
+): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: TEXT_MODEL,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    temperature,
+    max_tokens: maxTokens,
+  });
+  const text = response.choices[0]?.message?.content || '';
+  return cleanPrompt(text);
+}
+
+async function buildFinalPrompt(openai: OpenAI, visual: any): Promise<string> {
+  const dossier = buildDossier(visual);
+  const firstPass = await callTextPass(
+    openai,
+    PROMPT_BUILDER_SYSTEM,
+    dossier,
+    BUILDER_TEMPERATURE,
+    BUILDER_MAX_TOKENS,
+  );
+  const secondPass = await callTextPass(
+    openai,
+    REALISM_REFINER_SYSTEM,
+    `DOSSIER:\n${dossier}\n\nPRIMER PROMPT:\n${firstPass}`,
+    REFINER_TEMPERATURE,
+    REFINER_MAX_TOKENS,
+  );
+
+  let prompt = cleanPrompt(secondPass || firstPass || visual.visual_prompt);
+  const hasPhotoPreamble = /fotograf[íi]a\s+hiperrealista/i.test(prompt);
+  if (!hasPhotoPreamble) {
+    prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
+  }
+  prompt = `${prompt}\n\n${IMAGE_REALISM_TAIL}`;
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
+  }
+  if (prompt.length < MIN_PROMPT_LENGTH) {
+    throw new Error(`El prompt final refinado es demasiado corto (${prompt.length} chars)`);
+  }
+  return prompt;
+}
 
 function cleanPrompt(raw: string): string {
   let p = raw.trim();
@@ -93,7 +301,33 @@ export async function POST(request: NextRequest) {
 
   const { data: visual, error: vErr } = await service
     .from('content_item_visuals')
-    .select('*, content_items!inner(id, project_id, projects!inner(id, user_id, name, sector, location))')
+    .select(`
+      *,
+      content_items!inner(
+        id,
+        project_id,
+        scheduled_date,
+        content_type,
+        format,
+        idea,
+        copy,
+        cta,
+        post_goal,
+        hashtags,
+        platforms,
+        visual_brief,
+        visual_prompt,
+        production_specs,
+        projects!inner(
+          id,
+          user_id,
+          name,
+          sector,
+          location,
+          description
+        )
+      )
+    `)
     .eq('id', visual_id)
     .maybeSingle();
 
@@ -119,30 +353,15 @@ export async function POST(request: NextRequest) {
       .update({ image_status: 'generating', image_error: null })
       .eq('id', visual_id);
 
-    let prompt = cleanPrompt(visual.visual_prompt);
-
-    // Forzar que arranque con la frase canónica del documento si no la tiene
-    const hasPhotoPreamble = /fotograf[íi]a\s+hiperrealista/i.test(prompt);
-    if (!hasPhotoPreamble) {
-      prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
-    }
-
-    // Concatenar la cola fija de realismo (paso 4 del doc)
-    prompt = `${prompt}\n\n${IMAGE_REALISM_TAIL}`;
-
-    // Truncar a 4000 chars (paso 6 del doc)
-    if (prompt.length > MAX_PROMPT_LENGTH) {
-      prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
-    }
-
     const apiKey = await resolveOpenAIKey(user.id);
     if (!apiKey) {
       throw new Error('No se encontró API key de OpenAI. Configúrala en Ajustes → Proveedores IA.');
     }
 
     const openai = new OpenAI({ apiKey });
+    const prompt = await buildFinalPrompt(openai, visual);
 
-    console.log(`[generate-image] Generando imagen para visual ${visual_id}, prompt: ${prompt.length} chars`);
+    console.log(`[generate-image] Generando imagen para visual ${visual_id}, prompt refinado: ${prompt.length} chars`);
 
     const response = await openai.images.generate({
       model: 'gpt-image-1.5',
