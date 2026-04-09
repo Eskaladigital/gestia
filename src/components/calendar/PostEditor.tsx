@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual, ImageGenerationStatus } from '@/types';
+import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
-import { ImageCostConfirmModal } from './ImageCostConfirmModal';
+import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 
 function buildProductionSpecs(
   numSlides: string,
@@ -60,9 +60,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   const [visualPrompt, setVisualPrompt] = useState('');
 
   const [visuals, setVisuals] = useState<ContentItemVisual[]>([]);
-  const [generatingImageIds, setGeneratingImageIds] = useState<Set<string>>(new Set());
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [confirmGenerate, setConfirmGenerate] = useState<string[] | null>(null);
+  const [imageGenQueue, setImageGenQueue] = useState<ImageGenItem[] | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -119,29 +117,16 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
     }
   }, []);
 
-  const handleGenerateImage = useCallback(async (visualId: string) => {
-    setGeneratingImageIds(prev => new Set(prev).add(visualId));
-    setImageError(null);
-    try {
-      const res = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visual_id: visualId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Error generando imagen');
-      setVisuals(prev => prev.map(v =>
-        v.id === visualId ? { ...v, image_url: json.image_url, image_status: 'ready' as ImageGenerationStatus, image_error: null } : v
-      ));
-    } catch (err: any) {
-      const msg = err?.message || 'Error desconocido';
-      setImageError(msg);
-      setVisuals(prev => prev.map(v =>
-        v.id === visualId ? { ...v, image_status: 'error' as ImageGenerationStatus, image_error: msg } : v
-      ));
-    } finally {
-      setGeneratingImageIds(prev => { const n = new Set(prev); n.delete(visualId); return n; });
-    }
+  const handleImageReady = useCallback((visualId: string, _contentItemId: string, imageUrl: string) => {
+    setVisuals(prev => prev.map(v =>
+      v.id === visualId ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null } : v
+    ));
+  }, []);
+
+  const handleImageError = useCallback((visualId: string, _contentItemId: string, errorMsg: string) => {
+    setVisuals(prev => prev.map(v =>
+      v.id === visualId ? { ...v, image_status: 'error' as const, image_error: errorMsg } : v
+    ));
   }, []);
 
   async function handleDeleteClick() {
@@ -404,8 +389,8 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                   {visuals.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => setConfirmGenerate(visuals.map(v => v.id))}
-                      disabled={generatingImageIds.size > 0}
+                      onClick={() => setImageGenQueue(visuals.map(v => ({ visualId: v.id, contentItemId: item.id, label: v.label || `Visual ${v.visual_index + 1}` })))}
+                      disabled={!!imageGenQueue}
                       className="text-xs font-bold uppercase tracking-wider text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-full transition-colors"
                     >
                       Generar {visuals.length} imágenes
@@ -416,7 +401,6 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                   Genera la imagen de cada visual usando gpt-image-1.5. Puedes descargarla o regenerarla.
                 </p>
                 {visuals.map(visual => {
-                  const isGen = generatingImageIds.has(visual.id);
                   const hasImage = visual.image_status === 'ready' && visual.image_url;
                   const hasError = visual.image_status === 'error';
                   return (
@@ -427,26 +411,19 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                         </span>
                         <button
                           type="button"
-                          onClick={() => setConfirmGenerate([visual.id])}
-                          disabled={isGen}
+                          onClick={() => setImageGenQueue([{ visualId: visual.id, contentItemId: item.id, label: visual.label || `Visual ${visual.visual_index + 1}` }])}
+                          disabled={!!imageGenQueue}
                           className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait ${
                             hasImage
                               ? 'bg-violet-600 text-white hover:bg-violet-700'
                               : 'bg-brand-600 text-white hover:bg-brand-700'
                           }`}
                         >
-                          {isGen ? 'Generando…' : hasImage ? 'Regenerar imagen' : 'Generar imagen'}
+                          {hasImage ? 'Regenerar imagen' : 'Generar imagen'}
                         </button>
                       </div>
 
-                      {isGen && (
-                        <div className="bg-brand-50 px-3 py-3 flex items-center gap-2 border-b border-surface-200">
-                          <div className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
-                          <span className="text-xs text-brand-700 font-mono">Generando con gpt-image-1.5… puede tardar 30-60s</span>
-                        </div>
-                      )}
-
-                      {hasError && !isGen && (
+                      {hasError && (
                         <div className="bg-red-50 px-3 py-2 border-b border-surface-200">
                           <span className="text-xs text-red-700 font-mono">Error: {visual.image_error || 'Error desconocido'}</span>
                         </div>
@@ -518,36 +495,13 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
         </div>
       </div>
 
-      {confirmGenerate && (
-        <ImageCostConfirmModal
-          imageCount={confirmGenerate.length}
-          onConfirm={async () => {
-            const ids = confirmGenerate;
-            setConfirmGenerate(null);
-            for (const vId of ids) {
-              setGeneratingImageIds(prev => new Set(prev).add(vId));
-              setImageError(null);
-              try {
-                const res = await fetch('/api/generate-image', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ visual_id: vId }),
-                });
-                const json = await res.json();
-                if (!res.ok) throw new Error(json.error || 'Error generando imagen');
-                setVisuals(prev => prev.map(v =>
-                  v.id === vId ? { ...v, image_url: json.image_url, image_status: 'ready' as ImageGenerationStatus, image_error: null } : v
-                ));
-              } catch (err: any) {
-                setVisuals(prev => prev.map(v =>
-                  v.id === vId ? { ...v, image_status: 'error' as ImageGenerationStatus, image_error: err?.message || 'Error' } : v
-                ));
-              } finally {
-                setGeneratingImageIds(prev => { const n = new Set(prev); n.delete(vId); return n; });
-              }
-            }
-          }}
-          onCancel={() => setConfirmGenerate(null)}
+      {imageGenQueue && (
+        <ImageGenProgressModal
+          queue={imageGenQueue}
+          onImageReady={handleImageReady}
+          onImageError={handleImageError}
+          onComplete={() => setImageGenQueue(null)}
+          onClose={() => setImageGenQueue(null)}
         />
       )}
     </div>

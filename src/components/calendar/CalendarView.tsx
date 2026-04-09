@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types';
 import { CalendarTable } from './CalendarTable';
 import { CalendarGrid } from './CalendarGrid';
+import { ContentGallery } from './ContentGallery';
 import { PostEditor } from './PostEditor';
-import { ImageCostConfirmModal } from './ImageCostConfirmModal';
+import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { createClient } from '@/lib/supabase/client';
 import { BriefsProgressModal } from '../projects/BriefsProgressModal';
 
@@ -17,7 +18,7 @@ interface CalendarViewProps {
 
 export function CalendarView({ items, projectId }: CalendarViewProps) {
   const router = useRouter();
-  const [view, setView] = useState<'list' | 'calendar'>('calendar');
+  const [view, setView] = useState<'list' | 'calendar' | 'content'>('calendar');
   const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
   const [localItems, setLocalItems] = useState(items);
   const supabase = createClient();
@@ -66,8 +67,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
   }
 
   const [briefsModalIds, setBriefsModalIds] = useState<string[] | null>(null);
-  const [allImagesConfirm, setAllImagesConfirm] = useState<ContentItemVisual[] | null>(null);
-  const [allImagesProgress, setAllImagesProgress] = useState<{ done: number; total: number } | null>(null);
+  const [allImagesQueue, setAllImagesQueue] = useState<ImageGenItem[] | null>(null);
 
   const pendingBriefsCount = localItems.filter(i => !i.visual_prompt?.trim()).length;
   const itemsWithBriefs = localItems.filter(i => i.visual_prompt?.trim());
@@ -94,26 +94,13 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
       .in('content_item_id', itemIds)
       .order('visual_index', { ascending: true });
     if (!visuals || visuals.length === 0) return;
-    setAllImagesConfirm(visuals as ContentItemVisual[]);
+    const queue: ImageGenItem[] = (visuals as ContentItemVisual[]).map(v => ({
+      visualId: v.id,
+      contentItemId: v.content_item_id,
+      label: v.label || `Visual ${v.visual_index + 1}`,
+    }));
+    setAllImagesQueue(queue);
   }, [itemsWithBriefs, supabase]);
-
-  const handleConfirmAllImages = useCallback(async () => {
-    if (!allImagesConfirm) return;
-    const queue = allImagesConfirm;
-    setAllImagesConfirm(null);
-    setAllImagesProgress({ done: 0, total: queue.length });
-    for (let i = 0; i < queue.length; i++) {
-      try {
-        await fetch('/api/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ visual_id: queue[i].id }),
-        });
-      } catch {}
-      setAllImagesProgress({ done: i + 1, total: queue.length });
-    }
-    setAllImagesProgress(null);
-  }, [allImagesConfirm]);
 
   return (
     <div>
@@ -142,6 +129,16 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
             >
               Calendario
             </button>
+            <button
+              onClick={() => setView('content')}
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all border-l-2 border-surface-900 ${
+                view === 'content'
+                  ? 'bg-surface-900 text-white'
+                  : 'bg-white text-surface-500 hover:text-surface-900'
+              }`}
+            >
+              Contenido
+            </button>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -166,12 +163,10 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           {itemsWithBriefs.length > 0 && (
             <button
               onClick={handleGenerateAllImages}
-              disabled={!!allImagesProgress}
+              disabled={!!allImagesQueue}
               className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-violet-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 w-full sm:w-auto"
             >
-              {allImagesProgress
-                ? `Generando ${allImagesProgress.done}/${allImagesProgress.total}…`
-                : 'Generar todas las imágenes'}
+              Generar todas las imágenes
             </button>
           )}
           <button
@@ -184,7 +179,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
       </div>
 
       {/* Views */}
-      {view === 'list' ? (
+      {view === 'list' && (
         <CalendarTable
           items={localItems}
           projectId={projectId}
@@ -192,15 +187,18 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
           onGenerateBriefForPost={(id) => handleGenerateVisualBriefs([id])}
           generatingBrief={false}
         />
-      ) : (
-        <CalendarGrid items={localItems} onSelectItem={setEditingItem} onItemsChange={setLocalItems} />
       )}
-
       {view === 'calendar' && (
-        <p className="text-xs text-surface-500 mt-3 max-w-3xl">
-          <strong>Aprobar borradores:</strong> en el modal al pulsar <strong>Editar</strong> (selector <strong>Estado</strong>), en la lista, o en el detalle del día
-          (número del día en la cuadrícula): pasa de <strong>Borrador</strong> a <strong>Aprobado</strong>.
-        </p>
+        <>
+          <CalendarGrid items={localItems} onSelectItem={setEditingItem} onItemsChange={setLocalItems} />
+          <p className="text-xs text-surface-500 mt-3 max-w-3xl">
+            <strong>Aprobar borradores:</strong> en el modal al pulsar <strong>Editar</strong> (selector <strong>Estado</strong>), en la lista, o en el detalle del día
+            (número del día en la cuadrícula): pasa de <strong>Borrador</strong> a <strong>Aprobado</strong>.
+          </p>
+        </>
+      )}
+      {view === 'content' && (
+        <ContentGallery items={localItems} projectId={projectId} />
       )}
 
       {editingItem && (
@@ -224,29 +222,14 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
         />
       )}
 
-      {allImagesConfirm && (
-        <ImageCostConfirmModal
-          imageCount={allImagesConfirm.length}
-          onConfirm={handleConfirmAllImages}
-          onCancel={() => setAllImagesConfirm(null)}
+      {allImagesQueue && (
+        <ImageGenProgressModal
+          queue={allImagesQueue}
+          onImageReady={() => {}}
+          onImageError={() => {}}
+          onComplete={() => { setAllImagesQueue(null); refreshCalendarItems(); }}
+          onClose={() => setAllImagesQueue(null)}
         />
-      )}
-
-      {allImagesProgress && (
-        <div className="fixed bottom-4 right-4 z-50 bg-white border-2 border-surface-900 shadow-brutal px-4 py-3 flex items-center gap-3 min-w-[280px]">
-          <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold text-surface-900 uppercase tracking-wider">
-              Generando imágenes {allImagesProgress.done}/{allImagesProgress.total}
-            </div>
-            <div className="w-full bg-surface-200 h-1.5 mt-1">
-              <div
-                className="bg-violet-600 h-full transition-all duration-500"
-                style={{ width: `${(allImagesProgress.done / allImagesProgress.total) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
