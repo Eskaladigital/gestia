@@ -3,6 +3,25 @@ import OpenAI from 'openai';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 
 const BUCKET = 'visual-assets';
+const REFINER_MODEL = 'gpt-4o';
+const REFINER_TEMPERATURE = 0.18;
+const REFINER_MAX_TOKENS = 1200;
+
+const REALISM_REFINER_SYSTEM = `Eres un retocador de prompts para generacion de imagenes fotorrealistas. Recibes el prompt visible que el usuario ya ha aprobado. Tu trabajo es RETOCARLO para que el modelo de imagen lo interprete de la forma mas fotorrealista posible.
+
+REGLAS ESTRICTAS:
+- NO cambies la escena, los sujetos, los objetos, la accion ni la idea del prompt original. La escena que describe el usuario es sagrada.
+- NO inventes elementos nuevos que no esten en el prompt original.
+- NO elimines sujetos, objetos ni acciones que el prompt mencione.
+- SI puedes: mejorar la descripcion de la luz para que suene a luz natural real, sustituir adjetivos vagos por materiales o texturas concretas, añadir detalles de camara (tipo de plano, profundidad de campo) si no los tiene, y rebajar cualquier frase que suene a "arte generativo" o "poster de IA".
+- Si el prompt menciona personas, mantenlas pero asegurate de que la descripcion las presente naturales y no posadas.
+- Si hay indicaciones de video (frame rate, travelling, motion blur), respetalas pero adaptalas para que funcionen como fotograma fijo: describe el instante congelado, no la secuencia.
+- Quita referencias a logotipos, marcas o texto visible que el modelo de imagen no puede renderizar bien.
+
+FORMATO DE SALIDA:
+- Un unico bloque de texto en espanol, sin saltos de linea, sin vinetas, sin comillas, sin markdown.
+- Debe sonar a encargo fotografico profesional, no a instruccion artistica.
+- No escribas nada antes ni despues del prompt retocado.`;
 
 const IMAGE_REALISM_TAIL = [
   'Tomada como fotografia real con camara full frame profesional y optica de reportaje de alta calidad,',
@@ -26,16 +45,31 @@ const TOXIC_WORDS = [
 ];
 
 /**
- * Limpia el prompt visible del usuario y le añade la cola de realismo.
+ * Toma el prompt visible del usuario, lo refina con una sola pasada
+ * de GPT-4o para mejorar el realismo fotográfico (sin cambiar la
+ * escena ni la idea), y le añade la cola de realismo.
  *
- * El prompt visible ES el que manda: describe la escena que el usuario
- * quiere y es el que puede copiar. Nosotros solo lo limpiamos (quitar
- * comillas, palabras tóxicas, --ar de Midjourney) y le concatenamos
- * la cola de realismo fotográfico para que gpt-image-1.5 lo ejecute
- * con el acabado más realista posible.
+ * El prompt visible sigue siendo el que manda: la pasada de refinamiento
+ * solo retoca vocabulario y detalles técnicos fotográficos.
  */
-function buildFinalPrompt(rawPrompt: string): string {
-  let prompt = cleanPrompt(rawPrompt);
+async function buildFinalPrompt(openai: OpenAI, rawPrompt: string): Promise<string> {
+  const cleaned = cleanPrompt(rawPrompt);
+
+  let prompt: string;
+  try {
+    const response = await openai.chat.completions.create({
+      model: REFINER_MODEL,
+      messages: [
+        { role: 'system', content: REALISM_REFINER_SYSTEM },
+        { role: 'user', content: cleaned },
+      ],
+      temperature: REFINER_TEMPERATURE,
+      max_tokens: REFINER_MAX_TOKENS,
+    });
+    prompt = cleanPrompt(response.choices[0]?.message?.content || cleaned);
+  } catch {
+    prompt = cleaned;
+  }
 
   if (!/fotograf[íi]a\s+hiperrealista/i.test(prompt)) {
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
@@ -145,7 +179,7 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey });
-    const prompt = buildFinalPrompt(visual.visual_prompt);
+    const prompt = await buildFinalPrompt(openai, visual.visual_prompt);
 
     console.log(`[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars`);
 
