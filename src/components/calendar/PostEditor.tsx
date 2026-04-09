@@ -61,6 +61,9 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
 
   const [visuals, setVisuals] = useState<ContentItemVisual[]>([]);
   const [imageGenQueue, setImageGenQueue] = useState<ImageGenItem[] | null>(null);
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editingPromptText, setEditingPromptText] = useState('');
+  const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -128,6 +131,34 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
       v.id === visualId ? { ...v, image_status: 'error' as const, image_error: errorMsg } : v
     ));
   }, []);
+
+  const startEditPrompt = useCallback((visual: ContentItemVisual) => {
+    setEditingPromptId(visual.id);
+    setEditingPromptText(visual.visual_prompt);
+  }, []);
+
+  const cancelEditPrompt = useCallback(() => {
+    setEditingPromptId(null);
+    setEditingPromptText('');
+  }, []);
+
+  const saveVisualPrompt = useCallback(async (visualId: string) => {
+    const trimmed = editingPromptText.trim();
+    if (!trimmed) return;
+    setSavingPromptId(visualId);
+    const { error } = await supabase
+      .from('content_item_visuals')
+      .update({ visual_prompt: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', visualId);
+    if (!error) {
+      setVisuals(prev => prev.map(v =>
+        v.id === visualId ? { ...v, visual_prompt: trimmed } : v
+      ));
+    }
+    setSavingPromptId(null);
+    setEditingPromptId(null);
+    setEditingPromptText('');
+  }, [editingPromptText, supabase]);
 
   async function handleDeleteClick() {
     if (!onDelete) return;
@@ -459,8 +490,33 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                         </div>
                       )}
 
-                      <div className="bg-surface-900 text-emerald-300 px-3 py-2 text-[11px] font-mono leading-relaxed whitespace-pre-wrap max-h-[120px] overflow-y-auto">
-                        {visual.visual_prompt.slice(0, 300)}{visual.visual_prompt.length > 300 ? '…' : ''}
+                      <div className="bg-surface-900 text-emerald-300 px-3 py-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-surface-500">Prompt</span>
+                          <div className="flex items-center gap-1.5">
+                            {editingPromptId === visual.id ? (
+                              <>
+                                <button type="button" onClick={cancelEditPrompt} className="text-[9px] font-bold uppercase tracking-widest text-surface-400 hover:text-white transition-colors">Cancelar</button>
+                                <button type="button" onClick={() => saveVisualPrompt(visual.id)} disabled={savingPromptId === visual.id} className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">{savingPromptId === visual.id ? 'Guardando…' : 'Guardar'}</button>
+                              </>
+                            ) : (
+                              <button type="button" onClick={() => startEditPrompt(visual)} className="text-[9px] font-bold uppercase tracking-widest text-surface-500 hover:text-amber-400 transition-colors">Editar</button>
+                            )}
+                          </div>
+                        </div>
+                        {editingPromptId === visual.id ? (
+                          <textarea
+                            value={editingPromptText}
+                            onChange={e => setEditingPromptText(e.target.value)}
+                            className="w-full bg-surface-800 text-emerald-300 text-[11px] font-mono leading-relaxed p-2 border border-surface-600 focus:border-emerald-500 focus:outline-none resize-y min-h-[100px] rounded-lg"
+                            rows={6}
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap max-h-[120px] overflow-y-auto">
+                            {visual.visual_prompt.slice(0, 300)}{visual.visual_prompt.length > 300 ? '…' : ''}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

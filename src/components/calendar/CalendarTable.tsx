@@ -99,6 +99,9 @@ export function CalendarTable({
   const [visualsLoading, setVisualsLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [imageGenQueue, setImageGenQueue] = useState<ImageGenItem[] | null>(null);
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editingPromptText, setEditingPromptText] = useState('');
+  const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const router = useRouter();
   const supabase = createClient();
@@ -151,6 +154,41 @@ export function CalendarTable({
       window.open(url, '_blank');
     }
   }, []);
+
+  const startEditPrompt = useCallback((visual: ContentItemVisual) => {
+    setEditingPromptId(visual.id);
+    setEditingPromptText(visual.visual_prompt);
+  }, []);
+
+  const cancelEditPrompt = useCallback(() => {
+    setEditingPromptId(null);
+    setEditingPromptText('');
+  }, []);
+
+  const savePrompt = useCallback(async (visualId: string, contentItemId: string) => {
+    const trimmed = editingPromptText.trim();
+    if (!trimmed) return;
+    setSavingPromptId(visualId);
+    const { error } = await supabase
+      .from('content_item_visuals')
+      .update({ visual_prompt: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', visualId);
+    if (!error) {
+      setVisualsCache(prev => {
+        const list = prev[contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [contentItemId]: list.map(v =>
+            v.id === visualId ? { ...v, visual_prompt: trimmed } : v
+          ),
+        };
+      });
+    }
+    setSavingPromptId(null);
+    setEditingPromptId(null);
+    setEditingPromptText('');
+  }, [editingPromptText, supabase]);
 
   const handleImageReady = useCallback((visualId: string, contentItemId: string, imageUrl: string) => {
     setVisualsCache(prev => {
@@ -507,8 +545,33 @@ export function CalendarTable({
                                         </div>
                                       )}
 
-                                      <div className="bg-surface-900 text-emerald-300 px-3 py-3 text-xs font-mono leading-relaxed whitespace-pre-wrap">
-                                        {visual.visual_prompt}
+                                      <div className="bg-surface-900 text-emerald-300 px-3 py-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[9px] font-bold uppercase tracking-widest text-surface-500">Prompt</span>
+                                          <div className="flex items-center gap-1.5">
+                                            {editingPromptId === visual.id ? (
+                                              <>
+                                                <button type="button" onClick={cancelEditPrompt} className="text-[9px] font-bold uppercase tracking-widest text-surface-400 hover:text-white transition-colors">Cancelar</button>
+                                                <button type="button" onClick={() => savePrompt(visual.id, item.id)} disabled={savingPromptId === visual.id} className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">{savingPromptId === visual.id ? 'Guardando…' : 'Guardar'}</button>
+                                              </>
+                                            ) : (
+                                              <button type="button" onClick={() => startEditPrompt(visual)} className="text-[9px] font-bold uppercase tracking-widest text-surface-500 hover:text-amber-400 transition-colors">Editar</button>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {editingPromptId === visual.id ? (
+                                          <textarea
+                                            value={editingPromptText}
+                                            onChange={e => setEditingPromptText(e.target.value)}
+                                            className="w-full bg-surface-800 text-emerald-300 text-xs font-mono leading-relaxed p-2 border border-surface-600 focus:border-emerald-500 focus:outline-none resize-y min-h-[100px]"
+                                            rows={6}
+                                            autoFocus
+                                          />
+                                        ) : (
+                                          <div className="text-xs font-mono leading-relaxed whitespace-pre-wrap">
+                                            {visual.visual_prompt}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   );

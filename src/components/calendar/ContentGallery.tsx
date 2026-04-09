@@ -57,6 +57,9 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [imageGenQueue, setImageGenQueue] = useState<ImageGenItem[] | null>(null);
   const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editingPromptText, setEditingPromptText] = useState('');
+  const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const itemsWithBriefs = useMemo(() => items.filter(i => i.visual_prompt?.trim()), [items]);
@@ -165,13 +168,50 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
   }, []);
 
   const togglePrompt = useCallback((id: string) => {
+    if (editingPromptId === id) return;
     setExpandedPrompts(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  }, [editingPromptId]);
+
+  const startEditPrompt = useCallback((visual: ContentItemVisual) => {
+    setEditingPromptId(visual.id);
+    setEditingPromptText(visual.visual_prompt);
+    setExpandedPrompts(prev => new Set(prev).add(visual.id));
   }, []);
+
+  const cancelEditPrompt = useCallback(() => {
+    setEditingPromptId(null);
+    setEditingPromptText('');
+  }, []);
+
+  const savePrompt = useCallback(async (visualId: string, contentItemId: string) => {
+    const trimmed = editingPromptText.trim();
+    if (!trimmed) return;
+    setSavingPromptId(visualId);
+    const { error } = await supabase
+      .from('content_item_visuals')
+      .update({ visual_prompt: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', visualId);
+    if (!error) {
+      setVisualsMap(prev => {
+        const list = prev[contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [contentItemId]: list.map(v =>
+            v.id === visualId ? { ...v, visual_prompt: trimmed } : v
+          ),
+        };
+      });
+    }
+    setSavingPromptId(null);
+    setEditingPromptId(null);
+    setEditingPromptText('');
+  }, [editingPromptText, supabase]);
 
   const totalVisuals = useMemo(() =>
     Object.values(visualsMap).reduce((sum, list) => sum + list.length, 0),
@@ -408,19 +448,60 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                             )}
 
                             {/* Prompt */}
-                            <div
-                              className="bg-surface-900 text-emerald-300 px-3 py-2 cursor-pointer"
-                              onClick={() => togglePrompt(visual.id)}
-                            >
+                            <div className="bg-surface-900 text-emerald-300 px-3 py-2">
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-surface-500">Prompt</span>
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-surface-500">
-                                  {isExpanded ? '▲ Cerrar' : '▼ Expandir'}
+                                <span
+                                  className="text-[9px] font-bold uppercase tracking-widest text-surface-500 cursor-pointer"
+                                  onClick={() => togglePrompt(visual.id)}
+                                >
+                                  Prompt {isExpanded && editingPromptId !== visual.id ? '▲' : !isExpanded ? '▼' : ''}
                                 </span>
+                                <div className="flex items-center gap-1.5">
+                                  {editingPromptId === visual.id ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={cancelEditPrompt}
+                                        className="text-[9px] font-bold uppercase tracking-widest text-surface-400 hover:text-white transition-colors"
+                                      >
+                                        Cancelar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => savePrompt(visual.id, item.id)}
+                                        disabled={savingPromptId === visual.id}
+                                        className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
+                                      >
+                                        {savingPromptId === visual.id ? 'Guardando…' : 'Guardar'}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); startEditPrompt(visual); }}
+                                      className="text-[9px] font-bold uppercase tracking-widest text-surface-500 hover:text-amber-400 transition-colors"
+                                    >
+                                      Editar
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <p className={`text-[11px] font-mono leading-relaxed whitespace-pre-wrap ${isExpanded ? '' : 'line-clamp-2'}`}>
-                                {visual.visual_prompt}
-                              </p>
+                              {editingPromptId === visual.id ? (
+                                <textarea
+                                  value={editingPromptText}
+                                  onChange={e => setEditingPromptText(e.target.value)}
+                                  className="w-full bg-surface-800 text-emerald-300 text-[11px] font-mono leading-relaxed p-2 border border-surface-600 focus:border-emerald-500 focus:outline-none resize-y min-h-[120px]"
+                                  rows={8}
+                                  autoFocus
+                                />
+                              ) : (
+                                <p
+                                  className={`text-[11px] font-mono leading-relaxed whitespace-pre-wrap cursor-pointer ${isExpanded ? '' : 'line-clamp-2'}`}
+                                  onClick={() => togglePrompt(visual.id)}
+                                >
+                                  {visual.visual_prompt}
+                                </p>
+                              )}
                             </div>
                           </div>
                         );
