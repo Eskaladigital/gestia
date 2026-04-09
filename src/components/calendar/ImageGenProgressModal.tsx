@@ -39,6 +39,8 @@ export function ImageGenProgressModal({
 
   const cancelledRef = useRef(false);
   const startTimeRef = useRef(0);
+  /** Aborta el fetch en curso para que Cancelar responda al instante (sin esperar al servidor). */
+  const fetchAbortRef = useRef<AbortController | null>(null);
 
   const total = queue.length;
   const estimatedCost = (total * COST_PER_IMAGE_USD).toFixed(2);
@@ -85,22 +87,45 @@ export function ImageGenProgressModal({
       const { visualId, contentItemId, label } = queue[i];
       setCurrentLabel(label || `Imagen ${i + 1}`);
 
+      fetchAbortRef.current = new AbortController();
+      const { signal } = fetchAbortRef.current;
+
       try {
         const res = await fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ visual_id: visualId }),
+          signal,
         });
+        if (cancelledRef.current) {
+          setPhase('cancelled');
+          return;
+        }
         const json = await res.json();
+        if (cancelledRef.current) {
+          setPhase('cancelled');
+          return;
+        }
         if (!res.ok) throw new Error(json.error || 'Error generando imagen');
         onImageReady(visualId, contentItemId, json.image_url);
       } catch (err: any) {
+        if (cancelledRef.current || err?.name === 'AbortError') {
+          setPhase('cancelled');
+          return;
+        }
         errCount++;
         const msg = err?.message || 'Error desconocido';
         onImageError(visualId, contentItemId, msg);
         if (errCount >= queue.length) {
           setErrorMsg(msg);
         }
+      } finally {
+        fetchAbortRef.current = null;
+      }
+
+      if (cancelledRef.current) {
+        setPhase('cancelled');
+        return;
       }
 
       setDone(i + 1);
@@ -123,8 +148,12 @@ export function ImageGenProgressModal({
   const handleCancel = useCallback(() => {
     if (phase === 'confirm') {
       onClose();
-    } else {
+      return;
+    }
+    if (phase === 'running') {
       cancelledRef.current = true;
+      fetchAbortRef.current?.abort();
+      setPhase('cancelled');
     }
   }, [phase, onClose]);
 
