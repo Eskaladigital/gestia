@@ -41,6 +41,7 @@ const PROMPT_BUILDER_SYSTEM = `Eres un agente senior: director de arte + locatio
 ANTES de escribir (mentalmente, no lo imprimas): (1) Elige el escenario visual mas especifico y honesto con el dossier, no una escena generica ni una "postal bonita". (2) Conecta contexto, uso, materiales, publico y posicionamiento real. (3) Elige UNA luz creible de dia (manana luminosa, media manana, tarde clara o golden hour todavia alta) coherente con estacion y region. (4) Anade 2-4 sustantivos CONCRETOS de textura o material (adobe, lino, arcilla, corcho, sal, musgo, hormigon, madera envejecida, algodon lavado, piedra, arena, baldosa hidraulica) alineados con el lugar y la actividad, no adjetivos vacios. (5) Si hay conflicto entre campos, prima la descripcion del visual + idea + copy sobre suposiciones. (6) Piensa como si un fotografo profesional estuviera fisicamente alli con una camara full frame de alta gama haciendo una foto real para una portada editorial, no como si estuviera "creando arte". (7) Decide la PROPORCION del sujeto u objeto principal respecto al encuadre: el sujeto debe ocupar entre un 30% y un 60% del area visible, ni tan pequeno que se pierda en el fondo ni tan grande que parezca un packshot recortado o un primer plano artificial; el resto debe ser entorno real que contextualice la escena.
 
 REGLAS DURAS:
+- Reglas IA del proyecto: si el dossier incluye un bloque "REGLAS IA DEL PROYECTO", cumplelas al pie de la letra con prioridad MAXIMA sobre cualquier suposicion tuya. Por ejemplo si dice que un vehiculo debe ser un modelo concreto, usa exactamente ese modelo.
 - Geografia: respeta sector, ubicacion y estacion del dossier; no inventes monumentos ni ciudades que no salgan en el dossier.
 - Luz/horario: PROHIBIDO noche, anochecer oscuro, hora azul, sol ya puesto, amanecer antes de salir el sol o escenas subexpuestas. La foto debe sentirse tomada con luz natural real, luminosa, clara y usable como portada.
 - Proporcion sujeto/fondo: el sujeto u objeto principal debe ocupar entre un tercio y dos tercios del encuadre; el fondo real debe ser visible y contextualizar la escena. Prohibido: sujeto diminuto perdido en paisaje vacio, primer plano extremo que elimine el entorno, o packshot centrado flotando sin contexto. Describe la distancia de camara (plano medio, plano americano, plano general corto) para que la proporcion quede clara.
@@ -62,6 +63,7 @@ const REALISM_REFINER_SYSTEM = `Eres un editor fotografico obsesionado con el hi
 TU UNICA TAREA: reescribir el borrador para que parezca todavia MAS una foto real tomada por un profesional con camara y luz existente. NO anadiras instrucciones tecnicas ni meta-lenguaje; solo reescribiras la escena de forma mas concreta, sobria y fotografica.
 
 Checklist mental (no lo imprimas):
+0. Si el dossier incluye "REGLAS IA DEL PROYECTO", verifica que el borrador las cumple al pie de la letra. Si no, corrigelo. Estas reglas tienen prioridad MAXIMA.
 1. Si el borrador suena a "arte generativo", "poster" o "catalogo fake", rebajalo: menos adjetivos grandilocuentes, mas sustantivos reales.
 2. Asegurate de que la luz descrita sea natural y de dia (NO noche, NO hora azul, NO escena subexpuesta).
 3. Si hay personas innecesarias o con caras visibles de cerca, reduce su protagonismo o giralas de espaldas.
@@ -103,6 +105,7 @@ function buildDossier(visual: any): string {
   const projectSector = clip(project.sector, 200) || '';
   const projectLocation = clip(project.location, 200) || '';
   const projectDescription = clip(project.description, 1200) || '';
+  const aiRules = clip(project.ai_rules, 1200) || '';
   const itemIdea = clip(item.idea, 400);
   const itemCopy = clip(item.copy, 800);
   const format = clip(item.format, 80);
@@ -129,6 +132,12 @@ function buildDossier(visual: any): string {
   if (projectDescription) parts.push(`Descripcion: ${projectDescription}`);
   if (season !== 'sin datos') parts.push(`Estacion: ${season}`);
   if (format) parts.push(`Formato: ${format}`);
+
+  if (aiRules) {
+    parts.push('');
+    parts.push('--- REGLAS IA DEL PROYECTO (OBLIGATORIAS, prioridad maxima) ---');
+    parts.push(aiRules);
+  }
 
   parts.push('');
   parts.push('--- Escena visual ---');
@@ -261,7 +270,7 @@ export async function POST(request: NextRequest) {
         id, project_id, scheduled_date, format,
         idea, copy, visual_brief, production_specs,
         projects!inner(
-          id, user_id, name, sector, location, description
+          id, user_id, name, sector, location, description, ai_rules
         )
       )
     `)
