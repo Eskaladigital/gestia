@@ -128,6 +128,23 @@ export function CalendarTable({
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
+  const handleDownloadImage = useCallback(async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  }, []);
+
   const handleGenerateImage = useCallback(async (visualId: string, contentItemId: string) => {
     setGeneratingImageId(visualId);
     try {
@@ -445,13 +462,13 @@ export function CalendarTable({
                                               >
                                                 Abrir
                                               </a>
-                                              <a
-                                                href={visual.image_url!}
-                                                download
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDownloadImage(visual.image_url!, `visual-${visual.visual_index + 1}.png`)}
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                                               >
                                                 Descargar
-                                              </a>
+                                              </button>
                                             </div>
                                           </div>
                                         </div>

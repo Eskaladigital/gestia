@@ -100,6 +100,23 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
     return () => { cancelled = true; };
   }, [item.id, supabase]);
 
+  const handleDownloadImage = useCallback(async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  }, []);
+
   const handleGenerateImage = useCallback(async (visualId: string) => {
     setGeneratingImageId(visualId);
     setImageError(null);
@@ -439,13 +456,13 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                               >
                                 Abrir
                               </a>
-                              <a
-                                href={visual.image_url!}
-                                download
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadImage(visual.image_url!, `visual-${visual.visual_index + 1}.png`)}
                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"
                               >
                                 Descargar
-                              </a>
+                              </button>
                             </div>
                           </div>
                         </div>
