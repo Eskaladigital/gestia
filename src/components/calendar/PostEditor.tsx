@@ -5,6 +5,7 @@ import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
+import { buildImageFilename } from './ContentGallery';
 
 function buildProductionSpecs(
   numSlides: string,
@@ -480,7 +481,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                               </a>
                               <button
                                 type="button"
-                                onClick={() => handleDownloadImage(visual.image_url!, `visual-${visual.visual_index + 1}.png`)}
+                                onClick={() => handleDownloadImage(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"
                               >
                                 Descargar

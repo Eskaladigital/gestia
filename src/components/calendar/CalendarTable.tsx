@@ -7,6 +7,7 @@ import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types'
 import { PostEditor } from './PostEditor';
 import { ProductionSpecsDisplay } from './ProductionSpecsDisplay';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
+import { buildImageFilename } from './ContentGallery';
 
 interface CalendarTableProps {
   items: ContentItem[];
@@ -529,7 +530,7 @@ export function CalendarTable({
                                               </a>
                                               <button
                                                 type="button"
-                                                onClick={() => handleDownloadImage(visual.image_url!, `visual-${visual.visual_index + 1}.png`)}
+                                                onClick={() => handleDownloadImage(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                                               >
                                                 Descargar

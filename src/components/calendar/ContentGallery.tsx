@@ -1,10 +1,28 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
 import type { ContentItem, ContentItemVisual } from '@/types';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { FORMAT_CONFIG, TYPE_LABELS } from './CalendarTable';
+
+/**
+ * Genera el nombre de archivo para una imagen visual.
+ * Formato: "2025-04-13 CARRUSEL 1.png"
+ */
+export function buildImageFilename(
+  scheduledDate: string,
+  format: string | null,
+  visualIndex: number,
+  label?: string | null,
+): string {
+  const date = scheduledDate.slice(0, 10);
+  const fmt = (format || 'POST').toUpperCase();
+  const idx = visualIndex + 1;
+  const suffix = label ? ` ${label}` : '';
+  return `${date} ${fmt} ${idx}${suffix}.png`;
+}
 
 const WEEK_COLORS = [
   { bg: 'bg-blue-50/60', header: 'bg-blue-100 text-blue-900', accent: 'border-blue-500' },
@@ -60,7 +78,8 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; filename: string } | null>(null);
+  const [downloadingZip, setDownloadingZip] = useState(false);
 
   const itemsWithBriefs = useMemo(() => items.filter(i => i.visual_prompt?.trim()), [items]);
 
@@ -221,6 +240,57 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
     Object.values(visualsMap).flat().filter(v => v.image_status === 'ready' && v.image_url).length,
   [visualsMap]);
 
+  const itemsById = useMemo(() => {
+    const map: Record<string, ContentItem> = {};
+    for (const item of items) map[item.id] = item;
+    return map;
+  }, [items]);
+
+  const handleDownloadAllZip = useCallback(async () => {
+    const allReady = Object.values(visualsMap)
+      .flat()
+      .filter(v => v.image_status === 'ready' && v.image_url);
+    if (allReady.length === 0) return;
+
+    setDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+
+      for (const visual of allReady) {
+        const parentItem = itemsById[visual.content_item_id];
+        let filename = parentItem
+          ? buildImageFilename(parentItem.scheduled_date, parentItem.format, visual.visual_index, visual.label)
+          : `visual-${visual.visual_index + 1}.png`;
+
+        while (usedNames.has(filename)) {
+          filename = filename.replace('.png', ' (copia).png');
+        }
+        usedNames.add(filename);
+
+        try {
+          const res = await fetch(visual.image_url!);
+          const blob = await res.blob();
+          zip.file(filename, blob);
+        } catch {
+          // skip failed downloads
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `contenido-visual-${projectId.slice(0, 8)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingZip(false);
+    }
+  }, [visualsMap, itemsById, projectId]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -267,6 +337,16 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
           <span className="text-[10px] font-mono font-bold bg-amber-500 text-white px-2 py-0.5 uppercase tracking-widest">
             {totalVisuals - readyCount} pendientes
           </span>
+        )}
+        {readyCount > 0 && (
+          <button
+            type="button"
+            onClick={handleDownloadAllZip}
+            disabled={downloadingZip}
+            className="ml-auto text-[10px] font-bold uppercase tracking-wider text-white bg-surface-900 border-2 border-surface-900 px-3 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 disabled:cursor-wait"
+          >
+            {downloadingZip ? 'Descargando…' : `Descargar todas (${readyCount})`}
+          </button>
         )}
       </div>
 
@@ -408,7 +488,7 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                 {hasImage && (
                                   <button
                                     type="button"
-                                    onClick={() => handleDownload(visual.image_url!, `${item.scheduled_date}-visual-${visual.visual_index + 1}.png`)}
+                                    onClick={() => handleDownload(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
                                     className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                                   >
                                     Descargar
@@ -421,7 +501,7 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                             {hasImage ? (
                               <div
                                 className="relative cursor-pointer group"
-                                onClick={() => setLightboxUrl(visual.image_url!)}
+                                onClick={() => setLightbox({ url: visual.image_url!, filename: buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label) })}
                               >
                                 <img
                                   src={visual.image_url!}
@@ -516,28 +596,28 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
       })}
 
       {/* Lightbox */}
-      {lightboxUrl && (
+      {lightbox && (
         <div
           className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightbox(null)}
         >
           <div className="relative max-w-5xl w-full" onClick={e => e.stopPropagation()}>
             <img
-              src={lightboxUrl}
+              src={lightbox.url}
               alt="Vista ampliada"
               className="w-full h-auto max-h-[85vh] object-contain border-4 border-white"
             />
             <div className="absolute top-3 right-3 flex gap-2">
               <button
                 type="button"
-                onClick={() => handleDownload(lightboxUrl, `visual-${Date.now()}.png`)}
+                onClick={() => handleDownload(lightbox.url, lightbox.filename)}
                 className="text-xs font-bold uppercase tracking-wider bg-white text-surface-900 border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
               >
                 Descargar
               </button>
               <button
                 type="button"
-                onClick={() => setLightboxUrl(null)}
+                onClick={() => setLightbox(null)}
                 className="text-xs font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-white px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
               >
                 Cerrar
