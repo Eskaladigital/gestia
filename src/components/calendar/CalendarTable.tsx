@@ -98,8 +98,7 @@ export function CalendarTable({
   const [visualsCache, setVisualsCache] = useState<Record<string, ContentItemVisual[]>>({});
   const [visualsLoading, setVisualsLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
-  const [imageGenQueue, setImageGenQueue] = useState<Array<{ visualId: string; contentItemId: string }>>([]);
+  const [generatingImageIds, setGeneratingImageIds] = useState<Set<string>>(new Set());
   const [imageGenProgress, setImageGenProgress] = useState<{ done: number; total: number } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ visuals: Array<{ visualId: string; contentItemId: string }>} | null>(null);
   const router = useRouter();
@@ -152,7 +151,7 @@ export function CalendarTable({
   }, []);
 
   const handleGenerateImage = useCallback(async (visualId: string, contentItemId: string) => {
-    setGeneratingImageId(visualId);
+    setGeneratingImageIds(prev => new Set(prev).add(visualId));
     try {
       const res = await fetch('/api/generate-image', {
         method: 'POST',
@@ -183,7 +182,7 @@ export function CalendarTable({
         };
       });
     } finally {
-      setGeneratingImageId(null);
+      setGeneratingImageIds(prev => { const n = new Set(prev); n.delete(visualId); return n; });
     }
   }, []);
 
@@ -191,7 +190,7 @@ export function CalendarTable({
     setImageGenProgress({ done: 0, total: queue.length });
     for (let i = 0; i < queue.length; i++) {
       const { visualId, contentItemId } = queue[i];
-      setGeneratingImageId(visualId);
+      setGeneratingImageIds(prev => new Set(prev).add(visualId));
       try {
         const res = await fetch('/api/generate-image', {
           method: 'POST',
@@ -222,9 +221,9 @@ export function CalendarTable({
           };
         });
       }
+      setGeneratingImageIds(prev => { const n = new Set(prev); n.delete(visualId); return n; });
       setImageGenProgress({ done: i + 1, total: queue.length });
     }
-    setGeneratingImageId(null);
     setImageGenProgress(null);
   }, []);
 
@@ -493,7 +492,7 @@ export function CalendarTable({
                             {visualsCache[item.id] && visualsCache[item.id].length > 0 && (
                               <div className="space-y-3">
                                 {visualsCache[item.id].map((visual) => {
-                                  const isGen = generatingImageId === visual.id;
+                                  const isGen = generatingImageIds.has(visual.id);
                                   const hasImage = visual.image_status === 'ready' && visual.image_url;
                                   const hasError = visual.image_status === 'error';
                                   return (

@@ -60,7 +60,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   const [visualPrompt, setVisualPrompt] = useState('');
 
   const [visuals, setVisuals] = useState<ContentItemVisual[]>([]);
-  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [generatingImageIds, setGeneratingImageIds] = useState<Set<string>>(new Set());
   const [imageError, setImageError] = useState<string | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState<string[] | null>(null);
   const supabase = createClient();
@@ -120,7 +120,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   }, []);
 
   const handleGenerateImage = useCallback(async (visualId: string) => {
-    setGeneratingImageId(visualId);
+    setGeneratingImageIds(prev => new Set(prev).add(visualId));
     setImageError(null);
     try {
       const res = await fetch('/api/generate-image', {
@@ -140,7 +140,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
         v.id === visualId ? { ...v, image_status: 'error' as ImageGenerationStatus, image_error: msg } : v
       ));
     } finally {
-      setGeneratingImageId(null);
+      setGeneratingImageIds(prev => { const n = new Set(prev); n.delete(visualId); return n; });
     }
   }, []);
 
@@ -405,7 +405,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                     <button
                       type="button"
                       onClick={() => setConfirmGenerate(visuals.map(v => v.id))}
-                      disabled={!!generatingImageId}
+                      disabled={generatingImageIds.size > 0}
                       className="text-xs font-bold uppercase tracking-wider text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-full transition-colors"
                     >
                       Generar {visuals.length} imágenes
@@ -416,7 +416,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                   Genera la imagen de cada visual usando gpt-image-1.5. Puedes descargarla o regenerarla.
                 </p>
                 {visuals.map(visual => {
-                  const isGen = generatingImageId === visual.id;
+                  const isGen = generatingImageIds.has(visual.id);
                   const hasImage = visual.image_status === 'ready' && visual.image_url;
                   const hasError = visual.image_status === 'error';
                   return (
@@ -428,7 +428,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                         <button
                           type="button"
                           onClick={() => setConfirmGenerate([visual.id])}
-                          disabled={isGen || !!generatingImageId}
+                          disabled={isGen}
                           className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait ${
                             hasImage
                               ? 'bg-violet-600 text-white hover:bg-violet-700'
@@ -525,7 +525,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
             const ids = confirmGenerate;
             setConfirmGenerate(null);
             for (const vId of ids) {
-              setGeneratingImageId(vId);
+              setGeneratingImageIds(prev => new Set(prev).add(vId));
               setImageError(null);
               try {
                 const res = await fetch('/api/generate-image', {
@@ -542,9 +542,10 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                 setVisuals(prev => prev.map(v =>
                   v.id === vId ? { ...v, image_status: 'error' as ImageGenerationStatus, image_error: err?.message || 'Error' } : v
                 ));
+              } finally {
+                setGeneratingImageIds(prev => { const n = new Set(prev); n.delete(vId); return n; });
               }
             }
-            setGeneratingImageId(null);
           }}
           onCancel={() => setConfirmGenerate(null)}
         />
