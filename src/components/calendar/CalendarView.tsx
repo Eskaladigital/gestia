@@ -85,22 +85,34 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
     setBriefsModalIds(itemIds || []);
   }, []);
 
-  const handleGenerateAllImages = useCallback(async () => {
+  const buildImageQueue = useCallback(async (onlyPending: boolean): Promise<ImageGenItem[]> => {
     const itemIds = itemsWithBriefs.map(i => i.id);
-    if (itemIds.length === 0) return;
+    if (itemIds.length === 0) return [];
     const { data: visuals } = await supabase
       .from('content_item_visuals')
       .select('*')
       .in('content_item_id', itemIds)
       .order('visual_index', { ascending: true });
-    if (!visuals || visuals.length === 0) return;
-    const queue: ImageGenItem[] = (visuals as ContentItemVisual[]).map(v => ({
+    if (!visuals || visuals.length === 0) return [];
+    const filtered = onlyPending
+      ? (visuals as ContentItemVisual[]).filter(v => v.image_status !== 'ready' || !v.image_url)
+      : (visuals as ContentItemVisual[]);
+    return filtered.map(v => ({
       visualId: v.id,
       contentItemId: v.content_item_id,
       label: v.label || `Visual ${v.visual_index + 1}`,
     }));
-    setAllImagesQueue(queue);
   }, [itemsWithBriefs, supabase]);
+
+  const handleGeneratePendingImages = useCallback(async () => {
+    const queue = await buildImageQueue(true);
+    if (queue.length > 0) setAllImagesQueue(queue);
+  }, [buildImageQueue]);
+
+  const handleGenerateAllImages = useCallback(async () => {
+    const queue = await buildImageQueue(false);
+    if (queue.length > 0) setAllImagesQueue(queue);
+  }, [buildImageQueue]);
 
   return (
     <div>
@@ -141,13 +153,13 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
             </button>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto flex-wrap">
           {pendingBriefsCount > 0 && (
             <button
               onClick={() => handleGenerateVisualBriefs()}
               className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full sm:w-auto"
             >
-              Generar briefs ({pendingBriefsCount})
+              Generar briefs pendientes ({pendingBriefsCount})
             </button>
           )}
           <button
@@ -161,13 +173,22 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
             Regenerar todos los briefs
           </button>
           {itemsWithBriefs.length > 0 && (
-            <button
-              onClick={handleGenerateAllImages}
-              disabled={!!allImagesQueue}
-              className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-violet-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 w-full sm:w-auto"
-            >
-              Generar todas las imágenes
-            </button>
+            <>
+              <button
+                onClick={handleGeneratePendingImages}
+                disabled={!!allImagesQueue}
+                className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-violet-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 w-full sm:w-auto"
+              >
+                Generar imágenes pendientes
+              </button>
+              <button
+                onClick={handleGenerateAllImages}
+                disabled={!!allImagesQueue}
+                className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 bg-white border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+              >
+                Regenerar todas las imágenes
+              </button>
+            </>
           )}
           <button
             onClick={handleExportJSON}

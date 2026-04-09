@@ -338,16 +338,38 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
             {totalVisuals - readyCount} pendientes
           </span>
         )}
-        {readyCount > 0 && (
-          <button
-            type="button"
-            onClick={handleDownloadAllZip}
-            disabled={downloadingZip}
-            className="ml-auto text-[10px] font-bold uppercase tracking-wider text-white bg-surface-900 border-2 border-surface-900 px-3 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 disabled:cursor-wait"
-          >
-            {downloadingZip ? 'Descargando…' : `Descargar todas (${readyCount})`}
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {totalVisuals - readyCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const pending = Object.values(visualsMap)
+                  .flat()
+                  .filter(v => v.image_status !== 'ready' || !v.image_url);
+                if (pending.length === 0) return;
+                setImageGenQueue(pending.map(v => ({
+                  visualId: v.id,
+                  contentItemId: v.content_item_id,
+                  label: v.label || `Visual ${v.visual_index + 1}`,
+                })));
+              }}
+              disabled={!!imageGenQueue}
+              className="text-[10px] font-bold uppercase tracking-wider text-white bg-violet-600 border-2 border-surface-900 px-3 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50"
+            >
+              Generar pendientes ({totalVisuals - readyCount})
+            </button>
+          )}
+          {readyCount > 0 && (
+            <button
+              type="button"
+              onClick={handleDownloadAllZip}
+              disabled={downloadingZip}
+              className="text-[10px] font-bold uppercase tracking-wider text-white bg-surface-900 border-2 border-surface-900 px-3 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 disabled:cursor-wait"
+            >
+              {downloadingZip ? 'Descargando…' : `Descargar todas (${readyCount})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Week groups */}
