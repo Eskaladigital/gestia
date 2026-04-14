@@ -115,6 +115,13 @@ export default function ProjectsListCards({
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  /** Un solo proyecto en la cuenta y está activo: no permitir archivarlo (evita quedar solo con papelera). */
+  const soleActiveProjectLocked =
+    activeProjects.length === 1 && trashedProjects.length === 0;
+  /** Un solo proyecto en la cuenta y está en papelera: priorizar restaurar; borrado definitivo solo bajo desplegable. */
+  const soleTrashedProjectOnly =
+    activeProjects.length === 0 && trashedProjects.length === 1;
+
   async function patchProject(id: string, body: Record<string, unknown>) {
     const res = await fetch('/api/projects', {
       method: 'PATCH',
@@ -198,16 +205,26 @@ export default function ProjectsListCards({
                 <span className="text-[10px] font-bold text-surface-900 uppercase tracking-wider group-hover:text-brand-600 transition-colors">
                   Abrir proyecto →
                 </span>
-                <button
-                  type="button"
-                  title="Mover a la papelera"
-                  aria-label="Mover a la papelera"
-                  disabled={loadingId === project.id}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveToTrash(project.id); }}
-                  className="p-1.5 text-surface-400 hover:text-red-600 hover:bg-red-50 border-2 border-transparent hover:border-surface-900 transition-all disabled:opacity-50"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
+                {soleActiveProjectLocked ? (
+                  <span
+                    className="p-1.5 text-surface-300 cursor-not-allowed border-2 border-transparent"
+                    title="Es tu único proyecto: crea otro antes de poder archivar este."
+                    aria-label="Archivar no disponible: es tu único proyecto"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    title="Mover a la papelera"
+                    aria-label="Mover a la papelera"
+                    disabled={loadingId === project.id}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveToTrash(project.id); }}
+                    className="p-1.5 text-surface-400 hover:text-red-600 hover:bg-red-50 border-2 border-transparent hover:border-surface-900 transition-all disabled:opacity-50"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -220,8 +237,8 @@ export default function ProjectsListCards({
             <span className="text-xl">🗑️</span>
             <div>
               <h2 className="font-display text-xl font-bold text-surface-900">Papelera</h2>
-              <p className="text-xs text-surface-500 font-medium">
-                Restaura o elimina definitivamente
+              <p className="text-xs text-surface-500 font-medium max-w-xl">
+                Solo los proyectos archivados aparecen aquí (no son los activos de arriba). Puedes recuperarlos o borrarlos del todo.
               </p>
             </div>
           </div>
@@ -232,24 +249,52 @@ export default function ProjectsListCards({
                 className="bg-surface-50 border-2 border-dashed border-surface-900 overflow-hidden opacity-70 hover:opacity-100 transition-opacity"
               >
                 <CardBody project={project} />
-                <div className="flex border-t-2 border-surface-300">
-                  <button
-                    type="button"
-                    disabled={loadingId === project.id}
-                    onClick={() => restore(project.id)}
-                    className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50 border-r border-surface-300"
-                  >
-                    Restaurar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={loadingId === project.id}
-                    onClick={() => permanentDelete(project.id)}
-                    className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                  >
-                    Eliminar
-                  </button>
-                </div>
+                {soleTrashedProjectOnly ? (
+                  <div className="border-t-2 border-surface-300 bg-surface-100/80">
+                    <button
+                      type="button"
+                      disabled={loadingId === project.id}
+                      onClick={() => restore(project.id)}
+                      className="w-full py-3 text-[11px] font-bold uppercase tracking-wider text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50"
+                    >
+                      Restaurar proyecto
+                    </button>
+                    <details className="group border-t border-surface-300">
+                      <summary className="cursor-pointer list-none py-2 text-center text-[9px] font-bold uppercase tracking-wider text-surface-500 hover:text-surface-800 marker:content-none [&::-webkit-details-marker]:hidden">
+                        <span className="underline decoration-dotted">Opciones avanzadas</span>
+                      </summary>
+                      <div className="px-3 pb-3">
+                        <button
+                          type="button"
+                          disabled={loadingId === project.id}
+                          onClick={() => permanentDelete(project.id)}
+                          className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 border-2 border-surface-300 transition-colors disabled:opacity-50"
+                        >
+                          Eliminar definitivamente
+                        </button>
+                      </div>
+                    </details>
+                  </div>
+                ) : (
+                  <div className="flex border-t-2 border-surface-300">
+                    <button
+                      type="button"
+                      disabled={loadingId === project.id}
+                      onClick={() => restore(project.id)}
+                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50 border-r border-surface-300"
+                    >
+                      Restaurar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loadingId === project.id}
+                      onClick={() => permanentDelete(project.id)}
+                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
