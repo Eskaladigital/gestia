@@ -13,6 +13,92 @@ type ProjectRow = {
   deleted_at: string | null;
 };
 
+type EnrichedProjectRow = ProjectRow & {
+  email: string;
+  ownerName: string;
+  company: string | null;
+  posts: number;
+  strategies: number;
+};
+
+function AdminProjectsTable({
+  rows,
+  showFichaLink,
+}: {
+  rows: EnrichedProjectRow[];
+  showFichaLink: boolean;
+}) {
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="bg-white border-2 border-surface-900 shadow-brutal-sm overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b-2 border-surface-900 bg-surface-100">
+            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Proyecto</th>
+            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Propietario</th>
+            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden md:table-cell">Email</th>
+            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden lg:table-cell">Posts</th>
+            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
+            <th className="text-right px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Ficha</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => (
+            <tr
+              key={p.id}
+              className={`border-b border-surface-200 hover:bg-surface-50 ${p.deleted_at ? 'opacity-80 bg-surface-50/80' : ''}`}
+            >
+              <td className="px-4 py-3 align-top">
+                <span className="font-display font-bold text-surface-900 block">{p.name}</span>
+                <span className="text-xs text-surface-500 line-clamp-1">{p.url || 'Sin URL'}</span>
+                {p.deleted_at && (
+                  <span className="inline-block mt-1 text-[9px] font-bold uppercase bg-amber-100 text-amber-900 px-1.5 py-0.5 border border-amber-800">
+                    Papelera
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3 align-top text-surface-700">
+                <span className="font-medium">{p.ownerName}</span>
+                {p.company && <span className="block text-xs text-surface-500">{p.company}</span>}
+              </td>
+              <td className="px-4 py-3 align-top text-surface-600 hidden md:table-cell font-mono text-xs">
+                {p.email}
+              </td>
+              <td className="px-4 py-3 align-top hidden lg:table-cell">
+                <span className="font-mono text-xs font-bold text-surface-700 tabular-nums">{p.posts}</span>
+                <span className="text-[10px] text-surface-400 ml-1">/ {p.strategies} estrat.</span>
+              </td>
+              <td className="px-4 py-3 align-top">
+                <span className="text-[10px] font-mono font-bold uppercase border border-surface-900 px-2 py-1">
+                  {p.status}
+                </span>
+              </td>
+              <td className="px-4 py-3 align-top text-right">
+                {showFichaLink && !p.deleted_at ? (
+                  <Link
+                    href={projectDashboardBasePath(p.id, true)}
+                    className="text-xs font-bold text-red-700 uppercase tracking-wider hover:underline"
+                  >
+                    Abrir →
+                  </Link>
+                ) : (
+                  <span
+                    className="text-[10px] font-medium text-surface-400"
+                    title="En papelera no se abre la ficha hasta que el propietario lo restaure desde su panel de proyectos."
+                  >
+                    —
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default async function AdministratorProjectsPage() {
   const service = createServiceSupabase();
 
@@ -50,7 +136,7 @@ export default async function AdministratorProjectsPage() {
     nameById[u.id] = u.user_metadata?.full_name || '';
   }
 
-  const rows = ((projects ?? []) as ProjectRow[]).map((p) => {
+  const rows: EnrichedProjectRow[] = ((projects ?? []) as ProjectRow[]).map((p) => {
     const email = emailById[p.user_id] || '—';
     const profileName = profileById[p.user_id]?.full_name;
     const metaName = nameById[p.user_id];
@@ -64,8 +150,10 @@ export default async function AdministratorProjectsPage() {
     };
   });
 
-  const activeCount = rows.filter(r => !r.deleted_at).length;
-  const deletedCount = rows.filter(r => r.deleted_at).length;
+  const activeRows = rows.filter((r) => !r.deleted_at);
+  const trashedRows = rows.filter((r) => r.deleted_at);
+  const activeCount = activeRows.length;
+  const deletedCount = trashedRows.length;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -78,62 +166,43 @@ export default async function AdministratorProjectsPage() {
         </p>
       </div>
 
-      <div className="bg-white border-2 border-surface-900 shadow-brutal-sm overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b-2 border-surface-900 bg-surface-100">
-              <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Proyecto</th>
-              <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Propietario</th>
-              <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden md:table-cell">Email</th>
-              <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden lg:table-cell">Posts</th>
-              <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
-              <th className="text-right px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Ficha</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.id} className="border-b border-surface-200 hover:bg-surface-50">
-                <td className="px-4 py-3 align-top">
-                  <span className="font-display font-bold text-surface-900 block">{p.name}</span>
-                  <span className="text-xs text-surface-500 line-clamp-1">{p.url || 'Sin URL'}</span>
-                  {p.deleted_at && (
-                    <span className="inline-block mt-1 text-[9px] font-bold uppercase bg-amber-100 text-amber-900 px-1.5 py-0.5 border border-amber-800">
-                      Papelera
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 align-top text-surface-700">
-                  <span className="font-medium">{p.ownerName}</span>
-                  {p.company && <span className="block text-xs text-surface-500">{p.company}</span>}
-                </td>
-                <td className="px-4 py-3 align-top text-surface-600 hidden md:table-cell font-mono text-xs">
-                  {p.email}
-                </td>
-                <td className="px-4 py-3 align-top hidden lg:table-cell">
-                  <span className="font-mono text-xs font-bold text-surface-700 tabular-nums">{p.posts}</span>
-                  <span className="text-[10px] text-surface-400 ml-1">/ {p.strategies} estrat.</span>
-                </td>
-                <td className="px-4 py-3 align-top">
-                  <span className="text-[10px] font-mono font-bold uppercase border border-surface-900 px-2 py-1">
-                    {p.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 align-top text-right">
-                  <Link
-                    href={projectDashboardBasePath(p.id, true)}
-                    className="text-xs font-bold text-red-700 uppercase tracking-wider hover:underline"
-                  >
-                    Abrir →
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && (
-          <p className="p-8 text-center text-sm text-surface-500 font-medium">No hay proyectos</p>
-        )}
-      </div>
+      {rows.length === 0 ? (
+        <div className="bg-white border-2 border-dashed border-surface-900 p-12 text-center">
+          <p className="text-sm text-surface-500 font-medium">No hay proyectos</p>
+        </div>
+      ) : (
+        <>
+          <section className="mb-2">
+            <h2 className="font-display text-lg font-bold text-surface-900 mb-1">Activos</h2>
+            <p className="text-xs text-surface-500 font-medium mb-4 max-w-2xl">
+              Proyectos en uso. La ficha de administración solo está disponible mientras el proyecto no esté archivado en papelera.
+            </p>
+            {activeRows.length > 0 ? (
+              <AdminProjectsTable rows={activeRows} showFichaLink />
+            ) : (
+              <p className="text-sm text-surface-500 font-medium py-6 border-2 border-dashed border-surface-300 px-4">
+                Ahora mismo no hay proyectos activos (solo entradas en la papelera más abajo).
+              </p>
+            )}
+          </section>
+
+          {trashedRows.length > 0 ? (
+            <section className={activeRows.length > 0 ? 'mt-12 pt-10 border-t-2 border-surface-900' : ''}>
+              <div className="flex items-start gap-3 mb-4">
+                <span className="text-xl leading-none" aria-hidden>🗑️</span>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-surface-900">Papelera</h2>
+                  <p className="text-xs text-surface-500 font-medium max-w-2xl mt-1">
+                    Solo proyectos que el propietario archivó desde su panel. No se abre la ficha admin hasta que los restauren en{' '}
+                    <span className="font-mono text-surface-700">/projects</span>. Restaurar o borrar definitivamente sigue siendo acción del usuario en su cuenta.
+                  </p>
+                </div>
+              </div>
+              <AdminProjectsTable rows={trashedRows} showFichaLink={false} />
+            </section>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
