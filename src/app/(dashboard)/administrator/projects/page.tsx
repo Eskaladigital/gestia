@@ -1,6 +1,7 @@
 import { createServiceSupabase } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { projectDashboardBasePath } from '@/lib/utils';
+import { AdministratorTrashedProjectActions } from '@/components/administrator/AdministratorTrashedProjectActions';
 
 type ProjectRow = {
   id: string;
@@ -23,12 +24,14 @@ type EnrichedProjectRow = ProjectRow & {
 
 function AdminProjectsTable({
   rows,
-  showFichaLink,
+  variant,
 }: {
   rows: EnrichedProjectRow[];
-  showFichaLink: boolean;
+  variant: 'active' | 'trashed';
 }) {
   if (rows.length === 0) return null;
+
+  const lastHeading = variant === 'trashed' ? 'Acciones' : 'Ficha';
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal-sm overflow-x-auto">
@@ -40,7 +43,7 @@ function AdminProjectsTable({
             <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden md:table-cell">Email</th>
             <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden lg:table-cell">Posts</th>
             <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
-            <th className="text-right px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Ficha</th>
+            <th className="text-right px-4 py-3 font-bold text-[10px] uppercase tracking-wider">{lastHeading}</th>
           </tr>
         </thead>
         <tbody>
@@ -75,7 +78,9 @@ function AdminProjectsTable({
                 </span>
               </td>
               <td className="px-4 py-3 align-top text-right">
-                {showFichaLink && !p.deleted_at ? (
+                {variant === 'trashed' ? (
+                  <AdministratorTrashedProjectActions projectId={p.id} projectName={p.name} />
+                ) : !p.deleted_at ? (
                   <Link
                     href={projectDashboardBasePath(p.id, true)}
                     className="text-xs font-bold text-red-700 uppercase tracking-wider hover:underline"
@@ -83,12 +88,7 @@ function AdminProjectsTable({
                     Abrir →
                   </Link>
                 ) : (
-                  <span
-                    className="text-[10px] font-medium text-surface-400"
-                    title="En papelera no se abre la ficha hasta que el propietario lo restaure desde su panel de proyectos."
-                  >
-                    —
-                  </span>
+                  <span className="text-[10px] font-medium text-surface-400">—</span>
                 )}
               </td>
             </tr>
@@ -178,7 +178,7 @@ export default async function AdministratorProjectsPage() {
               Proyectos en uso. La ficha de administración solo está disponible mientras el proyecto no esté archivado en papelera.
             </p>
             {activeRows.length > 0 ? (
-              <AdminProjectsTable rows={activeRows} showFichaLink />
+              <AdminProjectsTable rows={activeRows} variant="active" />
             ) : (
               <p className="text-sm text-surface-500 font-medium py-6 border-2 border-dashed border-surface-300 px-4">
                 Ahora mismo no hay proyectos activos (solo entradas en la papelera más abajo).
@@ -193,12 +193,12 @@ export default async function AdministratorProjectsPage() {
                 <div>
                   <h2 className="font-display text-lg font-bold text-surface-900">Papelera</h2>
                   <p className="text-xs text-surface-500 font-medium max-w-2xl mt-1">
-                    Solo proyectos que el propietario archivó desde su panel. No se abre la ficha admin hasta que los restauren en{' '}
-                    <span className="font-mono text-surface-700">/projects</span>. Restaurar o borrar definitivamente sigue siendo acción del usuario en su cuenta.
+                    Archivados por el cliente desde su panel. Puedes <strong className="text-surface-700">restaurarlos</strong> (vuelven a activos y se puede abrir ficha) o{' '}
+                    <strong className="text-surface-700">eliminarlos del todo</strong> como haría el propietario.
                   </p>
                 </div>
               </div>
-              <AdminProjectsTable rows={trashedRows} showFichaLink={false} />
+              <AdminProjectsTable rows={trashedRows} variant="trashed" />
             </section>
           ) : null}
         </>
