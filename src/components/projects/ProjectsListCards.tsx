@@ -35,7 +35,16 @@ function StatusBadge({ badgeKey }: { badgeKey: string }) {
   );
 }
 
-function CardBody({ project, showBadge = false }: { project: ProjectListRow; showBadge?: boolean }) {
+function CardBody({
+  project,
+  showBadge = false,
+  /** En papelera: no mostrar «Abrir» (no hay ficha hasta restaurar). */
+  trashed = false,
+}: {
+  project: ProjectListRow;
+  showBadge?: boolean;
+  trashed?: boolean;
+}) {
   const goal = project.primary_goal ? GOAL_CONFIG[project.primary_goal] : null;
   const stripColor = goal?.color || 'bg-surface-900';
 
@@ -93,6 +102,10 @@ function CardBody({ project, showBadge = false }: { project: ProjectListRow; sho
           </p>
           {showBadge ? (
             <StatusBadge badgeKey={project.listBadgeStatus} />
+          ) : trashed ? (
+            <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider shrink-0">
+              Archivado
+            </span>
           ) : (
             <span className="text-[10px] font-bold text-surface-900 uppercase tracking-wider group-hover:text-brand-600 transition-colors">
               Abrir →
@@ -118,10 +131,6 @@ export default function ProjectsListCards({
   /** Un solo proyecto en la cuenta y está activo: no permitir archivarlo (evita quedar solo con papelera). */
   const soleActiveProjectLocked =
     activeProjects.length === 1 && trashedProjects.length === 0;
-  /** Un solo proyecto en la cuenta y está en papelera: priorizar restaurar; borrado definitivo solo bajo desplegable. */
-  const soleTrashedProjectOnly =
-    activeProjects.length === 0 && trashedProjects.length === 1;
-
   async function patchProject(id: string, body: Record<string, unknown>) {
     const res = await fetch('/api/projects', {
       method: 'PATCH',
@@ -246,55 +255,29 @@ export default function ProjectsListCards({
             {trashedProjects.map((project) => (
               <div
                 key={project.id}
-                className="bg-surface-50 border-2 border-dashed border-surface-900 overflow-hidden opacity-70 hover:opacity-100 transition-opacity"
+                className="bg-surface-50 border-2 border-dashed border-surface-900 opacity-80 hover:opacity-100 transition-opacity flex flex-col min-h-0"
               >
-                <CardBody project={project} />
-                {soleTrashedProjectOnly ? (
-                  <div className="border-t-2 border-surface-300 bg-surface-100/80">
-                    <button
-                      type="button"
-                      disabled={loadingId === project.id}
-                      onClick={() => restore(project.id)}
-                      className="w-full py-3 text-[11px] font-bold uppercase tracking-wider text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50"
-                    >
-                      Restaurar proyecto
-                    </button>
-                    <details className="group border-t border-surface-300">
-                      <summary className="cursor-pointer list-none py-2 text-center text-[9px] font-bold uppercase tracking-wider text-surface-500 hover:text-surface-800 marker:content-none [&::-webkit-details-marker]:hidden">
-                        <span className="underline decoration-dotted">Opciones avanzadas</span>
-                      </summary>
-                      <div className="px-3 pb-3">
-                        <button
-                          type="button"
-                          disabled={loadingId === project.id}
-                          onClick={() => permanentDelete(project.id)}
-                          className="w-full py-2 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 border-2 border-surface-300 transition-colors disabled:opacity-50"
-                        >
-                          Eliminar definitivamente
-                        </button>
-                      </div>
-                    </details>
-                  </div>
-                ) : (
-                  <div className="flex border-t-2 border-surface-300">
-                    <button
-                      type="button"
-                      disabled={loadingId === project.id}
-                      onClick={() => restore(project.id)}
-                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50 border-r border-surface-300"
-                    >
-                      Restaurar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={loadingId === project.id}
-                      onClick={() => permanentDelete(project.id)}
-                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                )}
+                <div className="flex-1 min-h-0">
+                  <CardBody project={project} trashed />
+                </div>
+                <div className="flex flex-col sm:flex-row border-t-2 border-surface-900 shrink-0 bg-surface-100">
+                  <button
+                    type="button"
+                    disabled={loadingId === project.id}
+                    onClick={() => restore(project.id)}
+                    className="flex-1 py-3 sm:py-3.5 text-[11px] font-bold uppercase tracking-wider text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50 border-b sm:border-b-0 sm:border-r-2 border-surface-300"
+                  >
+                    Restaurar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loadingId === project.id}
+                    onClick={() => permanentDelete(project.id)}
+                    className="flex-1 py-3 sm:py-3.5 text-[11px] font-bold uppercase tracking-wider text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                  >
+                    Eliminar definitivamente
+                  </button>
+                </div>
               </div>
             ))}
           </div>
