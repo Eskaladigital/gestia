@@ -65,6 +65,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
+  const [flipHorizontalByVisualId, setFlipHorizontalByVisualId] = useState<Record<string, boolean>>({});
   const supabase = createClient();
 
   useEffect(() => {
@@ -437,22 +438,43 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                   const hasError = visual.image_status === 'error';
                   return (
                     <div key={visual.id} className="border border-surface-200 rounded-xl overflow-hidden">
-                      <div className="flex items-center justify-between bg-surface-50 px-3 py-2 border-b border-surface-200">
+                      <div className="flex items-center justify-between gap-2 bg-surface-50 px-3 py-2 border-b border-surface-200 flex-wrap">
                         <span className="text-xs font-bold text-surface-700 uppercase tracking-wider">
                           {visual.label || `Visual ${visual.visual_index + 1}`}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => setImageGenQueue([{ visualId: visual.id, contentItemId: item.id, label: visual.label || `Visual ${visual.visual_index + 1}` }])}
-                          disabled={!!imageGenQueue}
-                          className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait ${
-                            hasImage
-                              ? 'bg-violet-600 text-white hover:bg-violet-700'
-                              : 'bg-brand-600 text-white hover:bg-brand-700'
-                          }`}
-                        >
-                          {hasImage ? 'Regenerar imagen' : 'Generar imagen'}
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setImageGenQueue([{ visualId: visual.id, contentItemId: item.id, label: visual.label || `Visual ${visual.visual_index + 1}` }])}
+                            disabled={!!imageGenQueue}
+                            className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-wait ${
+                              hasImage
+                                ? 'bg-violet-600 text-white hover:bg-violet-700'
+                                : 'bg-brand-600 text-white hover:bg-brand-700'
+                            }`}
+                          >
+                            {hasImage ? 'Regenerar imagen' : 'Generar imagen'}
+                          </button>
+                          {hasImage && (
+                            <button
+                              type="button"
+                              title="Voltear horizontal (espejo)"
+                              onClick={() =>
+                                setFlipHorizontalByVisualId(prev => ({
+                                  ...prev,
+                                  [visual.id]: !prev[visual.id],
+                                }))
+                              }
+                              className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-surface-300 transition-colors ${
+                                flipHorizontalByVisualId[visual.id]
+                                  ? 'bg-amber-100 text-amber-900 border-amber-400'
+                                  : 'bg-white text-surface-800 hover:bg-surface-100'
+                              }`}
+                            >
+                              Espejo
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {hasError && (
@@ -463,11 +485,11 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
 
                       {hasImage && (
                         <div className="p-3 bg-white">
-                          <div className="relative group">
+                          <div className="relative group overflow-hidden rounded-lg">
                             <img
                               src={visual.image_url!}
                               alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                              className="w-full max-h-[280px] object-cover rounded-lg border border-surface-200"
+                              className={`w-full max-h-[280px] object-cover rounded-lg border border-surface-200 ${flipHorizontalByVisualId[visual.id] ? '-scale-x-100' : ''}`}
                               loading="lazy"
                             />
                             <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">

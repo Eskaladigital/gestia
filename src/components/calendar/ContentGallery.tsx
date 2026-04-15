@@ -78,8 +78,10 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{ url: string; filename: string } | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; filename: string; visualId: string | null } | null>(null);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  /** Vista previa: espejo horizontal por visual (no persiste en servidor). */
+  const [flipHorizontalByVisualId, setFlipHorizontalByVisualId] = useState<Record<string, boolean>>({});
 
   const itemsWithBriefs = useMemo(() => items.filter(i => i.visual_prompt?.trim()), [items]);
 
@@ -508,13 +510,32 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                   {hasImage ? 'Regenerar' : 'Generar'}
                                 </button>
                                 {hasImage && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDownload(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
-                                    className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
-                                  >
-                                    Descargar
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      title="Voltear horizontal (espejo)"
+                                      onClick={() =>
+                                        setFlipHorizontalByVisualId(prev => ({
+                                          ...prev,
+                                          [visual.id]: !prev[visual.id],
+                                        }))
+                                      }
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                        flipHorizontalByVisualId[visual.id]
+                                          ? 'bg-amber-500 text-surface-900'
+                                          : 'bg-white text-surface-900 hover:bg-surface-100'
+                                      }`}
+                                    >
+                                      Espejo
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownload(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
+                                      className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                                    >
+                                      Descargar
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -522,13 +543,19 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                             {/* Image area */}
                             {hasImage ? (
                               <div
-                                className="relative cursor-pointer group"
-                                onClick={() => setLightbox({ url: visual.image_url!, filename: buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label) })}
+                                className="relative cursor-pointer group overflow-hidden"
+                                onClick={() =>
+                                  setLightbox({
+                                    url: visual.image_url!,
+                                    filename: buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                    visualId: visual.id,
+                                  })
+                                }
                               >
                                 <img
                                   src={visual.image_url!}
                                   alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                  className="w-full aspect-[3/2] object-cover"
+                                  className={`w-full aspect-[3/2] object-cover ${flipHorizontalByVisualId[visual.id] ? '-scale-x-100' : ''}`}
                                   loading="lazy"
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -627,9 +654,30 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
             <img
               src={lightbox.url}
               alt="Vista ampliada"
-              className="w-full h-auto max-h-[85vh] object-contain border-4 border-white"
+              className={`w-full h-auto max-h-[85vh] object-contain border-4 border-white ${
+                lightbox.visualId && flipHorizontalByVisualId[lightbox.visualId] ? '-scale-x-100' : ''
+              }`}
             />
             <div className="absolute top-3 right-3 flex gap-2">
+              {lightbox.visualId && (
+                <button
+                  type="button"
+                  title="Voltear horizontal (espejo)"
+                  onClick={() =>
+                    setFlipHorizontalByVisualId(prev => ({
+                      ...prev,
+                      [lightbox.visualId!]: !prev[lightbox.visualId!],
+                    }))
+                  }
+                  className={`text-xs font-bold uppercase tracking-wider border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                    flipHorizontalByVisualId[lightbox.visualId]
+                      ? 'bg-amber-500 text-surface-900'
+                      : 'bg-white text-surface-900'
+                  }`}
+                >
+                  Espejo
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => handleDownload(lightbox.url, lightbox.filename)}

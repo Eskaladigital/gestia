@@ -103,6 +103,8 @@ export function CalendarTable({
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
+  /** Vista previa: espejo horizontal por visual (no persiste en servidor). */
+  const [flipHorizontalByVisualId, setFlipHorizontalByVisualId] = useState<Record<string, boolean>>({});
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const router = useRouter();
   const supabase = createClient();
@@ -507,16 +509,35 @@ export function CalendarTable({
                                           >
                                             {hasImage ? 'Regenerar' : '🖼️ Generar imagen'}
                                           </button>
+                                          {hasImage && (
+                                            <button
+                                              type="button"
+                                              title="Voltear horizontal (espejo)"
+                                              onClick={() =>
+                                                setFlipHorizontalByVisualId(prev => ({
+                                                  ...prev,
+                                                  [visual.id]: !prev[visual.id],
+                                                }))
+                                              }
+                                              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                                flipHorizontalByVisualId[visual.id]
+                                                  ? 'bg-amber-500 text-surface-900'
+                                                  : 'bg-white text-surface-900 hover:bg-surface-100'
+                                              }`}
+                                            >
+                                              Espejo
+                                            </button>
+                                          )}
                                         </div>
                                       </div>
 
                                       {hasImage && (
                                         <div className="bg-surface-50 border-b-2 border-surface-900 p-3">
-                                          <div className="relative group">
+                                          <div className="relative group overflow-hidden">
                                             <img
                                               src={visual.image_url!}
                                               alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                              className="w-full max-h-[300px] object-cover border-2 border-surface-200"
+                                              className={`w-full max-h-[300px] object-cover border-2 border-surface-200 ${flipHorizontalByVisualId[visual.id] ? '-scale-x-100' : ''}`}
                                               loading="lazy"
                                             />
                                             <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
