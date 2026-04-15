@@ -150,9 +150,14 @@ export async function POST(request: NextRequest) {
 
     const businessAnalysis = existingStrategy
       ? JSON.stringify({
+          detailed_business_description: existingStrategy.detailed_business_description || null,
           value_proposition: existingStrategy.value_proposition,
           target_audience: existingStrategy.target_audience,
           positioning: existingStrategy.positioning,
+          brand_personality: existingStrategy.brand_personality || null,
+          key_services: existingStrategy.key_services || null,
+          unique_selling_points: existingStrategy.unique_selling_points || null,
+          content_opportunities: existingStrategy.content_opportunities || null,
           web_site_analysis: existingStrategy.web_site_analysis || null,
         })
       : 'No hay análisis de negocio disponible. Genera uno basándote en los datos del proyecto.';

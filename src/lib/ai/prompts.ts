@@ -367,25 +367,73 @@ Si la evidencia es débil, dilo con claridad en vez de completar huecos.`,
 // 3. PROMPT: Generación de estrategia
 // ============================================================
 
+function buildBrandDnaForStrategy(project: Project): string {
+  const parts: string[] = [];
+
+  if (project.brand_summary?.trim()) {
+    parts.push(`RESUMEN DE MARCA: ${project.brand_summary.trim()}`);
+  }
+
+  const detail = project.brand_identity_detail;
+  if (detail) {
+    if (detail.brand_feel_keywords?.length) {
+      parts.push(`SENSACIÓN DE MARCA (keywords): ${detail.brand_feel_keywords.join(', ')}`);
+    }
+    if (detail.imagery_iconography?.trim()) {
+      parts.push(`ESTILO VISUAL/FOTOGRÁFICO: ${detail.imagery_iconography.trim()}`);
+    }
+    if (detail.dos?.length) {
+      parts.push(`HACER (identidad visual): ${detail.dos.join(' | ')}`);
+    }
+    if (detail.donts?.length) {
+      parts.push(`NO HACER (identidad visual): ${detail.donts.join(' | ')}`);
+    }
+  }
+
+  if (project.brand_colors?.length) {
+    const heroColors = project.brand_colors
+      .filter(c => ['primary', 'secondary', 'accent'].includes(c.usage))
+      .map(c => `${c.name} (${c.hex}, ${c.usage})`);
+    if (heroColors.length) {
+      parts.push(`COLORES CLAVE: ${heroColors.join(', ')}`);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n') : '';
+}
+
 export function buildStrategyPrompt(
   project: Project,
   businessAnalysis: string,
   competitorAnalysis: string
 ): { system: string; user: string } {
+  const brandDna = buildBrandDnaForStrategy(project);
+
   return {
-    system: `Eres un director de estrategia de contenido para redes sociales. Combinas visión de marca, enfoque editorial y criterio comercial.
+    system: `Eres un director de estrategia de contenido para redes sociales de alto nivel. Combinas visión de marca, enfoque editorial, criterio comercial y sensibilidad estética.
 
-Tu tarea es crear una estrategia práctica y de alta calidad para este proyecto, usando solo los campos que la aplicación realmente va a reutilizar después.
+Tu tarea es crear una estrategia ÚNICA Y DIFERENCIADA para este proyecto concreto. Si la estrategia podría servir para cualquier otra marca del mismo sector, has fracasado.
 
-REGLAS CRÍTICAS:
+═══════════════════════════════════════════
+REGLAS DE PRIORIDAD (orden descendente)
+═══════════════════════════════════════════
+1. REGLAS IA DEL PROYECTO — si el usuario las definió, son ley absoluta.
+2. TONO DEL PROYECTO (sliders) — el usuario los ajustó manualmente; tus "tone_guidelines" DEBEN ser coherentes con ellos, no contradecirlos. Si el slider dice "muy informal (20/100)", tu guía de tono NO puede recomendar un estilo corporativo.
+3. IDENTIDAD VISUAL / ADN DE MARCA — la estrategia debe sentirse como una extensión natural de la personalidad visual detectada. Los pilares y líneas temáticas deben encajar con las keywords de sensación de marca.
+4. ANÁLISIS DEL NEGOCIO — los pilares deben explotar las fortalezas reales (key_services, unique_selling_points) y atacar las oportunidades de contenido identificadas.
+5. ANÁLISIS COMPETITIVO — al menos 1 pilar debe abordar directamente un hueco o debilidad detectada en la competencia. Las "thematic_lines" deben evitar lo que la competencia ya hace bien y explotar lo que hace mal.
+
+═══════════════════════════════════════════
+REGLAS TÉCNICAS
+═══════════════════════════════════════════
 - Respeta ESTRICTAMENTE tono, estilo, complejidad, frecuencia y distribución de formatos configurados.
 - Los pilares deben reflejar los pesos de estilo de contenido y explicar qué rol juega cada pilar.
 - Devuelve entre 3 y 5 pilares de contenido.
 - La suma de "percentage" en "content_pillars" debe ser exactamente 100.
-- "content_types" y "example_topics" deben ser concretos, variados y útiles para generar calendario después.
-- "tone_guidelines" debe incluir qué hacer, qué evitar y cómo suena la marca en términos editoriales.
-- "thematic_lines" debe aportar líneas de trabajo sostenibles, no etiquetas vacías.
-- "recommendations" debe recoger prioridades, riesgos, experimentos razonables y enfoque de ejecución.
+- "content_types" y "example_topics" deben ser concretos, variados y útiles para generar calendario después. PROHIBIDO: temas genéricos aplicables a cualquier marca.
+- "tone_guidelines" debe ser una EXTENSIÓN FIEL de los sliders de tono del usuario. Incluye qué hacer, qué evitar, cómo suena la marca, y referencia explícita al ADN visual (ej. "usar lenguaje tan directo como los colores primarios de la marca").
+- "thematic_lines" debe aportar líneas de trabajo sostenibles y diferenciadas. Cada línea debe justificarse por una fortaleza del negocio o un gap de la competencia.
+- "recommendations" debe recoger prioridades, riesgos, experimentos razonables y enfoque de ejecución. Incluye al menos 1 recomendación sobre cómo explotar una debilidad concreta de un competidor.
 - No incluyas campos fuera del esquema.
 - Responde en español.
 - Devuelve SOLO JSON válido, sin texto adicional.
@@ -395,34 +443,38 @@ FORMATO DE RESPUESTA JSON:
   "content_pillars": [
     {
       "name": "Nombre del pilar",
-      "description": "Descripción del pilar",
+      "description": "Descripción del pilar (incluye POR QUÉ existe: qué fortaleza explota o qué gap cubre)",
       "percentage": 30,
       "content_types": ["tipo1", "tipo2"],
       "example_topics": ["tema1", "tema2", "tema3"]
     }
   ],
-  "tone_guidelines": "Guías detalladas de tono y voz para el contenido",
+  "tone_guidelines": "Guías detalladas de tono y voz COHERENTES con los sliders del usuario y el ADN de marca",
   "thematic_lines": [
     {
       "theme": "Línea temática",
-      "description": "Descripción",
+      "description": "Descripción (incluye qué oportunidad o gap del mercado justifica esta línea)",
       "frequency": "semanal|quincenal|mensual",
       "example_topics": ["tema1", "tema2"]
     }
   ],
-  "recommendations": "Recomendaciones adicionales y próximos pasos"
+  "recommendations": "Recomendaciones con acciones concretas vinculadas a debilidades de la competencia y fortalezas del negocio"
 }`,
     user: `Crea una estrategia de contenido para redes sociales:
 
 ${buildProjectContext(project, { includeAiRules: true })}
-
+${brandDna ? `\n## ADN VISUAL / IDENTIDAD DE MARCA\n${brandDna}\n` : ''}
 ## ANÁLISIS DEL NEGOCIO
 ${businessAnalysis}
 
 ## ANÁLISIS COMPETITIVO
 ${competitorAnalysis}
 
-Genera una estrategia que sea coherente con todos los parámetros definidos, especialmente los tonos y pesos de estilo de contenido.`,
+INSTRUCCIONES FINALES:
+- Cada pilar de contenido debe justificarse por una fortaleza del negocio, una oportunidad de contenido detectada, o un gap/debilidad de la competencia. Si no puedes justificarlo, no lo incluyas.
+- Las "tone_guidelines" DEBEN ser coherentes con los sliders de tono que el usuario configuró arriba. NO los contradigas.
+- Al menos 1 pilar debe atacar directamente algo que la competencia hace mal o no cubre.
+- Los "example_topics" deben ser tan específicos que solo sirvan para ESTA marca, no para otra del mismo sector.`,
   };
 }
 
