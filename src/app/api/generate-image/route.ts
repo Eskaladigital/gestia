@@ -230,6 +230,7 @@ export async function POST(request: NextRequest) {
         image_url: imageUrl,
         image_status: 'ready',
         image_error: null,
+        image_flip_horizontal: false,
         updated_at: new Date().toISOString(),
       })
       .eq('id', visual_id);

@@ -392,6 +392,8 @@ export interface ContentItemVisual {
   image_url: string | null;
   image_status: ImageGenerationStatus;
   image_error: string | null;
+  /** Espejo horizontal guardado en BD (vista y descargas). */
+  image_flip_horizontal?: boolean;
   created_at: string;
   updated_at: string;
 }

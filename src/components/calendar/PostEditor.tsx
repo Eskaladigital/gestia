@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl } from '@/lib/utils';
@@ -66,8 +66,10 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
-  const [flipHorizontalByVisualId, setFlipHorizontalByVisualId] = useState<Record<string, boolean>>({});
   const supabase = createClient();
+
+  const visualsRef = useRef(visuals);
+  visualsRef.current = visuals;
 
   useEffect(() => {
     setIdea(item.idea);
@@ -110,9 +112,33 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
     await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
+  const toggleImageFlipHorizontal = useCallback(
+    async (visualId: string) => {
+      const v = visualsRef.current.find(x => x.id === visualId);
+      if (!v) return;
+      const prevFlip = v.image_flip_horizontal === true;
+      const nextFlip = !prevFlip;
+      setVisuals(prev =>
+        prev.map(x => (x.id === visualId ? { ...x, image_flip_horizontal: nextFlip } : x))
+      );
+      const { error } = await supabase
+        .from('content_item_visuals')
+        .update({ image_flip_horizontal: nextFlip, updated_at: new Date().toISOString() })
+        .eq('id', visualId);
+      if (error) {
+        setVisuals(prev =>
+          prev.map(x => (x.id === visualId ? { ...x, image_flip_horizontal: prevFlip } : x))
+        );
+      }
+    },
+    [supabase],
+  );
+
   const handleImageReady = useCallback((visualId: string, _contentItemId: string, imageUrl: string) => {
     setVisuals(prev => prev.map(v =>
-      v.id === visualId ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null } : v
+      v.id === visualId
+        ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null, image_flip_horizontal: false }
+        : v
     ));
   }, []);
 
@@ -446,15 +472,10 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                           {hasImage && (
                             <button
                               type="button"
-                              title="Voltear horizontal (espejo)"
-                              onClick={() =>
-                                setFlipHorizontalByVisualId(prev => ({
-                                  ...prev,
-                                  [visual.id]: !prev[visual.id],
-                                }))
-                              }
+                              title="Voltear horizontal (espejo) — se guarda en el proyecto"
+                              onClick={() => void toggleImageFlipHorizontal(visual.id)}
                               className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-surface-300 transition-colors ${
-                                flipHorizontalByVisualId[visual.id]
+                                visual.image_flip_horizontal === true
                                   ? 'bg-amber-100 text-amber-900 border-amber-400'
                                   : 'bg-white text-surface-800 hover:bg-surface-100'
                               }`}
@@ -477,7 +498,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                             <img
                               src={visual.image_url!}
                               alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                              className={`w-full max-h-[280px] object-cover rounded-lg border border-surface-200 ${flipHorizontalByVisualId[visual.id] ? '-scale-x-100' : ''}`}
+                              className={`w-full max-h-[280px] object-cover rounded-lg border border-surface-200 ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
                               loading="lazy"
                             />
                             <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -495,7 +516,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                                   handleDownloadImage(
                                     visual.image_url!,
                                     buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                    flipHorizontalByVisualId[visual.id],
+                                    visual.image_flip_horizontal === true,
                                   )
                                 }
                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"

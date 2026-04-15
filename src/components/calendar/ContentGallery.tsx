@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl, imageBlobFlippedHorizontally } from '@/lib/utils';
@@ -79,10 +79,16 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{ url: string; filename: string; visualId: string | null } | null>(null);
+  const [lightbox, setLightbox] = useState<{
+    url: string;
+    filename: string;
+    visualId: string;
+    contentItemId: string;
+  } | null>(null);
   const [downloadingZip, setDownloadingZip] = useState(false);
-  /** Vista previa: espejo horizontal por visual (no persiste en servidor). */
-  const [flipHorizontalByVisualId, setFlipHorizontalByVisualId] = useState<Record<string, boolean>>({});
+
+  const visualsMapRef = useRef(visualsMap);
+  visualsMapRef.current = visualsMap;
 
   const itemsWithBriefs = useMemo(() => items.filter(i => i.visual_prompt?.trim()), [items]);
 
@@ -150,6 +156,43 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
     await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
+  const toggleImageFlipHorizontal = useCallback(
+    async (visualId: string, contentItemId: string) => {
+      const list = visualsMapRef.current[contentItemId];
+      const v = list?.find(x => x.id === visualId);
+      if (!v) return;
+      const prevFlip = v.image_flip_horizontal === true;
+      const nextFlip = !prevFlip;
+      setVisualsMap(prev => {
+        const L = prev[contentItemId];
+        if (!L) return prev;
+        return {
+          ...prev,
+          [contentItemId]: L.map(x =>
+            x.id === visualId ? { ...x, image_flip_horizontal: nextFlip } : x
+          ),
+        };
+      });
+      const { error } = await supabase
+        .from('content_item_visuals')
+        .update({ image_flip_horizontal: nextFlip, updated_at: new Date().toISOString() })
+        .eq('id', visualId);
+      if (error) {
+        setVisualsMap(prev => {
+          const L = prev[contentItemId];
+          if (!L) return prev;
+          return {
+            ...prev,
+            [contentItemId]: L.map(x =>
+              x.id === visualId ? { ...x, image_flip_horizontal: prevFlip } : x
+            ),
+          };
+        });
+      }
+    },
+    [supabase],
+  );
+
   const handleImageReady = useCallback((visualId: string, contentItemId: string, imageUrl: string) => {
     setVisualsMap(prev => {
       const list = prev[contentItemId];
@@ -157,7 +200,9 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
       return {
         ...prev,
         [contentItemId]: list.map(v =>
-          v.id === visualId ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null } : v
+          v.id === visualId
+            ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null, image_flip_horizontal: false }
+            : v
         ),
       };
     });
@@ -261,7 +306,7 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
         try {
           const res = await fetch(visual.image_url!);
           let blob = await res.blob();
-          if (flipHorizontalByVisualId[visual.id]) {
+          if (visual.image_flip_horizontal === true) {
             const flipped = await imageBlobFlippedHorizontally(blob);
             if (flipped) blob = flipped;
           }
@@ -283,7 +328,13 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
     } finally {
       setDownloadingZip(false);
     }
-  }, [visualsMap, itemsById, projectId, flipHorizontalByVisualId]);
+  }, [visualsMap, itemsById, projectId]);
+
+  const lightboxVisual = useMemo(() => {
+    if (!lightbox) return null;
+    const row = visualsMap[lightbox.contentItemId];
+    return row?.find(v => v.id === lightbox.visualId) ?? null;
+  }, [lightbox, visualsMap]);
 
   if (loading) {
     return (
@@ -505,15 +556,10 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                   <>
                                     <button
                                       type="button"
-                                      title="Voltear horizontal (espejo)"
-                                      onClick={() =>
-                                        setFlipHorizontalByVisualId(prev => ({
-                                          ...prev,
-                                          [visual.id]: !prev[visual.id],
-                                        }))
-                                      }
+                                      title="Voltear horizontal (espejo) — se guarda en el proyecto"
+                                      onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
                                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                        flipHorizontalByVisualId[visual.id]
+                                        visual.image_flip_horizontal === true
                                           ? 'bg-amber-500 text-surface-900'
                                           : 'bg-white text-surface-900 hover:bg-surface-100'
                                       }`}
@@ -526,7 +572,7 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                         handleDownload(
                                           visual.image_url!,
                                           buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                          flipHorizontalByVisualId[visual.id],
+                                          visual.image_flip_horizontal === true,
                                         )
                                       }
                                       className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
@@ -547,13 +593,14 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                     url: visual.image_url!,
                                     filename: buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
                                     visualId: visual.id,
+                                    contentItemId: item.id,
                                   })
                                 }
                               >
                                 <img
                                   src={visual.image_url!}
                                   alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                  className={`w-full aspect-[3/2] object-cover ${flipHorizontalByVisualId[visual.id] ? '-scale-x-100' : ''}`}
+                                  className={`w-full aspect-[3/2] object-cover ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
                                   loading="lazy"
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -653,36 +700,29 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
               src={lightbox.url}
               alt="Vista ampliada"
               className={`w-full h-auto max-h-[85vh] object-contain border-4 border-white ${
-                lightbox.visualId && flipHorizontalByVisualId[lightbox.visualId] ? '-scale-x-100' : ''
+                lightboxVisual?.image_flip_horizontal === true ? '-scale-x-100' : ''
               }`}
             />
             <div className="absolute top-3 right-3 flex gap-2">
-              {lightbox.visualId && (
-                <button
-                  type="button"
-                  title="Voltear horizontal (espejo)"
-                  onClick={() =>
-                    setFlipHorizontalByVisualId(prev => ({
-                      ...prev,
-                      [lightbox.visualId!]: !prev[lightbox.visualId!],
-                    }))
-                  }
-                  className={`text-xs font-bold uppercase tracking-wider border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                    flipHorizontalByVisualId[lightbox.visualId]
-                      ? 'bg-amber-500 text-surface-900'
-                      : 'bg-white text-surface-900'
-                  }`}
-                >
-                  Espejo
-                </button>
-              )}
+              <button
+                type="button"
+                title="Voltear horizontal (espejo) — se guarda en el proyecto"
+                onClick={() => void toggleImageFlipHorizontal(lightbox.visualId, lightbox.contentItemId)}
+                className={`text-xs font-bold uppercase tracking-wider border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                  lightboxVisual?.image_flip_horizontal === true
+                    ? 'bg-amber-500 text-surface-900'
+                    : 'bg-white text-surface-900'
+                }`}
+              >
+                Espejo
+              </button>
               <button
                 type="button"
                 onClick={() =>
-                  handleDownload(
+                  void handleDownload(
                     lightbox.url,
                     lightbox.filename,
-                    !!(lightbox.visualId && flipHorizontalByVisualId[lightbox.visualId]),
+                    lightboxVisual?.image_flip_horizontal === true,
                   )
                 }
                 className="text-xs font-bold uppercase tracking-wider bg-white text-surface-900 border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"

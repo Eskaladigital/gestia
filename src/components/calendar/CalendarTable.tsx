@@ -104,11 +104,12 @@ export function CalendarTable({
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
-  /** Vista previa: espejo horizontal por visual (no persiste en servidor). */
-  const [flipHorizontalByVisualId, setFlipHorizontalByVisualId] = useState<Record<string, boolean>>({});
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const router = useRouter();
   const supabase = createClient();
+
+  const visualsCacheRef = useRef(visualsCache);
+  visualsCacheRef.current = visualsCache;
 
   const fetchVisuals = useCallback(async (contentItemId: string) => {
     if (visualsCache[contentItemId]) return;
@@ -145,6 +146,43 @@ export function CalendarTable({
   const handleDownloadImage = useCallback(async (url: string, filename: string, flipHorizontal?: boolean) => {
     await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
+
+  const toggleImageFlipHorizontal = useCallback(
+    async (visualId: string, contentItemId: string) => {
+      const list = visualsCacheRef.current[contentItemId];
+      const v = list?.find(x => x.id === visualId);
+      if (!v) return;
+      const prevFlip = v.image_flip_horizontal === true;
+      const nextFlip = !prevFlip;
+      setVisualsCache(prev => {
+        const L = prev[contentItemId];
+        if (!L) return prev;
+        return {
+          ...prev,
+          [contentItemId]: L.map(x =>
+            x.id === visualId ? { ...x, image_flip_horizontal: nextFlip } : x
+          ),
+        };
+      });
+      const { error } = await supabase
+        .from('content_item_visuals')
+        .update({ image_flip_horizontal: nextFlip, updated_at: new Date().toISOString() })
+        .eq('id', visualId);
+      if (error) {
+        setVisualsCache(prev => {
+          const L = prev[contentItemId];
+          if (!L) return prev;
+          return {
+            ...prev,
+            [contentItemId]: L.map(x =>
+              x.id === visualId ? { ...x, image_flip_horizontal: prevFlip } : x
+            ),
+          };
+        });
+      }
+    },
+    [supabase],
+  );
 
   const startEditPrompt = useCallback((visual: ContentItemVisual) => {
     setEditingPromptId(visual.id);
@@ -188,7 +226,9 @@ export function CalendarTable({
       return {
         ...prev,
         [contentItemId]: list.map(v =>
-          v.id === visualId ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null } : v
+          v.id === visualId
+            ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null, image_flip_horizontal: false }
+            : v
         ),
       };
     });
@@ -500,15 +540,10 @@ export function CalendarTable({
                                           {hasImage && (
                                             <button
                                               type="button"
-                                              title="Voltear horizontal (espejo)"
-                                              onClick={() =>
-                                                setFlipHorizontalByVisualId(prev => ({
-                                                  ...prev,
-                                                  [visual.id]: !prev[visual.id],
-                                                }))
-                                              }
+                                              title="Voltear horizontal (espejo) — se guarda en el proyecto"
+                                              onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
                                               className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                                flipHorizontalByVisualId[visual.id]
+                                                visual.image_flip_horizontal === true
                                                   ? 'bg-amber-500 text-surface-900'
                                                   : 'bg-white text-surface-900 hover:bg-surface-100'
                                               }`}
@@ -525,7 +560,7 @@ export function CalendarTable({
                                             <img
                                               src={visual.image_url!}
                                               alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                              className={`w-full max-h-[300px] object-cover border-2 border-surface-200 ${flipHorizontalByVisualId[visual.id] ? '-scale-x-100' : ''}`}
+                                              className={`w-full max-h-[300px] object-cover border-2 border-surface-200 ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
                                               loading="lazy"
                                             />
                                             <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -543,7 +578,7 @@ export function CalendarTable({
                                                   handleDownloadImage(
                                                     visual.image_url!,
                                                     buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                                    flipHorizontalByVisualId[visual.id],
+                                                    visual.image_flip_horizontal === true,
                                                   )
                                                 }
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
