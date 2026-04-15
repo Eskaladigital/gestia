@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, type ReactNode } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 import type { BrandColorEntry, BrandFontEntry, BrandIdentityDetail } from '@/types';
 
 /** Imagen con ocultación en error; solo usable en componentes cliente o importada desde ellos. */
@@ -38,6 +40,8 @@ interface BrandCardProps {
   /** Si true, no se muestra el botón propio: el análisis de marca va en el flujo «Análisis base completo». */
   manualAnalyzeDisabled?: boolean;
 }
+
+const inputClass = 'w-full px-3 py-2 border-2 border-surface-900 bg-white text-surface-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500';
 
 function DetailAccordion({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -151,6 +155,159 @@ const USAGE_ORDER: Record<string, number> = {
   background: 4,
 };
 
+function BrandCardEditForm({
+  localData,
+  setLocalData,
+  onSave,
+  onCancel,
+  saving
+}: {
+  localData: any;
+  setLocalData: (d: any) => void;
+  onSave: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const updateSummary = (val: string) => setLocalData({ ...localData, brandSummary: val });
+  
+  const addColor = () => setLocalData({
+    ...localData,
+    brandColors: [...localData.brandColors, { name: '', hex: '', usage: 'primary', notes: '' }]
+  });
+  const updateColor = (idx: number, field: string, val: string) => {
+    const newColors = [...localData.brandColors];
+    newColors[idx] = { ...newColors[idx], [field]: val };
+    setLocalData({ ...localData, brandColors: newColors });
+  };
+  const removeColor = (idx: number) => {
+    const newColors = [...localData.brandColors];
+    newColors.splice(idx, 1);
+    setLocalData({ ...localData, brandColors: newColors });
+  };
+
+  const addFont = () => setLocalData({
+    ...localData,
+    brandFonts: [...localData.brandFonts, { name: '', usage: 'primary', weights: '' }]
+  });
+  const updateFont = (idx: number, field: string, val: string) => {
+    const newFonts = [...localData.brandFonts];
+    newFonts[idx] = { ...newFonts[idx], [field]: val };
+    setLocalData({ ...localData, brandFonts: newFonts });
+  };
+  const removeFont = (idx: number) => {
+    const newFonts = [...localData.brandFonts];
+    newFonts.splice(idx, 1);
+    setLocalData({ ...localData, brandFonts: newFonts });
+  };
+
+  const updateKeywords = (val: string) => {
+    const arr = val.split(',').map(s => s.trim()).filter(Boolean);
+    setLocalData({
+      ...localData,
+      brandIdentityDetail: {
+        ...(localData.brandIdentityDetail || {}),
+        brand_feel_keywords: arr
+      }
+    });
+  };
+
+  return (
+    <form onSubmit={onSave} className="p-6 space-y-8 bg-surface-50">
+      <div>
+        <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider mb-2">Resumen de marca</label>
+        <textarea
+          value={localData.brandSummary || ''}
+          onChange={e => updateSummary(e.target.value)}
+          rows={3}
+          className={inputClass}
+          placeholder="Ej: Somos una marca joven y dinámica..."
+        />
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider">Colores corporativos</label>
+          <button type="button" onClick={addColor} className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white px-3 py-1 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all">+ Añadir color</button>
+        </div>
+        <div className="space-y-3">
+          {localData.brandColors.map((c: any, i: number) => (
+            <div key={i} className="flex flex-wrap sm:flex-nowrap items-start gap-2 border-2 border-surface-200 bg-white p-3 relative">
+              <div className="flex-1 min-w-[150px] space-y-1">
+                <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">Nombre</span>
+                <input type="text" value={c.name} onChange={e => updateColor(i, 'name', e.target.value)} className={inputClass} placeholder="Ej: Azul Oscuro" />
+              </div>
+              <div className="w-24 space-y-1">
+                <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">Hex</span>
+                <div className="flex items-center gap-1">
+                  <input type="color" value={c.hex || '#000000'} onChange={e => updateColor(i, 'hex', e.target.value)} className="w-8 h-8 p-0 border-0 shrink-0" />
+                  <input type="text" value={c.hex} onChange={e => updateColor(i, 'hex', e.target.value)} className={inputClass} placeholder="#000000" />
+                </div>
+              </div>
+              <div className="w-32 space-y-1">
+                <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">Uso</span>
+                <select value={c.usage} onChange={e => updateColor(i, 'usage', e.target.value)} className={inputClass}>
+                  <option value="primary">Primario</option>
+                  <option value="secondary">Secundario</option>
+                  <option value="accent">Acento</option>
+                  <option value="text">Texto</option>
+                  <option value="background">Fondo</option>
+                </select>
+              </div>
+              <button type="button" onClick={() => removeColor(i)} className="absolute -top-3 -right-3 w-6 h-6 bg-red-100 text-red-600 border-2 border-red-200 rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-200 transition-colors">×</button>
+            </div>
+          ))}
+          {localData.brandColors.length === 0 && <p className="text-xs text-surface-500 italic">No hay colores. Añade uno.</p>}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider">Tipografías</label>
+          <button type="button" onClick={addFont} className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white px-3 py-1 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all">+ Añadir fuente</button>
+        </div>
+        <div className="space-y-3">
+          {localData.brandFonts.map((f: any, i: number) => (
+            <div key={i} className="flex flex-wrap sm:flex-nowrap items-start gap-2 border-2 border-surface-200 bg-white p-3 relative">
+              <div className="flex-1 min-w-[150px] space-y-1">
+                <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">Familia</span>
+                <input type="text" value={f.name} onChange={e => updateFont(i, 'name', e.target.value)} className={inputClass} placeholder="Ej: Inter, serif" />
+              </div>
+              <div className="w-32 space-y-1">
+                <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">Uso</span>
+                <input type="text" value={f.usage} onChange={e => updateFont(i, 'usage', e.target.value)} className={inputClass} placeholder="Ej: Titulares" />
+              </div>
+              <div className="flex-1 min-w-[100px] space-y-1">
+                <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">Pesos (opcional)</span>
+                <input type="text" value={f.weights || ''} onChange={e => updateFont(i, 'weights', e.target.value)} className={inputClass} placeholder="Ej: 400, 700" />
+              </div>
+              <button type="button" onClick={() => removeFont(i)} className="absolute -top-3 -right-3 w-6 h-6 bg-red-100 text-red-600 border-2 border-red-200 rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-200 transition-colors">×</button>
+            </div>
+          ))}
+          {localData.brandFonts.length === 0 && <p className="text-xs text-surface-500 italic">No hay fuentes. Añade una.</p>}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider mb-2">Sensación de marca (Keywords)</label>
+        <input
+          type="text"
+          value={(localData.brandIdentityDetail?.brand_feel_keywords || []).join(', ')}
+          onChange={e => updateKeywords(e.target.value)}
+          className={inputClass}
+          placeholder="Ej: moderno, cercano, profesional (separado por comas)"
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4 border-t-2 border-surface-200">
+        <button type="button" onClick={onCancel} disabled={saving} className="px-4 py-2 text-xs font-bold uppercase tracking-wider border-2 border-surface-900 bg-white text-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50">Cancelar</button>
+        <button type="submit" disabled={saving} className="px-6 py-2 text-xs font-bold uppercase tracking-wider border-2 border-surface-900 bg-brand-600 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50">
+          {saving ? 'Guardando...' : 'Guardar ADN'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function BrandCard({
   projectId,
   projectUrl,
@@ -163,7 +320,11 @@ export function BrandCard({
   brandIdentityDetail = null,
   manualAnalyzeDisabled = false,
 }: BrandCardProps) {
+  const router = useRouter();
+  const supabase = createClient();
   const [analyzing, setAnalyzing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localData, setLocalData] = useState({
     brandColors,
@@ -235,6 +396,31 @@ export function BrandCard({
     return (r * 299 + g * 587 + b * 114) / 1000 > 128 ? '#000000' : '#ffffff';
   }
 
+  async function saveEdits(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const { error: updateErr } = await supabase
+        .from('projects')
+        .update({
+          brand_colors: localData.brandColors,
+          brand_fonts: localData.brandFonts,
+          brand_summary: localData.brandSummary,
+          brand_identity_detail: localData.brandIdentityDetail,
+        })
+        .eq('id', projectId);
+
+      if (updateErr) throw new Error(updateErr.message);
+      setIsEditing(false);
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal overflow-hidden mb-6">
       <div className="flex items-center justify-between px-6 py-4 border-b-2 border-surface-900">
@@ -243,7 +429,7 @@ export function BrandCard({
             <img src={localData.brandFaviconUrl} alt="Favicon" className="w-6 h-6 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
           )}
           <div>
-            <h2 className="font-display font-bold text-surface-900">Identidad visual</h2>
+            <h2 className="font-display font-bold text-surface-900">Identidad visual / ADN</h2>
             {localData.brandAnalyzedAt && (
               <p className="text-[10px] text-surface-400 font-mono uppercase tracking-wider">
                 Analizado {new Date(localData.brandAnalyzedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -251,24 +437,42 @@ export function BrandCard({
             )}
           </div>
         </div>
-        {!manualAnalyzeDisabled ? (
-          <button
-            onClick={analyzeBrand}
-            disabled={analyzing || !projectUrl}
-            className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-150 disabled:opacity-50 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-surface-900"
-          >
-            {analyzing ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin h-3.5 w-3.5 border-2 border-brand-600 border-t-transparent rounded-full" />
-                Analizando...
-              </span>
-            ) : hasData ? (
-              'Re-analizar'
-            ) : (
-              'Analizar marca'
-            )}
-          </button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {!manualAnalyzeDisabled && !isEditing ? (
+            <button
+              onClick={analyzeBrand}
+              disabled={analyzing || !projectUrl}
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-150 disabled:opacity-50 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-surface-900"
+            >
+              {analyzing ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin h-3.5 w-3.5 border-2 border-brand-600 border-t-transparent rounded-full" />
+                  Analizando...
+                </span>
+              ) : hasData ? (
+                'Re-analizar'
+              ) : (
+                'Analizar marca'
+              )}
+            </button>
+          ) : null}
+          {hasData && (
+            <button
+              onClick={() => {
+                if (isEditing) {
+                  setLocalData({ brandColors, brandFonts, brandLogoUrl, brandFaviconUrl, brandSummary, brandAnalyzedAt, brandIdentityDetail });
+                  setIsEditing(false);
+                } else {
+                  setIsEditing(true);
+                }
+              }}
+              disabled={analyzing || saving}
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-150 disabled:opacity-50 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] ${isEditing ? 'bg-surface-100 text-surface-600' : 'bg-surface-900 text-white'}`}
+            >
+              {isEditing ? 'Cancelar' : 'Editar ADN'}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -298,7 +502,19 @@ export function BrandCard({
       )}
 
       {hasData && (
-        <div className="p-6 space-y-5">
+        isEditing ? (
+          <BrandCardEditForm
+            localData={localData}
+            setLocalData={setLocalData}
+            onSave={saveEdits}
+            onCancel={() => {
+              setLocalData({ brandColors, brandFonts, brandLogoUrl, brandFaviconUrl, brandSummary, brandAnalyzedAt, brandIdentityDetail });
+              setIsEditing(false);
+            }}
+            saving={saving}
+          />
+        ) : (
+          <div className="p-6 space-y-5">
           {/* Logo & Summary */}
           <div className="flex items-start gap-5">
             {localData.brandLogoUrl && (
@@ -426,6 +642,7 @@ export function BrandCard({
             <IdentityDetailSections detail={localData.brandIdentityDetail} />
           )}
         </div>
+        )
       )}
     </div>
   );
