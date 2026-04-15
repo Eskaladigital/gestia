@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
+import { downloadImageFromUrl, imageBlobFlippedHorizontally } from '@/lib/utils';
 import type { ContentItem, ContentItemVisual } from '@/types';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { FORMAT_CONFIG, TYPE_LABELS } from './CalendarTable';
@@ -145,21 +146,8 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const handleDownload = useCallback(async (url: string, filename: string) => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      window.open(url, '_blank');
-    }
+  const handleDownload = useCallback(async (url: string, filename: string, flipHorizontal?: boolean) => {
+    await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
   const handleImageReady = useCallback((visualId: string, contentItemId: string, imageUrl: string) => {
@@ -272,7 +260,11 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
 
         try {
           const res = await fetch(visual.image_url!);
-          const blob = await res.blob();
+          let blob = await res.blob();
+          if (flipHorizontalByVisualId[visual.id]) {
+            const flipped = await imageBlobFlippedHorizontally(blob);
+            if (flipped) blob = flipped;
+          }
           zip.file(filename, blob);
         } catch {
           // skip failed downloads
@@ -291,7 +283,7 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
     } finally {
       setDownloadingZip(false);
     }
-  }, [visualsMap, itemsById, projectId]);
+  }, [visualsMap, itemsById, projectId, flipHorizontalByVisualId]);
 
   if (loading) {
     return (
@@ -530,7 +522,13 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleDownload(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
+                                      onClick={() =>
+                                        handleDownload(
+                                          visual.image_url!,
+                                          buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                          flipHorizontalByVisualId[visual.id],
+                                        )
+                                      }
                                       className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                                     >
                                       Descargar
@@ -680,7 +678,13 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
               )}
               <button
                 type="button"
-                onClick={() => handleDownload(lightbox.url, lightbox.filename)}
+                onClick={() =>
+                  handleDownload(
+                    lightbox.url,
+                    lightbox.filename,
+                    !!(lightbox.visualId && flipHorizontalByVisualId[lightbox.visualId]),
+                  )
+                }
                 className="text-xs font-bold uppercase tracking-wider bg-white text-surface-900 border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
               >
                 Descargar

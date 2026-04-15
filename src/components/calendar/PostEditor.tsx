@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual } from '@/types';
 import { createClient } from '@/lib/supabase/client';
+import { downloadImageFromUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { buildImageFilename } from './ContentGallery';
@@ -105,21 +106,8 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
     return () => { cancelled = true; };
   }, [item.id, supabase]);
 
-  const handleDownloadImage = useCallback(async (url: string, filename: string) => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      window.open(url, '_blank');
-    }
+  const handleDownloadImage = useCallback(async (url: string, filename: string, flipHorizontal?: boolean) => {
+    await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
   const handleImageReady = useCallback((visualId: string, _contentItemId: string, imageUrl: string) => {
@@ -503,7 +491,13 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                               </a>
                               <button
                                 type="button"
-                                onClick={() => handleDownloadImage(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
+                                onClick={() =>
+                                  handleDownloadImage(
+                                    visual.image_url!,
+                                    buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                    flipHorizontalByVisualId[visual.id],
+                                  )
+                                }
                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"
                               >
                                 Descargar

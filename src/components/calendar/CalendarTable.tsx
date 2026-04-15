@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { downloadImageFromUrl } from '@/lib/utils';
 import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types';
 import { PostEditor } from './PostEditor';
 import { ProductionSpecsDisplay } from './ProductionSpecsDisplay';
@@ -141,21 +142,8 @@ export function CalendarTable({
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const handleDownloadImage = useCallback(async (url: string, filename: string) => {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      window.open(url, '_blank');
-    }
+  const handleDownloadImage = useCallback(async (url: string, filename: string, flipHorizontal?: boolean) => {
+    await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
   const startEditPrompt = useCallback((visual: ContentItemVisual) => {
@@ -551,7 +539,13 @@ export function CalendarTable({
                                               </a>
                                               <button
                                                 type="button"
-                                                onClick={() => handleDownloadImage(visual.image_url!, buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label))}
+                                                onClick={() =>
+                                                  handleDownloadImage(
+                                                    visual.image_url!,
+                                                    buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                                    flipHorizontalByVisualId[visual.id],
+                                                  )
+                                                }
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
                                               >
                                                 Descargar
