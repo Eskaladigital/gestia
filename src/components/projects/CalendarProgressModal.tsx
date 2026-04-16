@@ -31,6 +31,8 @@ export interface CalendarProgressModalProps {
   durationMonths: number;
   month: number;
   year: number;
+  /** Fecha YYYY-MM-DD opcional: si se envía, el calendario se genera a partir de ese día (evita el pasado). */
+  startDate?: string | null;
   onClose: () => void;
 }
 
@@ -80,6 +82,7 @@ export function CalendarProgressModal({
   durationMonths,
   month,
   year,
+  startDate,
   onClose,
 }: CalendarProgressModalProps) {
   const [mounted, setMounted] = useState(false);
@@ -140,6 +143,7 @@ export function CalendarProgressModal({
         month,
         year,
         batch_month_index: monthIndex,
+        ...(startDate ? { start_date: startDate } : {}),
       }),
       signal: controller.signal,
     });
@@ -227,7 +231,7 @@ export function CalendarProgressModal({
     }
 
     return { hasMore, nextMonthIndex, inserted: batchInserted };
-  }, [projectId, mode, durationMonths, month, year]);
+  }, [projectId, mode, durationMonths, month, year, startDate]);
 
   useEffect(() => {
     cancelledRef.current = false;

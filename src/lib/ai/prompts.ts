@@ -91,18 +91,39 @@ export type CalendarMonthWeekSegment = {
   postsQuota: number;
 };
 
+export type MonthWeekSegmentsOptions = {
+  /**
+   * Fecha YYYY-MM-DD mínima: cualquier día estrictamente anterior se descarta del tramo
+   * (útil para "empezar desde hoy" y no generar posts en el pasado).
+   */
+  minDate?: string;
+  /**
+   * Lista de fechas YYYY-MM-DD ya ocupadas por posts existentes: se excluyen del tramo
+   * (útil para modo "append inteligente": evita colisiones).
+   */
+  excludeDates?: string[];
+};
+
 /**
  * Semanas naturales (lun–dom) que intersectan el mes, con cupo proporcional.
  * Evita pedir «5 posts» en una semana que solo tiene 1–2 días en el mes (apelotonamiento al final).
+ *
+ * Si se pasa `minDate`, se recortan los días anteriores y las cuotas se ajustan
+ * proporcionalmente a los días útiles restantes de cada tramo.
+ * Si se pasa `excludeDates`, esas fechas se eliminan del tramo y la cuota no puede
+ * exceder el número de días libres.
  */
 export function getMonthWeekSegmentsWithQuotas(
   monthIndex: number,
   year: number,
-  weeklyTotal: number
+  weeklyTotal: number,
+  opts?: MonthWeekSegmentsOptions
 ): CalendarMonthWeekSegment[] {
   const first = new Date(year, monthIndex, 1);
   const last = new Date(year, monthIndex + 1, 0);
   const segments: CalendarMonthWeekSegment[] = [];
+  const excludeSet = new Set(opts?.excludeDates ?? []);
+  const minDate = opts?.minDate ?? '';
 
   let weekMonday = startOfWeekMonday(first);
   let weekNum = 1;
@@ -113,26 +134,38 @@ export function getMonthWeekSegmentsWithQuotas(
     const segEnd = weekSunday > last ? last : weekSunday;
 
     if (segStart <= segEnd) {
-      const dates: string[] = [];
+      const allDates: string[] = [];
       for (let cur = new Date(segStart); cur <= segEnd; cur.setDate(cur.getDate() + 1)) {
-        dates.push(ymdFromDate(cur));
+        allDates.push(ymdFromDate(cur));
       }
-      const days = dates.length;
+      const totalDaysInSegment = allDates.length;
+
+      const dates = allDates.filter(d => {
+        if (minDate && d < minDate) return false;
+        if (excludeSet.has(d)) return false;
+        return true;
+      });
+
+      const usableDays = dates.length;
       let quota = 0;
-      if (weeklyTotal > 0 && days > 0) {
-        quota = Math.round((weeklyTotal * days) / 7);
+      if (weeklyTotal > 0 && usableDays > 0) {
+        quota = Math.round((weeklyTotal * usableDays) / 7);
         quota = Math.max(1, quota);
-        quota = Math.min(quota, days);
+        quota = Math.min(quota, usableDays);
       }
 
-      segments.push({
-        weekNum,
-        start: dates[0],
-        end: dates[dates.length - 1],
-        dates,
-        postsQuota: quota,
-      });
-      weekNum++;
+      if (usableDays > 0) {
+        segments.push({
+          weekNum,
+          start: dates[0],
+          end: dates[dates.length - 1],
+          dates,
+          postsQuota: quota,
+        });
+      }
+      // Si el tramo entero queda fuera por minDate/excludeDates, no lo añadimos
+      // pero igualmente avanzamos weekNum para no romper la numeración visible.
+      if (totalDaysInSegment > 0) weekNum++;
     }
 
     weekMonday = addDays(weekMonday, 7);
@@ -485,6 +518,10 @@ INSTRUCCIONES FINALES:
 export type BuildCalendarPromptOptions = {
   /** Resumen de posts ya generados en meses anteriores del mismo periodo multi-mes (anti-duplicados). */
   priorMonthsDigest?: string;
+  /** Fecha YYYY-MM-DD mínima permitida (útil para "generar desde hoy"). */
+  minDate?: string;
+  /** Fechas YYYY-MM-DD ya ocupadas por posts existentes (append inteligente). */
+  excludeDates?: string[];
 };
 
 export function buildCalendarPrompt(
@@ -496,7 +533,10 @@ export function buildCalendarPrompt(
 ): { system: string; user: string; segments: CalendarMonthWeekSegment[] } {
   const dist = getWeeklyDistribution(project);
   const weeklyTotal = getWeeklyTotal(dist);
-  const segments = getMonthWeekSegmentsWithQuotas(monthIndex, year, weeklyTotal);
+  const segments = getMonthWeekSegmentsWithQuotas(monthIndex, year, weeklyTotal, {
+    minDate: opts?.minDate,
+    excludeDates: opts?.excludeDates,
+  });
   const totalPosts = segments.reduce((s, g) => s + g.postsQuota, 0);
   const month = getMonthName(monthIndex);
 
@@ -544,6 +584,8 @@ REGLAS CRÍTICAS:
 - Los hashtags deben ser reales y relevantes para el sector
 - Mantén variedad temática: evita repetir el mismo ángulo, la misma promesa o el mismo CTA varias veces
 ${opts?.priorMonthsDigest?.trim() ? '- Si hay sección "CONTINUIDAD CON EL PERIODO YA GENERADO", trátala como memoria obligatoria: nuevos ángulos y CTAs, sin reescribir ni parafrasear de forma estrecha lo ya cubierto' : ''}
+${opts?.minDate ? `- PROHIBIDO programar posts anteriores a ${opts.minDate}. Usa SOLO fechas listadas en "Fechas permitidas" de cada semana.` : ''}
+${opts?.excludeDates?.length ? `- PROHIBIDO usar estas fechas (ya hay un post programado ese día): ${opts.excludeDates.join(', ')}. Si por error apareciera alguna, descarta ese post.` : ''}
 - Cada idea debe sentirse publicable para Instagram sin depender de contexto externo no proporcionado
 - "platforms" debe incluir "instagram"
 - Las fechas deben ser del mes de ${month} ${year}

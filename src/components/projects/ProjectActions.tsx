@@ -63,9 +63,23 @@ export function ProjectActions({
   const [calendarModeChoice, setCalendarModeChoice] = useState<'append' | 'replace'>('append');
   const [durationMonths, setDurationMonths] = useState<1 | 3 | 6 | 9>(1);
   const [progressModalOpen, setProgressModalOpen] = useState(false);
+  const [startMonthChoice, setStartMonthChoice] = useState<'current' | 'next'>('current');
+  const [startFromToday, setStartFromToday] = useState(true);
 
   const now = new Date();
   const currentMonthLabel = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+
+  // Próximo mes natural al actual (para el selector "Siguiente mes")
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextMonthLabel = `${MONTH_NAMES[nextMonthDate.getMonth()]} ${nextMonthDate.getFullYear()}`;
+
+  // Resolvemos qué mes/año se envían según la elección del usuario
+  const effectiveStartMonth = startMonthChoice === 'next' ? nextMonthDate.getMonth() : now.getMonth();
+  const effectiveStartYear = startMonthChoice === 'next' ? nextMonthDate.getFullYear() : now.getFullYear();
+
+  // start_date YYYY-MM-DD para "empezar desde hoy" (solo tiene sentido si startMonthChoice === 'current')
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const effectiveStartDate = startMonthChoice === 'current' && startFromToday && now.getDate() > 1 ? todayYmd : null;
 
   async function postPipelineStep(endpoint: string) {
     const res = await fetch(`/api/${endpoint}`, {
@@ -166,6 +180,10 @@ export function ProjectActions({
     if (!phase1Complete || loading) return;
     setCalendarModeChoice('append');
     setDurationMonths(1);
+    // Si ya hay calendario, por defecto arrancamos en el siguiente mes natural
+    // (lo habitual: "ya tengo abril planificado, dame mayo").
+    setStartMonthChoice(hasCalendar ? 'next' : 'current');
+    setStartFromToday(true);
     setCalendarModalOpen(true);
   }
 
@@ -381,8 +399,9 @@ export function ProjectActions({
             calendarBasePath={`${base}/calendar`}
             mode={calendarModeChoice}
             durationMonths={durationMonths}
-            month={now.getMonth()}
-            year={now.getFullYear()}
+            month={effectiveStartMonth}
+            year={effectiveStartYear}
+            startDate={effectiveStartDate}
             onClose={handleProgressModalClose}
           />
         )}
@@ -402,9 +421,51 @@ export function ProjectActions({
               <h4 id="calendar-modal-title" className="font-display font-bold text-surface-900 text-lg mb-1">
                 Generar calendario
               </h4>
-              <p className="text-sm text-surface-500 mb-4 font-medium">
-                Inicio del rango: <strong className="text-surface-900">{currentMonthLabel}</strong> (mes actual del sistema)
+              <p className="text-sm text-surface-500 mb-5 font-medium">
+                La IA genera un mes completo por cada mes del rango. Puedes empezar desde hoy, desde el próximo mes, y elegir cómo tratar lo que ya tienes.
               </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-surface-400 mb-2">
+                Mes inicial
+              </p>
+              <div className="grid grid-cols-2 gap-2 mb-5">
+                <label className="flex flex-col cursor-pointer rounded-lg border-2 border-surface-200 p-3 has-[:checked]:border-surface-900 has-[:checked]:bg-surface-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="cal-start-month"
+                    checked={startMonthChoice === 'current'}
+                    onChange={() => setStartMonthChoice('current')}
+                    className="sr-only"
+                  />
+                  <span className="font-bold text-surface-900 text-sm">Este mes</span>
+                  <span className="text-xs text-surface-500 mt-0.5">{currentMonthLabel}</span>
+                </label>
+                <label className="flex flex-col cursor-pointer rounded-lg border-2 border-surface-200 p-3 has-[:checked]:border-surface-900 has-[:checked]:bg-surface-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="cal-start-month"
+                    checked={startMonthChoice === 'next'}
+                    onChange={() => setStartMonthChoice('next')}
+                    className="sr-only"
+                  />
+                  <span className="font-bold text-surface-900 text-sm">Próximo mes</span>
+                  <span className="text-xs text-surface-500 mt-0.5">{nextMonthLabel}</span>
+                </label>
+              </div>
+
+              {startMonthChoice === 'current' && now.getDate() > 1 && (
+                <label className="flex items-start gap-2.5 cursor-pointer mb-5 text-xs text-surface-700">
+                  <input
+                    type="checkbox"
+                    checked={startFromToday}
+                    onChange={e => setStartFromToday(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <strong className="text-surface-900">Empezar desde hoy</strong> ({todayYmd}). Evita generar publicaciones con fechas ya pasadas.
+                  </span>
+                </label>
+              )}
 
               <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-surface-400 mb-2">
                 Duración
@@ -433,7 +494,7 @@ export function ProjectActions({
               {hasCalendar ? (
                 <div className="space-y-3 mb-6">
                   <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-surface-400 mb-1">
-                    Modo (solo si ya tienes calendario)
+                    Qué hacer con lo que ya existe
                   </p>
                   <label className="flex gap-3 cursor-pointer rounded-lg border-2 border-surface-200 p-3 has-[:checked]:border-surface-900 has-[:checked]:bg-surface-50 transition-colors">
                     <input
@@ -444,9 +505,9 @@ export function ProjectActions({
                       className="mt-1"
                     />
                     <span>
-                      <span className="font-bold text-surface-900 text-sm">Añadir al existente</span>
+                      <span className="font-bold text-surface-900 text-sm">Añadir (no borra nada)</span>
                       <span className="block text-xs text-surface-500 mt-0.5">
-                        No se borra nada. Se añaden posts en los meses del rango elegido.
+                        La IA genera posts nuevos en los días libres del rango. Los posts ya existentes se respetan y no hay colisiones el mismo día.
                       </span>
                     </span>
                   </label>
@@ -459,9 +520,11 @@ export function ProjectActions({
                       className="mt-1"
                     />
                     <span>
-                      <span className="font-bold text-surface-900 text-sm">Reemplazar el rango</span>
+                      <span className="font-bold text-surface-900 text-sm">Reemplazar</span>
                       <span className="block text-xs text-surface-500 mt-0.5">
-                        Se eliminan <strong>todas</strong> las publicaciones desde {currentMonthLabel} durante los meses seleccionados y se insertan solo las nuevas.
+                        {effectiveStartDate
+                          ? <>Se eliminan los posts desde <strong>{effectiveStartDate}</strong> y siguientes del rango, y se regeneran. Se preservan los anteriores a esa fecha.</>
+                          : <>Se eliminan <strong>todas</strong> las publicaciones del rango elegido y se insertan solo las nuevas. <span className="text-amber-700 font-bold">Perderás cualquier edición o aprobación del rango.</span></>}
                       </span>
                     </span>
                   </label>

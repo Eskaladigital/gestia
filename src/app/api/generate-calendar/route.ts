@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { project_id, month, year, calendar_mode, duration_months: rawDuration } = body;
+    const { project_id, month, year, calendar_mode, duration_months: rawDuration, start_date: rawStartDate } = body;
     projectId = project_id;
     if (!project_id) {
       return NextResponse.json({ error: 'project_id es obligatorio' }, { status: 400 });
@@ -235,6 +235,11 @@ export async function POST(request: NextRequest) {
 
     const targetMonth = typeof month === 'number' && month >= 0 && month <= 11 ? month : new Date().getMonth();
     const targetYear = typeof year === 'number' && year >= 2000 && year <= 2100 ? year : new Date().getFullYear();
+
+    // Fecha de inicio opcional (YYYY-MM-DD). Aplica solo al primer mes del periodo.
+    // Sirve para "generar a partir de hoy" y evitar posts en el pasado.
+    const startDate: string | null =
+      typeof rawStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawStartDate) ? rawStartDate : null;
 
     const { data: project } = await fetchActiveProjectForUser(supabase, user.id, project_id);
 
@@ -296,10 +301,51 @@ export async function POST(request: NextRequest) {
     const rangeStart = toYmd(targetYear, targetMonth, 1);
     const rangeEnd = toYmd(lastPeriod.year, lastPeriod.month0, lastDayInMonth(lastPeriod.year, lastPeriod.month0));
 
-    const monthsPlan: Array<{ monthIndex: number; year: number; month0: number; label: string; expectedPosts: number; totalDays: number }> = [];
+    // En modo append leemos las fechas YA ocupadas por posts existentes para pasarlas
+    // a la IA como "no usar" (evita colisiones de dos posts el mismo día).
+    const occupiedDatesByMonth: Record<string, Set<string>> = {};
+    if (mode === 'append') {
+      const { data: existingRows, error: existingErr } = await supabase
+        .from('content_items')
+        .select('scheduled_date')
+        .eq('project_id', project_id)
+        .gte('scheduled_date', rangeStart)
+        .lte('scheduled_date', rangeEnd);
+      if (existingErr) {
+        console.warn('[generate-calendar] lectura fechas ocupadas falló:', existingErr);
+      } else if (existingRows) {
+        for (const row of existingRows) {
+          const ymd = row.scheduled_date as string;
+          if (!ymd) continue;
+          const monthKey = ymd.slice(0, 7); // YYYY-MM
+          if (!occupiedDatesByMonth[monthKey]) occupiedDatesByMonth[monthKey] = new Set();
+          occupiedDatesByMonth[monthKey].add(ymd);
+        }
+      }
+    }
+
+    const monthsPlan: Array<{
+      monthIndex: number;
+      year: number;
+      month0: number;
+      label: string;
+      expectedPosts: number;
+      totalDays: number;
+      minDate?: string;
+      excludeDates?: string[];
+    }> = [];
     for (let i = 0; i < duration; i++) {
       const { year: y, month0: m0 } = addCalendarMonths(targetYear, targetMonth, i);
-      const { segments: segs } = buildCalendarPrompt(project, strategyText, m0, y);
+      const monthKey = `${y}-${String(m0 + 1).padStart(2, '0')}`;
+      // Solo el primer mes del periodo recibe la fecha de inicio (para no sesgar los siguientes).
+      const minDate = i === 0 && startDate ? startDate : undefined;
+      const excludeDates = mode === 'append' && occupiedDatesByMonth[monthKey]
+        ? Array.from(occupiedDatesByMonth[monthKey])
+        : undefined;
+      const { segments: segs } = buildCalendarPrompt(project, strategyText, m0, y, {
+        minDate,
+        excludeDates,
+      });
       const expected = segs.reduce((s, g) => s + g.postsQuota, 0);
       monthsPlan.push({
         monthIndex: i,
@@ -308,6 +354,8 @@ export async function POST(request: NextRequest) {
         label: `${getMonthName(m0)} ${y}`,
         expectedPosts: expected,
         totalDays: lastDayInMonth(y, m0),
+        minDate,
+        excludeDates,
       });
     }
 
@@ -371,14 +419,45 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            const promptOpts: {
+              priorMonthsDigest?: string;
+              minDate?: string;
+              excludeDates?: string[];
+            } = {};
+            if (priorMonthsDigest) promptOpts.priorMonthsDigest = priorMonthsDigest;
+            if (mp.minDate) promptOpts.minDate = mp.minDate;
+            if (mp.excludeDates?.length) promptOpts.excludeDates = mp.excludeDates;
+
             const { system, user: userPrompt, segments } = buildCalendarPrompt(
               project,
               strategyText,
               mp.month0,
               mp.year,
-              priorMonthsDigest ? { priorMonthsDigest } : undefined
+              Object.keys(promptOpts).length > 0 ? promptOpts : undefined
             );
             const expectedPosts = segments.reduce((sum, segment) => sum + segment.postsQuota, 0);
+
+            // Si el mes entero queda sin días disponibles (ej. append con todo ocupado,
+            // o minDate tras el último día del mes), no llamamos a la IA.
+            if (expectedPosts === 0) {
+              send('progress', {
+                phase: 'month_done',
+                monthIndex: i,
+                monthLabel: mp.label,
+                totalMonths: duration,
+                postsInserted: 0,
+                postsExpected: 0,
+                grandTotalInserted,
+                totalExpectedPosts,
+                dates: [],
+                formatCounts: {},
+                typeCounts: {},
+                usage: totalUsage,
+                skipped: true,
+                skippedReason: 'Sin días disponibles (todo ocupado o fuera de rango).',
+              });
+              continue;
+            }
 
             let normalizedPosts: ReturnType<typeof normalizeCalendarPosts> = [];
 
@@ -443,14 +522,24 @@ export async function POST(request: NextRequest) {
               status: 'draft' as const,
             }));
 
-            const filtered = postsToInsert.filter(p => p.scheduled_date >= monthStart && p.scheduled_date <= monthEnd);
+            const excludeSet = new Set(mp.excludeDates ?? []);
+            const filtered = postsToInsert.filter(p => {
+              if (p.scheduled_date < monthStart || p.scheduled_date > monthEnd) return false;
+              if (mp.minDate && p.scheduled_date < mp.minDate) return false;
+              if (excludeSet.has(p.scheduled_date)) return false;
+              return true;
+            });
 
             if (mode === 'replace') {
+              // Si hay minDate (reemplazo "desde hoy"), preservamos los posts anteriores
+              // a esa fecha para no destruir lo ya publicado/aprobado.
+              const deleteFrom = mp.minDate && mp.minDate > monthStart ? mp.minDate : monthStart;
+
               const { error: delErr } = await supabase
                 .from('content_items')
                 .delete()
                 .eq('project_id', project_id)
-                .gte('scheduled_date', monthStart)
+                .gte('scheduled_date', deleteFrom)
                 .lte('scheduled_date', monthEnd);
 
               if (delErr) {
