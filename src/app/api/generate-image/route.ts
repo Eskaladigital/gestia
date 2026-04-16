@@ -168,10 +168,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await service
+    const { error: markGenErr } = await service
       .from('content_item_visuals')
       .update({ image_status: 'generating', image_error: null })
       .eq('id', visual_id);
+    if (markGenErr) {
+      console.error(`[generate-image] mark-generating failed for ${visual_id}:`, markGenErr);
+    }
 
     const apiKey = await resolveOpenAIKey(user.id);
     if (!apiKey) {
@@ -224,16 +227,45 @@ export async function POST(request: NextRequest) {
       throw new Error('No se pudo obtener la URL pública de la imagen');
     }
 
-    await service
+    // 1) UPDATE CRÍTICO: url/status/error. Si esto falla, abortamos y devolvemos
+    //    error al cliente. Nunca decimos "ready" si la BD no está realmente persistida.
+    const { data: savedRow, error: saveErr } = await service
       .from('content_item_visuals')
       .update({
         image_url: imageUrl,
         image_status: 'ready',
         image_error: null,
-        image_flip_horizontal: false,
         updated_at: new Date().toISOString(),
       })
+      .eq('id', visual_id)
+      .select('id, image_url, image_status')
+      .maybeSingle();
+
+    if (saveErr || !savedRow) {
+      throw new Error(
+        `No se pudo guardar la imagen en la base de datos: ${saveErr?.message || 'fila no encontrada tras UPDATE'}`
+      );
+    }
+
+    if (savedRow.image_url !== imageUrl || savedRow.image_status !== 'ready') {
+      throw new Error(
+        `La BD no refleja la imagen recién generada (url=${savedRow.image_url}, status=${savedRow.image_status})`
+      );
+    }
+
+    // 2) Reset opcional del flip horizontal. Puede fallar en entornos donde la
+    //    migración 019 todavía no se aplicó: lo toleramos para no bloquear la
+    //    generación de imágenes.
+    const { error: flipErr } = await service
+      .from('content_item_visuals')
+      .update({ image_flip_horizontal: false })
       .eq('id', visual_id);
+    if (flipErr) {
+      console.warn(
+        `[generate-image] no se pudo resetear image_flip_horizontal para ${visual_id} ` +
+        `(quizá la migración 019 no está aplicada): ${flipErr.message}`
+      );
+    }
 
     console.log(`[generate-image] ✓ Visual ${visual_id} → ${imageUrl} (${(buffer.length / 1024).toFixed(0)} KB)`);
 
@@ -242,7 +274,7 @@ export async function POST(request: NextRequest) {
     console.error(`[generate-image] ✗ Visual ${visual_id}:`, err?.message || err);
 
     const errorMsg = err?.message || 'Error desconocido generando la imagen';
-    await service
+    const { error: markErr } = await service
       .from('content_item_visuals')
       .update({
         image_status: 'error',
@@ -250,6 +282,9 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', visual_id);
+    if (markErr) {
+      console.error(`[generate-image] mark-error fallback also failed for ${visual_id}:`, markErr);
+    }
 
     const status = err?.status === 429 ? 429 : err?.status === 401 ? 401 : 500;
     return NextResponse.json({ error: errorMsg }, { status });
