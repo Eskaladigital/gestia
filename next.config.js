@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium'],
+  serverExternalPackages: ['puppeteer', 'puppeteer-core', '@sparticuz/chromium', 'sharp'],
   /**
    * En Vercel/serverless, el trace de archivos no incluye por defecto la carpeta `bin` de
    * @sparticuz/chromium (y con require vía eval el analizador no la ve). Sin esto:

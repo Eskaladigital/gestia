@@ -14,6 +14,14 @@ import {
   listProjectReferenceImages,
 } from '@/lib/projects/reference-images';
 
+// CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
+// enviarlas a OpenAI y tarda ~2-3 min con gpt-image-2 + referencias.
+// - runtime nodejs: sharp no funciona en Edge.
+// - maxDuration 300: con 4 referencias la edición de imagen puede pasar
+//   de 60s de Vercel Pro por defecto.
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
 const BUCKET = 'visual-assets';
 const REFINER_MODEL = IMAGE_PROMPT_REFINER_MODEL;
 const REFINER_TEMPERATURE = 0.18;
