@@ -6,7 +6,7 @@
 
 import type { Project, Competitor, ContentStyleWeights, WeeklyFormatDistribution } from '@/types';
 import { getMonthName } from '@/lib/utils';
-import { buildProductReferenceGuidance } from '@/lib/projects/reference-images';
+import { buildProductReferenceGuidance } from '@/lib/projects/reference-images-shared';
 
 // ---- Helpers para construir contexto ----
 

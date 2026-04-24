@@ -7,7 +7,7 @@ import type { ProjectReferenceImage } from '@/types';
 import {
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   MAX_PROJECT_REFERENCE_IMAGES,
-} from '@/lib/projects/reference-images';
+} from '@/lib/projects/reference-images-shared';
 
 interface ProjectReferenceImagesCardProps {
   projectId: string;
