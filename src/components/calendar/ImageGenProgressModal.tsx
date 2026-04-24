@@ -4,8 +4,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { ContentItemVisual, ImageGenerationStatus } from '@/types';
-
-const COST_PER_IMAGE_USD = 0.19;
+import {
+  IMAGE_GENERATION_ESTIMATED_COST_USD,
+  IMAGE_GENERATION_MODEL,
+  IMAGE_GENERATION_QUALITY,
+  IMAGE_GENERATION_SIZE,
+} from '@/lib/ai/constants';
 
 type Phase = 'confirm' | 'running' | 'complete' | 'cancelled' | 'error';
 
@@ -43,7 +47,7 @@ export function ImageGenProgressModal({
   const fetchAbortRef = useRef<AbortController | null>(null);
 
   const total = queue.length;
-  const estimatedCost = (total * COST_PER_IMAGE_USD).toFixed(2);
+  const estimatedCost = (total * IMAGE_GENERATION_ESTIMATED_COST_USD).toFixed(2);
   const estimatedMinutes = Math.ceil((total * 45) / 60);
 
   useEffect(() => setMounted(true), []);
@@ -233,8 +237,8 @@ export function ImageGenProgressModal({
                 </div>
               </div>
               <div className="bg-surface-50 border border-surface-200 p-3 text-xs text-surface-600 leading-relaxed space-y-1">
-                <p>Cada imagen se genera con <strong>gpt-image-1.5</strong> a resolución 1536×1024 (calidad alta).</p>
-                <p>Coste estimado: <strong>${COST_PER_IMAGE_USD}/imagen</strong>. Duración: ~30-60 segundos por imagen.</p>
+                <p>Cada imagen se genera con <strong>{IMAGE_GENERATION_MODEL}</strong> a resolución {IMAGE_GENERATION_SIZE} (calidad {IMAGE_GENERATION_QUALITY}).</p>
+                <p>Coste estimado: <strong>${IMAGE_GENERATION_ESTIMATED_COST_USD.toFixed(2)}/imagen</strong>. Duración: ~30-60 segundos por imagen.</p>
               </div>
             </>
           )}

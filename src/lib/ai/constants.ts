@@ -31,7 +31,7 @@ export const AGENT_DEFAULTS: Record<AgentKey, AgentDefault> = {
     description: 'Scrapea la web y extrae propuesta de valor, audiencia, posicionamiento',
     icon: '🔍',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4',
     temperature: 0.7,
     maxTokens: 4096,
     defaultSystemPrompt: `Eres un estratega senior de marketing digital especializado en convertir evidencia web en una ficha estratégica útil para redes sociales.
@@ -52,7 +52,7 @@ value_proposition, target_audience, positioning, detailed_business_description, 
     description: 'Estudia webs de competidores y detecta oportunidades de diferenciación',
     icon: '🏆',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4',
     temperature: 0.7,
     maxTokens: 4096,
     defaultSystemPrompt: `Eres un analista competitivo senior especializado en marketing digital y contenido para redes sociales.
@@ -73,7 +73,7 @@ competitors[{name, detected_content_types, strengths, weaknesses, estimated_freq
     description: 'Crea pilares de contenido, tono, líneas temáticas y recomendaciones',
     icon: '🎯',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4',
     temperature: 0.8,
     maxTokens: 4096,
     defaultSystemPrompt: `Eres un director de estrategia de contenido para redes sociales.
@@ -95,7 +95,7 @@ content_pillars, tone_guidelines, thematic_lines, recommendations.`,
     description: 'Produce el calendario mensual con copies listos para publicar',
     icon: '📅',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4',
     temperature: 0.9,
     maxTokens: 8192,
     defaultSystemPrompt: `Eres un editor senior y copywriter de redes sociales.
@@ -124,7 +124,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     description: 'Agente genérico de prompts visuales — usado como fallback si no hay config específica por formato',
     icon: '🎬',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4-mini',
     temperature: 0.85,
     maxTokens: 8192,
     defaultSystemPrompt: `Agente genérico de prompts visuales. El system prompt especializado se inyecta dinámicamente según el formato (story, vídeo, carrusel, feed).`,
@@ -134,7 +134,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     description: 'Especialista en composición vertical 9:16, impacto inmediato y contenido nativo de Stories',
     icon: '📱',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4-mini',
     temperature: 0.85,
     maxTokens: 8192,
     defaultSystemPrompt: `Especialista en Stories para Instagram/TikTok. Contenido vertical fullscreen 9:16 con impacto visual inmediato. Deja espacio para texto overlay. Estética nativa de Stories: cercana, auténtica, dinámica. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
@@ -144,7 +144,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     description: 'Director de cine especializado en fotogramas clave, movimiento de cámara y narrativa cinematográfica',
     icon: '🎥',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4-mini',
     temperature: 0.85,
     maxTokens: 8192,
     defaultSystemPrompt: `Director de cine y DF especializado en Reels/TikTok. Describe fotogramas clave de vídeo con lenguaje cinematográfico: movimiento de cámara, acción dinámica, ritmo, motion blur. NUNCA describir como foto estática. Secciones obligatorias incluyen Movimiento. Mínimo 300 palabras. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
@@ -154,7 +154,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     description: 'Director de arte editorial especializado en secuencias narrativas slide-a-slide con coherencia visual',
     icon: '🎠',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4-mini',
     temperature: 0.85,
     maxTokens: 8192,
     defaultSystemPrompt: `Director de arte editorial de carruseles para Instagram/LinkedIn. Cada slide forma parte de una secuencia narrativa coherente. Primer slide = gancho, último = CTA. Deja zonas para texto overlay. Coherencia visual entre slides (misma paleta, iluminación, estilo). Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
@@ -164,7 +164,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     description: 'Fotógrafo editorial especializado en fotografía de producto, lifestyle y naturaleza para feed de Instagram',
     icon: '📸',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4-mini',
     temperature: 0.85,
     maxTokens: 8192,
     defaultSystemPrompt: `Fotógrafo editorial de renombre especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Describe imágenes con precisión de director de fotografía profesional. Estructura: Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo. Mínimo 250 palabras. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
@@ -174,7 +174,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     description: 'Visita la web para extraer colores, fuentes, logo e identidad visual',
     icon: '🎨',
     provider: 'openai',
-    model: 'gpt-4o',
+    model: 'gpt-5.4',
     temperature: 0.35,
     maxTokens: 10000,
     defaultSystemPrompt: `Eres un especialista en identidad visual y auditoría UI.
@@ -201,9 +201,11 @@ export interface ModelOption {
 }
 
 export const AVAILABLE_MODELS: ModelOption[] = [
+  { id: 'gpt-5.4', label: 'GPT-5.4', provider: 'openai', context: '1.05M' },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', provider: 'openai', context: '1.05M' },
+  { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', provider: 'openai', context: '1.05M' },
   { id: 'gpt-4o', label: 'GPT-4o', provider: 'openai', context: '128k' },
   { id: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai', context: '128k' },
-  { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'openai', context: '128k' },
   { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'anthropic', context: '200k' },
   { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', provider: 'anthropic', context: '200k' },
   { id: 'claude-3-opus-20240229', label: 'Claude 3 Opus', provider: 'anthropic', context: '200k' },
@@ -217,7 +219,7 @@ export function getModelsForProvider(provider: AIProvider): ModelOption[] {
 }
 
 export function getDefaultModelForProvider(provider: AIProvider): string {
-  return getModelsForProvider(provider)[0]?.id || 'gpt-4o';
+  return getModelsForProvider(provider)[0]?.id || 'gpt-5.4';
 }
 
 export function resolveSupportedModel(provider: AIProvider, model?: string | null): string {
@@ -226,3 +228,9 @@ export function resolveSupportedModel(provider: AIProvider, model?: string | nul
   }
   return getDefaultModelForProvider(provider);
 }
+
+export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
+export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
+export const IMAGE_GENERATION_SIZE = '1536x1024';
+export const IMAGE_GENERATION_QUALITY = 'high';
+export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.17;

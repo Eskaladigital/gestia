@@ -3,6 +3,7 @@ import { createServerSupabase, markProjectPipelineError } from '@/lib/supabase/s
 import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
 import { callAI, buildStrategyPrompt } from '@/lib/ai';
 import { canRunGenerateStrategyStep, type StrategyForPipeline } from '@/lib/projects/pipeline';
+import { DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI, listProjectReferenceImages } from '@/lib/projects/reference-images';
 import type { StrategyGeneration } from '@/types';
 
 export const maxDuration = 300;
@@ -167,14 +168,22 @@ export async function POST(request: NextRequest) {
       : 'No hay análisis competitivo disponible.';
 
     // Generar estrategia
+    const referenceImages = await listProjectReferenceImages(
+      supabase,
+      project_id,
+      DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
+    );
+
     const { system, user: userPrompt } = buildStrategyPrompt(
       project,
       businessAnalysis,
-      competitorAnalysis
+      competitorAnalysis,
+      { referenceImageCount: referenceImages.length }
     );
     const aiResponse = await callAI<StrategyGeneration>(system, userPrompt, {
       agentKey: 'generate_strategy',
       userId: user.id,
+      inputImages: referenceImages.map(image => image.image_url),
     });
     const normalized = normalizeStrategyGeneration(aiResponse.data);
 

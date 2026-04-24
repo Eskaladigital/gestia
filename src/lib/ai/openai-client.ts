@@ -7,7 +7,7 @@ import { createProviderWithResolvedKey } from './providers';
 import { AGENT_DEFAULTS, resolveSupportedModel } from './constants';
 import { createServiceSupabase } from '@/lib/supabase/server';
 
-export const AI_MODEL = 'gpt-4o';
+export const AI_MODEL = 'gpt-5.4';
 
 export interface AIResponse<T> {
   data: T;
@@ -97,6 +97,7 @@ export async function callAI<T>(
     maxTokens?: number;
     agentKey?: AgentKey;
     userId?: string;
+    inputImages?: string[];
   }
 ): Promise<AIResponse<T>> {
   const agentKey = options?.agentKey;
@@ -119,6 +120,7 @@ export async function callAI<T>(
     temperature: temp,
     maxTokens: maxTok,
     jsonMode: true,
+    inputImages: options?.inputImages,
   });
 
   if (!result.content) {

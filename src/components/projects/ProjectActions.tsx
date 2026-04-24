@@ -39,6 +39,8 @@ interface ProjectActionsProps {
   hasCalendar: boolean;
   pipelineFlags: ProjectPipelineFlags;
   hasBrandData?: boolean;
+  settingsReady?: boolean;
+  hasReferenceImages?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -53,6 +55,8 @@ export function ProjectActions({
   hasCalendar,
   pipelineFlags,
   hasBrandData = false,
+  settingsReady = true,
+  hasReferenceImages = false,
 }: ProjectActionsProps) {
   const base = projectBasePath ?? `/projects/${projectId}`;
   const router = useRouter();
@@ -108,6 +112,10 @@ export function ProjectActions({
 
   /** Un solo paso del pipeline (web / competidores / estrategia). La marca va en la tarjeta «Identidad visual». */
   async function runStep(endpoint: string, stepName: string) {
+    if (!settingsReady) {
+      setError('Guarda antes los ajustes del proyecto para desbloquear el procesamiento con IA.');
+      return;
+    }
     setLoading(stepName);
     setError('');
     setScreenshotWarning('');
@@ -124,6 +132,10 @@ export function ProjectActions({
 
   /** Marca (si hay URL) → web → competidores → estrategia. Todo en secuencia, solo tras pulsar. */
   async function runFullBasePipeline() {
+    if (!settingsReady) {
+      setError('Guarda antes los ajustes del proyecto para desbloquear el procesamiento con IA.');
+      return;
+    }
     setError('');
     setScreenshotWarning('');
     try {
@@ -152,7 +164,7 @@ export function ProjectActions({
   const phase1Complete =
     pipelineFlags.webAnalyzed && pipelineFlags.competitorsAnalyzed && pipelineFlags.strategyReady;
   const basePipelineBusy = loading === 'base:marca' || loading === 'base:web' || loading === 'base:competidores' || loading === 'base:estrategia';
-  const canRunStrategy = pipelineFlags.webAnalyzed && pipelineFlags.competitorsAnalyzed;
+  const canRunStrategy = settingsReady && pipelineFlags.webAnalyzed && pipelineFlags.competitorsAnalyzed;
   const anyBusy = !!loading;
 
   async function runClearCalendar() {
@@ -177,7 +189,7 @@ export function ProjectActions({
   }
 
   function openCalendarFlow() {
-    if (!phase1Complete || loading) return;
+    if (!phase1Complete || loading || !settingsReady) return;
     setCalendarModeChoice('append');
     setDurationMonths(1);
     // Si ya hay calendario, por defecto arrancamos en el siguiente mes natural
@@ -189,6 +201,10 @@ export function ProjectActions({
 
   function launchCalendarGeneration(chosenMode: 'append' | 'replace') {
     setCalendarModalOpen(false);
+    if (!settingsReady) {
+      setError('Guarda antes los ajustes del proyecto para desbloquear el procesamiento con IA.');
+      return;
+    }
     if (!phase1Complete) {
       setError('Completa primero el análisis base completo (marca, web, competidores y estrategia).');
       return;
@@ -204,8 +220,10 @@ export function ProjectActions({
     router.refresh();
   }
 
-  const calendarDisabled = !phase1Complete || !!loading || progressModalOpen;
-  const calendarTitle = !phase1Complete
+  const calendarDisabled = !settingsReady || !phase1Complete || !!loading || progressModalOpen;
+  const calendarTitle = !settingsReady
+    ? 'Guarda antes los ajustes del proyecto'
+    : !phase1Complete
     ? 'Completa la fase base (todo en uno o los tres pasos sueltos: web → competidores → estrategia)'
     : undefined;
 
@@ -224,6 +242,17 @@ export function ProjectActions({
         <p className="text-[10px] text-surface-500 mb-6 font-bold uppercase tracking-[0.15em]">
           Nada se ejecuta al crear el proyecto &middot; Gris = pendiente &middot; Verde = completado
         </p>
+
+        {!settingsReady && (
+          <div className="mb-4 bg-amber-50 border-2 border-surface-900 text-amber-900 px-4 py-3 text-xs font-bold">
+            Guarda primero los <strong>ajustes del proyecto</strong>. Sin ellos no se puede lanzar el procesamiento con IA.
+          </div>
+        )}
+        {settingsReady && !hasReferenceImages && (
+          <div className="mb-4 bg-sky-50 border-2 border-surface-900 text-surface-900 px-4 py-3 text-xs font-bold">
+            Recomendado antes de procesar: sube <strong>imágenes de producto</strong> para que la IA respete mejor el vehículo o producto real.
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 bg-red-50 border-2 border-surface-900 text-red-700 px-4 py-3 text-xs font-bold">
@@ -247,13 +276,15 @@ export function ProjectActions({
                 variant={phase1Complete && hasBrandData ? 'success' : 'primary'}
                 size="lg"
                 title={
-                  phase1Complete
+                  !settingsReady
+                    ? 'Guarda antes los ajustes del proyecto'
+                    : phase1Complete
                     ? 'Vuelve a ejecutar todo el análisis base desde cero'
                     : 'Ejecuta identidad visual (si hay URL), web, competidores y estrategia en secuencia'
                 }
                 onClick={runFullBasePipeline}
                 loading={basePipelineBusy}
-                disabled={anyBusy}
+                disabled={anyBusy || !settingsReady}
               >
                 {basePipelineBusy && loading
                   ? BASE_PIPELINE_LABEL[loading] || 'Procesando…'
@@ -275,7 +306,9 @@ export function ProjectActions({
               <Button
                 variant={hasBrandData ? 'success' : 'secondary'}
                 title={
-                  !projectUrl?.trim()
+                  !settingsReady
+                    ? 'Guarda antes los ajustes del proyecto'
+                    : !projectUrl?.trim()
                     ? 'Hace falta una URL para analizar la identidad visual'
                     : hasBrandData
                       ? 'Identidad visual analizada (puedes repetirlo)'
@@ -283,27 +316,31 @@ export function ProjectActions({
                 }
                 onClick={() => runStep('analyze-brand', 'identidad visual')}
                 loading={loading === 'identidad visual'}
-                disabled={anyBusy || !projectUrl?.trim()}
+                disabled={anyBusy || !settingsReady || !projectUrl?.trim()}
               >
                 1. Identidad visual
               </Button>
               <Button
                 variant={pipelineFlags.webAnalyzed ? 'success' : 'secondary'}
                 title={
-                  pipelineFlags.webAnalyzed
+                  !settingsReady
+                    ? 'Guarda antes los ajustes del proyecto'
+                    : pipelineFlags.webAnalyzed
                     ? 'Análisis de web ya realizado (puedes repetirlo)'
                     : 'Scrape + análisis de negocio: servicios, audiencia, posicionamiento'
                 }
                 onClick={() => runStep('analyze-site', 'análisis web')}
                 loading={loading === 'análisis web'}
-                disabled={anyBusy}
+                disabled={anyBusy || !settingsReady}
               >
                 2. Analizar web
               </Button>
               <Button
                 variant={pipelineFlags.competitorsAnalyzed ? 'success' : 'secondary'}
                 title={
-                  !pipelineFlags.webAnalyzed
+                  !settingsReady
+                    ? 'Guarda antes los ajustes del proyecto'
+                    : !pipelineFlags.webAnalyzed
                     ? 'Primero ejecuta Analizar web'
                     : pipelineFlags.competitorsAnalyzed
                       ? 'Competencia lista'
@@ -311,14 +348,16 @@ export function ProjectActions({
                 }
                 onClick={() => runStep('analyze-competitors', 'análisis competidores')}
                 loading={loading === 'análisis competidores'}
-                disabled={anyBusy || !pipelineFlags.webAnalyzed}
+                disabled={anyBusy || !settingsReady || !pipelineFlags.webAnalyzed}
               >
                 3. Competidores
               </Button>
               <Button
                 variant={pipelineFlags.strategyReady ? 'success' : 'secondary'}
                 title={
-                  !canRunStrategy
+                  !settingsReady
+                    ? 'Guarda antes los ajustes del proyecto'
+                    : !canRunStrategy
                     ? 'Hace falta web y competidores'
                     : pipelineFlags.strategyReady
                       ? 'Estrategia ya generada (pilares, tono…)'
@@ -375,7 +414,12 @@ export function ProjectActions({
                 </>
               )}
             </div>
-            {!phase1Complete && (
+            {!settingsReady && (
+              <p className="text-xs text-surface-900 bg-amber-100 border-2 border-surface-900 px-3 py-2 mt-3 max-w-2xl font-bold">
+                Guarda antes los ajustes del proyecto para desbloquear el procesamiento con IA y el calendario.
+              </p>
+            )}
+            {settingsReady && !phase1Complete && (
               <p className="text-xs text-surface-900 bg-amber-100 border-2 border-surface-900 px-3 py-2 mt-3 max-w-2xl font-bold">
                 Completa los 4 pasos de la fase base (o usa &laquo;Todo en uno&raquo;) para desbloquear el calendario.
               </p>

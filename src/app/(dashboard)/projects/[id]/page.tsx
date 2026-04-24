@@ -6,11 +6,12 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ProjectActions } from '@/components/projects/ProjectActions';
 import { ProjectSettingsPanel, type ProjectSettingsInitial } from '@/components/projects/ProjectSettingsPanel';
+import { ProjectReferenceImagesCard } from '@/components/projects/ProjectReferenceImagesCard';
 import { BrandCard, FaviconImg } from '@/components/projects/BrandCard';
 import { BusinessCard } from '@/components/projects/BusinessCard';
 import { CompetitorsCard } from '@/components/projects/CompetitorsCard';
 import { GenerateClientPdfButton } from '@/components/projects/GenerateClientPdfButton';
-import type { BusinessAnalysis, CompetitorAnalysis, WeeklyFormatDistribution } from '@/types';
+import type { BusinessAnalysis, CompetitorAnalysis, ProjectReferenceImage, WeeklyFormatDistribution } from '@/types';
 import {
   computeProjectPipelineFlags,
   isPipelineComplete,
@@ -18,6 +19,7 @@ import {
   projectListBadgePresentation,
   type StrategyForPipeline,
 } from '@/lib/projects/pipeline';
+import { listProjectReferenceImages } from '@/lib/projects/reference-images';
 
 /** Datos del paso «Analizar web»: JSON guardado y/o columnas de estrategia (analyze-site escribe ambos). */
 function mergeWebSiteAnalysis(
@@ -137,6 +139,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     .from('scraped_content')
     .select('url, type, source, created_at, metadata')
     .eq('project_id', id);
+  const referenceImages = await listProjectReferenceImages(supabase, id);
 
   const scrapedCount = scrapedContent?.length ?? 0;
   const competitorCount = competitors?.length ?? 0;
@@ -160,6 +163,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     publicacion: 0,
     reel: 0,
   }) as WeeklyFormatDistribution;
+  const totalWeekly = dist.story + dist.carrusel + dist.publicacion + dist.reel;
+  const settingsReady = !!project.client_type && !!project.primary_goal && totalWeekly >= 1 && totalWeekly <= 21;
+  const hasReferenceImages = referenceImages.length > 0;
 
   const settingsInitial: ProjectSettingsInitial = {
     client_type: project.client_type,
@@ -258,6 +264,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </div>
             <h2 className="font-display text-xl font-bold text-surface-900 mb-3">Tu proyecto est&aacute; listo para empezar</h2>
             <p className="text-sm text-surface-600 mb-3 text-left sm:text-center">
+              Antes de lanzar la IA, revisa <strong>Ajustes del proyecto</strong> y, si aplica, sube <strong>imágenes de producto</strong>.
+            </p>
+            <p className="text-sm text-surface-600 mb-3 text-left sm:text-center">
               <strong>Fase 1:</strong> pulsa <strong>&laquo;Todo en uno&raquo;</strong> o los 4 pasos individuales
               (identidad visual → web → competidores → estrategia) en el panel de <strong>Procesamiento con IA</strong> de abajo.
             </p>
@@ -272,6 +281,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </div>
       )}
 
+      <ProjectSettingsPanel projectId={id} initial={settingsInitial} />
+
+      <ProjectReferenceImagesCard
+        projectId={id}
+        initialImages={referenceImages as ProjectReferenceImage[]}
+      />
+
       {/* Action buttons — incluye identidad visual como paso 1 */}
       <ProjectActions
         projectId={id}
@@ -280,6 +296,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         hasCalendar={pipelineFlags.calendarReady}
         pipelineFlags={pipelineFlags}
         hasBrandData={!!project.brand_analyzed_at}
+        settingsReady={settingsReady}
+        hasReferenceImages={hasReferenceImages}
       />
 
       {/* Brand identity — solo visualización, el botón está en ProjectActions */}
@@ -295,8 +313,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         brandIdentityDetail={project.brand_identity_detail ?? null}
         manualAnalyzeDisabled
       />
-
-      <ProjectSettingsPanel projectId={id} initial={settingsInitial} />
 
       {/* Ficha del negocio: análisis desde la web */}
       <BusinessCard projectId={id} strategyId={strategy?.id || null} initialData={webAi} />
@@ -440,7 +456,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           {(strategy.prompt_tokens || strategy.completion_tokens) && (
             <div className="mt-4 flex items-center gap-4 text-xs text-surface-400">
               <span>Tokens: {(strategy.prompt_tokens || 0).toLocaleString()} prompt + {(strategy.completion_tokens || 0).toLocaleString()} respuesta</span>
-              <span>Modelo: {strategy.ai_model || 'gpt-4o'}</span>
+              <span>Modelo: {strategy.ai_model || 'gpt-5.4'}</span>
             </div>
           )}
         </div>

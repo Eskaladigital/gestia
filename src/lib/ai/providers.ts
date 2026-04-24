@@ -12,7 +12,7 @@ export interface LLMProvider {
   chat(
     system: string,
     user: string,
-    opts: { temperature: number; maxTokens: number; jsonMode?: boolean }
+    opts: { temperature: number; maxTokens: number; jsonMode?: boolean; inputImages?: string[] }
   ): Promise<LLMResponse>;
 }
 
@@ -89,16 +89,26 @@ class OpenAIProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; jsonMode?: boolean }): Promise<LLMResponse> {
+  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; jsonMode?: boolean; inputImages?: string[] }): Promise<LLMResponse> {
     return withRetry(async () => {
+      const content = opts.inputImages?.length
+        ? [
+            { type: 'text' as const, text: user },
+            ...opts.inputImages.map(url => ({
+              type: 'image_url' as const,
+              image_url: { url, detail: 'high' as const },
+            })),
+          ]
+        : user;
+
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: user },
+          { role: 'user', content },
         ],
         temperature: opts.temperature,
-        max_tokens: opts.maxTokens,
+        max_completion_tokens: opts.maxTokens,
         ...(opts.jsonMode !== false ? { response_format: { type: 'json_object' as const } } : {}),
       });
 
@@ -125,7 +135,7 @@ class AnthropicProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number }): Promise<LLMResponse> {
+  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; inputImages?: string[] }): Promise<LLMResponse> {
     const apiKey = this.apiKey;
 
     return withRetry(async () => {
@@ -177,7 +187,7 @@ class GoogleProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number }): Promise<LLMResponse> {
+  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; inputImages?: string[] }): Promise<LLMResponse> {
     const apiKey = this.apiKey;
 
     return withRetry(async () => {

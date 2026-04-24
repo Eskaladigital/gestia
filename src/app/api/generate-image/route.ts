@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
+import {
+  IMAGE_GENERATION_MODEL,
+  IMAGE_GENERATION_QUALITY,
+  IMAGE_GENERATION_SIZE,
+  IMAGE_PROMPT_REFINER_MODEL,
+} from '@/lib/ai/constants';
+import {
+  DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
+  downloadReferenceImagesAsFiles,
+  listProjectReferenceImages,
+} from '@/lib/projects/reference-images';
 
 const BUCKET = 'visual-assets';
-const REFINER_MODEL = 'gpt-4o';
+const REFINER_MODEL = IMAGE_PROMPT_REFINER_MODEL;
 const REFINER_TEMPERATURE = 0.18;
 const REFINER_MAX_TOKENS = 1200;
 
@@ -52,7 +63,14 @@ const TOXIC_WORDS = [
  * El prompt visible sigue siendo el que manda: la pasada de refinamiento
  * solo retoca vocabulario y detalles técnicos fotográficos.
  */
-async function buildFinalPrompt(openai: OpenAI, rawPrompt: string): Promise<string> {
+function appendReferenceHandlingInstructions(prompt: string, referenceCount: number): string {
+  if (referenceCount <= 0) return prompt;
+  return `${prompt}
+
+Si hay imágenes de referencia del producto, úsalas para respetar forma, proporciones, acabados, colores y rasgos distintivos del producto real, pero NO copies necesariamente el mismo ángulo, la misma altura de cámara, la misma distancia ni el mismo encuadre de esas referencias. La composición final debe obedecer a la escena descrita en este prompt y mantener variedad de planos entre piezas del proyecto.`;
+}
+
+async function buildFinalPrompt(openai: OpenAI, rawPrompt: string, referenceCount = 0): Promise<string> {
   const cleaned = cleanPrompt(rawPrompt);
 
   let prompt: string;
@@ -61,10 +79,10 @@ async function buildFinalPrompt(openai: OpenAI, rawPrompt: string): Promise<stri
       model: REFINER_MODEL,
       messages: [
         { role: 'system', content: REALISM_REFINER_SYSTEM },
-        { role: 'user', content: cleaned },
+        { role: 'user', content: appendReferenceHandlingInstructions(cleaned, referenceCount) },
       ],
       temperature: REFINER_TEMPERATURE,
-      max_tokens: REFINER_MAX_TOKENS,
+      max_completion_tokens: REFINER_MAX_TOKENS,
     });
     prompt = cleanPrompt(response.choices[0]?.message?.content || cleaned);
   } catch {
@@ -75,7 +93,7 @@ async function buildFinalPrompt(openai: OpenAI, rawPrompt: string): Promise<stri
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
   }
 
-  prompt = `${prompt}\n\n${IMAGE_REALISM_TAIL}`;
+  prompt = `${appendReferenceHandlingInstructions(prompt, referenceCount)}\n\n${IMAGE_REALISM_TAIL}`;
 
   if (prompt.length > MAX_PROMPT_LENGTH) {
     prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
@@ -182,17 +200,30 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey });
-    const prompt = await buildFinalPrompt(openai, visual.visual_prompt);
+    const referenceImages = await listProjectReferenceImages(
+      service,
+      project.id,
+      DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
+    );
+    const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
 
     console.log(`[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars`);
 
-    const response = await openai.images.generate({
-      model: 'gpt-image-1.5',
-      prompt,
-      n: 1,
-      size: '1536x1024',
-      quality: 'high',
-    });
+    const response = referenceImages.length > 0
+      ? await openai.images.edit({
+          model: IMAGE_GENERATION_MODEL,
+          image: await downloadReferenceImagesAsFiles(referenceImages),
+          prompt,
+          size: IMAGE_GENERATION_SIZE,
+          quality: IMAGE_GENERATION_QUALITY,
+        })
+      : await openai.images.generate({
+          model: IMAGE_GENERATION_MODEL,
+          prompt,
+          n: 1,
+          size: IMAGE_GENERATION_SIZE,
+          quality: IMAGE_GENERATION_QUALITY,
+        });
 
     const b64 = response.data?.[0]?.b64_json;
     if (!b64) {

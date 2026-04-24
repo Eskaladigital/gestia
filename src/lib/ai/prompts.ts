@@ -6,6 +6,7 @@
 
 import type { Project, Competitor, ContentStyleWeights, WeeklyFormatDistribution } from '@/types';
 import { getMonthName } from '@/lib/utils';
+import { buildProductReferenceGuidance } from '@/lib/projects/reference-images';
 
 // ---- Helpers para construir contexto ----
 
@@ -438,9 +439,11 @@ function buildBrandDnaForStrategy(project: Project): string {
 export function buildStrategyPrompt(
   project: Project,
   businessAnalysis: string,
-  competitorAnalysis: string
+  competitorAnalysis: string,
+  options?: { referenceImageCount?: number }
 ): { system: string; user: string } {
   const brandDna = buildBrandDnaForStrategy(project);
+  const productReferenceBlock = buildProductReferenceGuidance(options?.referenceImageCount ?? 0);
 
   return {
     system: `Eres un director de estrategia de contenido para redes sociales de alto nivel. Combinas visión de marca, enfoque editorial, criterio comercial y sensibilidad estética.
@@ -497,6 +500,7 @@ FORMATO DE RESPUESTA JSON:
 
 ${buildProjectContext(project, { includeAiRules: true })}
 ${brandDna ? `\n## ADN VISUAL / IDENTIDAD DE MARCA\n${brandDna}\n` : ''}
+${productReferenceBlock ? `\n${productReferenceBlock}\n` : ''}
 ## ANÁLISIS DEL NEGOCIO
 ${businessAnalysis}
 
@@ -795,8 +799,10 @@ function buildBrandContext(project: Project): string {
 
 export function buildVisualBriefsPrompt(
   project: Project,
-  posts: VisualBriefInput[]
+  posts: VisualBriefInput[],
+  options?: { referenceImageCount?: number }
 ): { system: string; user: string } {
+  const productReferenceBlock = buildProductReferenceGuidance(options?.referenceImageCount ?? 0);
   const postsBlock = posts
     .map((p, i) => {
       const specs = p.production_specs;
@@ -918,7 +924,7 @@ FORMATO DE RESPUESTA:
 ${buildBrandContext(project)}
 
 ## CONTEXTO DEL NEGOCIO
-${buildProjectContext(project, { includeAiRules: true })}
+${buildProjectContext(project, { includeAiRules: true })}${productReferenceBlock ? `\n\n${productReferenceBlock}` : ''}
 
 ## PUBLICACIONES (${posts.length} en total)
 ${postsBlock}
@@ -1151,7 +1157,8 @@ const SYSTEM_BUILDERS: Record<VisualAgentKey, (ar: string) => string> = {
 
 export function buildSingleVisualPrompt(
   project: Project,
-  input: SingleVisualInput
+  input: SingleVisualInput,
+  options?: { referenceImageCount?: number }
 ): { system: string; user: string; agentKey: VisualAgentKey } {
   const { post, visualIndex, totalVisuals, label, slideContext } = input;
   const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
@@ -1159,6 +1166,7 @@ export function buildSingleVisualPrompt(
   const isVideo = agentKey === 'visual_briefs_video';
   const isCarousel = agentKey === 'visual_briefs_carousel';
   const isStory = agentKey === 'visual_briefs_story';
+  const productReferenceBlock = buildProductReferenceGuidance(options?.referenceImageCount ?? 0);
 
   const system = SYSTEM_BUILDERS[agentKey](ar);
 
@@ -1247,7 +1255,7 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}\n\n${brandBlock}\n\n${contextBlock}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    user: `${header}\n\n${brandBlock}\n\n${contextBlock}${productReferenceBlock ? `\n\n${productReferenceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
     agentKey,
   };
 }

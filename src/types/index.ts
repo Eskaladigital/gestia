@@ -191,6 +191,20 @@ export interface Project {
   deleted_at?: string | null;
 }
 
+export interface ProjectReferenceImage {
+  id: string;
+  project_id: string;
+  storage_path: string;
+  image_url: string;
+  original_filename: string;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
+  is_primary: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Competitor {
   id: string;
   project_id: string;

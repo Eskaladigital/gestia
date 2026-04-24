@@ -1,0 +1,675 @@
+AGENTE GENERADOR DE IMAGENES
+Version exportable del flujo de Retiru
+
+OBJETIVO
+
+Este documento describe exactamente el flujo que ha dado el salto de calidad en Retiru para generar portadas realmente fotograficas y no "dibujitos" o renders con look IA.
+
+La idea es que puedas llevarte este archivo a otro proyecto y usarlo como:
+
+1. especificacion de producto
+2. guia de implementacion
+3. prompt pack para un agente
+4. manual para reproducir el mismo sistema con otros contenidos: fichas de producto, articulos del blog, colecciones, landings, destinos, etc.
+
+
+RESUMEN EJECUTIVO
+
+La mejora no vino solo por cambiar el modelo de imagen.
+
+La mejora real vino de combinar tres cosas:
+
+1. Un DOSSIER rico y bien estructurado a partir de la ficha original.
+2. Dos pasadas de GPT-4o:
+   - una para sintetizar la ficha en un prompt visual
+   - otra para quitar el look IA y empujarlo hacia fotografia real
+3. Un generador de imagen configurado con gpt-image-1.5 y parametros compatibles con formato panoramico y calidad alta.
+
+El sistema funciona porque NO se le pide al modelo de imagen "hazme una portada bonita".
+Se le entrega antes una interpretacion editorial, geografica, tematica y fotografica de la ficha.
+
+
+ARQUITECTURA DEL FLUJO
+
+FLUJO COMPLETO
+
+Entrada estructurada
+-> construir dossier textual rico
+-> GPT-4o Prompt Builder
+-> GPT-4o Realism Refiner
+-> concatenar coletilla final de realismo fotografico
+-> gpt-image-1.5
+-> guardar imagen
+
+
+MODELOS Y PARAMETROS USADOS
+
+Modelo para interpretar la ficha y redactar prompts:
+- gpt-4o
+
+Primera pasada:
+- temperature: 0.32
+- max_tokens: 900
+
+Segunda pasada:
+- temperature: 0.18
+- max_tokens: 900
+
+Modelo de imagen:
+- gpt-image-1.5
+
+Parametros de generacion de imagen:
+- n: 1
+- size: 1536x1024
+- quality: high
+- output_format: png
+
+Notas:
+- Antes se usaba DALL-E 3. Este flujo fue migrado a gpt-image-1.5.
+- En Retiru, el salto de calidad perceptible vino de esta combinacion:
+  GPT-4o para pensar la escena + gpt-image-1.5 para ejecutarla.
+
+
+OBJETIVO VISUAL
+
+El objetivo visual no es "bonito", ni "artistico", ni "instagramable".
+
+El objetivo visual exacto es:
+
+- fotografia editorial hiperrealista
+- luz creible
+- materiales concretos
+- atmosfera real
+- composicion premium
+- nada de ilustracion
+- nada de glow fantasioso
+- nada de piel plastica
+- nada de simetria postalera de IA
+
+Frase de control mental:
+
+"Tiene que parecer una fotografia tomada por un fotografo profesional en un lugar real, no una imagen generada."
+
+
+POR QUE FUNCIONA
+
+El error habitual en muchos flujos es este:
+
+1. coger un titulo y un resumen
+2. mandar eso directo al modelo de imagen
+3. pedir "realistic, cinematic, premium"
+
+Eso suele dar:
+
+- escenas genericas
+- composiciones irreales
+- exceso de color
+- personas plasticas
+- vibe de render o cartel
+
+En cambio, este flujo fuerza al sistema a:
+
+1. leer toda la ficha
+2. decidir que escena SI representa de verdad el contenido
+3. concretar geografia, estacion, actividad, materiales, publico y luz
+4. pulir la escena para quitarle "look IA"
+
+
+ENTRADA IDEAL DEL AGENTE
+
+En Retiru la estructura original fue esta:
+
+- title_es
+- summary_es
+- description_es
+- title_en
+- summary_en
+- description_en
+- destination_label
+- address
+- start_date
+- end_date
+- category_labels[]
+- includes_es[]
+- excludes_es[]
+- schedule[]
+- languages[]
+
+Pero esto se puede generalizar.
+
+
+VERSION GENERICA DE INPUT PARA OTROS PROYECTOS
+
+Usa esta estructura mental:
+
+- titulo principal
+- subtitulo o resumen
+- descripcion larga
+- categoria o categorias
+- geografia / lugar / contexto
+- fecha / temporada / coleccion / estacion
+- materiales / ingredientes / componentes / acabados
+- elementos que SI deben verse
+- elementos que NO deben protagonizar la escena
+- audiencia o publico objetivo
+- tono de marca
+- detalles operativos o narrativos
+- idioma(s)
+
+
+MAPEO SEGUN EL TIPO DE CONTENIDO
+
+SI ES UNA FICHA DE PRODUCTO
+
+Usa como dossier:
+- nombre del producto
+- claim corto
+- descripcion larga
+- categoria
+- materiales
+- acabados
+- usos
+- contexto de uso
+- rango de precio o segmento
+- publico objetivo
+- referencias de estilo de marca
+- lo que no debe aparecer
+
+Escena sugerida:
+- producto en entorno real de uso
+- no packshot artificial salvo que lo pidas
+- luz editorial
+- texturas reales
+
+
+SI ES UN ARTICULO DE BLOG
+
+Usa como dossier:
+- titulo del articulo
+- excerpt
+- contenido completo o resumen largo
+- categoria editorial
+- keywords
+- angulo del articulo
+- ejemplos reales mencionados
+- geografia o estacion si aplica
+
+Escena sugerida:
+- imagen editorial que resuma la tesis del articulo
+- evitar metaforas visuales trilladas
+- buscar una escena concreta, real, fotografiable
+
+
+SI ES UNA LANDING O CATEGORIA
+
+Usa como dossier:
+- nombre de la categoria
+- propuesta de valor
+- tipo de publico
+- producto o servicio
+- tono de marca
+- ubicacion o mercado
+- estacionalidad
+- elementos visuales clave
+
+
+PASO 1 - CONSTRUIR EL DOSSIER
+
+REGLA CLAVE:
+No enviar campos sueltos al LLM. Hay que componer un DOSSIER narrativo bien rotulado.
+
+El dossier debe:
+
+- juntar toda la informacion relevante
+- recortar lo redundante
+- conservar datos concretos
+- separar bien bloques tematicos
+
+En Retiru se hizo asi:
+
+1. Titulo
+2. Resumen
+3. Descripcion larga
+4. Version inglesa si existe
+5. Geografia, calendario y clima ambiente
+6. Categorias
+7. Incluye
+8. No incluye
+9. Programa
+10. Idiomas
+
+
+HEURISTICAS IMPORTANTES DEL DOSSIER
+
+1. Limitar longitud de descripcion
+- descripcion larga: max 2800 caracteres
+- programa: max 1200 caracteres
+
+2. Inferir estacion desde la fecha
+- marzo-mayo -> primavera
+- junio-agosto -> verano
+- septiembre-noviembre -> otono
+- diciembre-febrero -> invierno
+
+3. Calcular duracion
+- si hay start_date y end_date, convertirlo en "noche(s) de experiencia"
+
+4. Convertir arrays a texto util
+- categorias en linea
+- incluye como lista separada por "; "
+- programa resumido por dias
+
+5. Marcar "no incluye"
+- no como bloqueo duro del modelo de imagen
+- sino como advertencia de que no debe ser protagonista
+
+
+PLANTILLA DEL DOSSIER
+
+Copia y reutiliza esta estructura:
+
+=== DOSSIER DEL ELEMENTO (usalo entero; prioriza coherencia tematica y contextual) ===
+Tu salida final sera SOLO el parrafo-prompt para el modelo de imagen, no resumenes de este dossier.
+
+Titulo: ...
+Resumen: ...
+Descripcion:
+...
+
+Titulo secundario o EN: ...
+Resumen secundario o EN: ...
+Descripcion secundaria o EN:
+...
+
+--- Geografia, contexto, tiempo y ambiente ---
+Lugar: ...
+Direccion / zona: ...
+Fecha inicio: ...
+Fecha fin: ...
+Duracion aproximada: ...
+Estacion inferida: ...
+
+--- Categorias / tematica ---
+...
+
+--- Elementos visibles que SI pueden aparecer ---
+...
+
+--- Elementos que NO deben protagonizar la escena ---
+...
+
+--- Programa / uso / narrativa / contexto de escena ---
+...
+
+Idiomas / publico / observaciones:
+...
+
+
+PASO 2 - PROMPT BUILDER
+
+OBJETIVO
+
+La primera pasada NO genera la imagen.
+Genera un prompt ya muy bueno, pero todavia con riesgo de sonar demasiado "bonito".
+
+La funcion de este prompt builder es:
+
+- elegir la escena correcta
+- fijar geografia y actividad real
+- elegir luz y momento del dia
+- introducir texturas concretas
+- evitar genericidad
+
+
+PROMPT BUILDER ORIGINAL DE RETIRU
+
+Usa esta version si quieres replicar la logica exacta:
+
+Eres un agente senior: director de arte + location scout + especialista en prompts para generacion de imagenes fotorrealistas. Recibes un DOSSIER COMPLETO de un retiro (geografia, fechas, categorias, textos, programa, incluidos). Tu UNICA salida es UN parrafo en espanol que el modelo de imagen usara tal cual: debe ser la mejor posible.
+
+ANTES de escribir (mentalmente, no lo imprimas): (1) Elige el escenario visual mas especifico y honesto con el dossier, no un "paraiso generico". (2) Conecta TEMATICA: yoga/meditacion/ceramica/ayurveda/circulo/mar/desierto/montana segun categorias + descripcion + programa + incluidos. (3) Elige UNA luz creible de dia (manana luminosa, media manana, tarde clara o golden hour todavia alta) coherente con estacion y region si el dossier lo permite. (4) Anade 2-4 sustantivos CONCRETOS de textura o material (adobe, lino, arcilla, corcho, sal, musgo, dunas, olivos) alineados con el lugar y la actividad, no adjetivos vacios. (5) Si hay conflicto entre campos, prima descripcion + titulo + destino sobre suposiciones. (6) Piensa como si un fotografo profesional estuviera fisicamente alli con una camara full frame de alta gama haciendo una foto real para una portada editorial, no como si estuviera "creando arte".
+
+REGLAS DURAS:
+- Geografia: respeta destino/direccion/fechas/estacion inferida; no inventes monumentos ni ciudades nombradas si no salen en el dossier.
+- Luz/horario: PROHIBIDO noche, anochecer oscuro, hora azul, sol ya puesto, amanecer antes de salir el sol o escenas subexpuestas. La foto debe sentirse tomada con luz natural real entre las 09:00 y las 20:30 de horario de verano del sur de Espana: luminosa, clara y usable como portada.
+- Publico: si el texto indica solo mujeres u otro colectivo, respetalo; si no, grupo mixto o sin genero explicito, sin estereotipos.
+- Personas: como mucho pocas figuras; rostros sin identidad (espaldas, lejania, desenfoque, silueta). Nunca celebridades. Si la presencia humana hace la imagen menos realista, prioriza una escena de entorno real con presencia humana minima, lejana o incluso ninguna.
+- Prohibido en la escena: texto legible, logotipos, carteles, moviles como foco, marcas, datos de contacto.
+- Evita "look IA": cielos neon, piel de plastico, simetria de postal barata, oversaturacion, HDR agresivo, tonos morados irreales, niebla magica, render/pintura/ilustracion, perfeccion plastica, piel suavizada, brillo artificial, composicion imposible o escenografia de fantasia, sombras excesivamente cerradas o escenas tenebrosas.
+
+FORMATO DE SALIDA (obligatorio):
+- Exactamente UN parrafo en espanol, sin saltos de linea, sin vinetas, sin comillas, sin markdown.
+- Entre 400 y 1100 caracteres: denso y cinematografico, pero fotografico (no guion de pelicula).
+- Debe empezar con: Fotografia hiperrealista y cinematografica de
+- Debe terminar integrando (en la misma frase final o penultima) la idea de: composicion editorial premium, fotografia de viaje y bienestar de lujo, profundidad de campo natural, texturas realistas, encuadre horizontal amplio, sin texto ni logos ni ilustracion, realismo fotografico absoluto, portada web de alta conversion.
+- La redaccion debe sonar a encargo fotografico real: camara profesional, luz existente, color natural, detalles imperfectos creibles y atmosfera autentica.
+
+No escribas nada antes ni despues del parrafo.
+
+
+PROMPT BUILDER GENERICO EXPORTABLE
+
+Usa esta version para productos, blog, landings o cualquier otro proyecto:
+
+Eres un agente senior: director de arte + location scout + especialista en prompts para generacion de imagenes fotorrealistas. Recibes un DOSSIER COMPLETO sobre un elemento de negocio (producto, articulo, categoria, servicio o experiencia). Tu UNICA salida es UN parrafo en espanol que el modelo de imagen usara tal cual: debe ser la mejor posible.
+
+ANTES de escribir (mentalmente, no lo imprimas): (1) Elige el escenario visual mas especifico y honesto con el dossier, no una escena generica. (2) Conecta contexto, uso, materiales, publico y posicionamiento. (3) Elige UNA luz creible de dia o una iluminacion realista coherente con el tipo de escena. (4) Anade 2-4 sustantivos concretos de textura o material alineados con el objeto o entorno, no adjetivos vacios. (5) Si hay conflicto entre campos, prima descripcion larga + titulo + contexto real sobre el resto. (6) Piensa como si un fotografo profesional estuviera capturando una foto editorial real para una portada, una ficha comercial premium o una cabecera de contenido.
+
+REGLAS DURAS:
+- No inventes elementos que contradigan el dossier.
+- Evita metaforas visuales obvias si hacen que la imagen parezca artificial.
+- Si hay personas, pocas, naturales y no posadas; rostros no protagonistas salvo que el caso de uso lo exija.
+- Prohibido en la escena: texto legible, logotipos, marcas, interfaces falsas, tipografia incrustada, carteles hero.
+- Evita look IA: cielos irreales, piel de plastico, simetria excesiva, oversaturacion, glow, render 3D, pintura digital, ilustracion, perfeccion plastica, HDR agresivo, composicion imposible.
+
+FORMATO DE SALIDA:
+- Exactamente UN parrafo en espanol.
+- Sin comillas, sin markdown, sin listas, sin saltos de linea.
+- Debe empezar con: Fotografia hiperrealista y cinematografica de
+- Debe sonar a encargo fotografico premium real.
+
+
+PASO 3 - REALISM REFINER
+
+OBJETIVO
+
+La segunda pasada es la pieza decisiva.
+
+No inventa el prompt desde cero.
+Hace de editor fotografico obsesionado con quitar:
+
+- exceso de belleza artificial
+- teatralidad
+- postureo de anuncio
+- fake luxury
+- turismo de folleto
+- wellness de Pinterest
+
+
+PROMPT REALISM REFINER ORIGINAL
+
+Eres un editor fotografico obsesionado con el hiperrealismo. Recibiras:
+1) un DOSSIER del evento
+2) un primer prompt ya redactado
+
+Tu tarea es REESCRIBIR ese prompt para que parezca todavia mas una fotografia real tomada por un fotografo profesional en localizacion real.
+
+Prioridades:
+- La imagen debe parecer una FOTO REAL, no arte generativo.
+- Si el borrador suena demasiado bonito, demasiado escenificado, demasiado "wellness instagram", demasiado simetrico o demasiado turistico, rebajalo.
+- Da prioridad a entorno real, luz existente, materiales concretos, imperfecciones creibles, composicion editorial contenida.
+- Si las personas no son imprescindibles para comunicar el retiro, reduce su protagonismo o dejalas lejanas/secundarias. Si aparecen, nada de poses artificiales ni expresiones de anuncio.
+- Corrige cualquier tendencia a oscuridad excesiva: nada de noche, nada de sol escondido, nada de cielos dramaticos oscuros; debe sentirse una franja luminosa y comercialmente util de dia.
+- Evita cualquier sensacion de fantasia, exceso de color, teatralidad, glow, piel plastica, postal irreal o escena de catalogo falso.
+
+Reglas:
+- Manten coherencia absoluta con el dossier.
+- Salida: EXACTAMENTE un parrafo en espanol, sin comillas, sin markdown, sin vinetas, sin saltos de linea.
+- Debe empezar por "Fotografia hiperrealista y cinematografica de".
+- Debe sonar a encargo fotografico premium real, no a instruccion artistica abstracta.
+- No anadas explicaciones sobre lo que has cambiado. Devuelve solo el prompt final.
+
+
+PROMPT REALISM REFINER GENERICO EXPORTABLE
+
+Eres un editor fotografico obsesionado con el hiperrealismo. Recibiras:
+1) un DOSSIER del elemento
+2) un primer prompt ya redactado
+
+Tu tarea es REESCRIBIR ese prompt para que parezca todavia mas una fotografia real tomada por un fotografo profesional en una localizacion autentica o en un contexto de producto real.
+
+Prioridades:
+- La imagen debe parecer una FOTO REAL, no arte generativo.
+- Si el borrador suena demasiado bonito, demasiado escenificado, demasiado de catalogo falso o demasiado de IA, rebajalo.
+- Da prioridad a materiales concretos, luz existente, detalle real, imperfecciones creibles y composicion editorial sobria.
+- Si las personas no son imprescindibles, reduce su protagonismo.
+- Evita fantasia, exceso de color, glow, suavizado plastico, simetria artificial, postureo publicitario falso.
+
+Reglas:
+- Manten coherencia absoluta con el dossier.
+- Devuelve exactamente un parrafo en espanol.
+- Sin explicaciones extra.
+
+
+PASO 4 - COLA FINAL DE REALISMO
+
+Despues de las dos pasadas de GPT-4o, aun se anade una coletilla final fija.
+Esto es importante porque:
+
+- normaliza el tipo de acabado
+- obliga a la fotografia a quedarse en terreno realista
+- baja el riesgo de que el modelo vuelva a "embellecer" demasiado
+
+COLA FINAL USADA EN RETIRU
+
+Tomada como fotografia real con camara full frame profesional y optica de reportaje de alta calidad, luz existente fisicamente creible, color natural y balance de blancos realista, contraste moderado, grano minimo natural, detalle autentico en piel, telas, arena, piedra, vegetacion o arquitectura segun la escena; siempre de dia, luminosa y clara, nunca nocturna ni sombria, con sensacion de franja util entre 09:00 y 20:30 de verano del sur de Espana; si aparecen personas, secundarias, naturales y no posadas; sin HDR agresivo, sin acabado plastico, sin render 3D, sin pintura digital, sin ilustracion, sin tipografia ni logotipos.
+
+RECOMENDACION
+
+No la elimines.
+Si adaptas el sistema a otro proyecto, ajusta solo:
+
+- rango horario
+- entorno geografico
+- tipo de materiales
+- presencia o ausencia de personas
+
+
+PASO 5 - PETICION FINAL A GPT-IMAGE-1.5
+
+PETICION RECOMENDADA
+
+POST https://api.openai.com/v1/images/generations
+
+JSON:
+
+{
+  "model": "gpt-image-1.5",
+  "prompt": "PROMPT_FINAL",
+  "n": 1,
+  "size": "1536x1024",
+  "quality": "high",
+  "output_format": "png"
+}
+
+REGLAS PRACTICAS
+
+- Usa formato panoramico si la imagen va a cabeceras o cards horizontales.
+- Usa una sola imagen por llamada para maximizar control editorial.
+- Usa png si luego la vas a guardar y servir tal cual.
+
+
+PASO 6 - LIMPIEZA Y NORMALIZACION DEL PROMPT
+
+Antes de llamar al modelo de imagen:
+
+1. quitar comillas iniciales o finales
+2. colapsar espacios multiples
+3. truncar a 4000 caracteres si hace falta
+4. validar que el prompt no se haya quedado ridiculamente corto
+
+Regla usada:
+- si el prompt final tiene menos de 200 caracteres -> error
+
+
+PARAMETROS QUE HAN DADO BUEN RESULTADO
+
+Para la interpretacion del dossier:
+- gpt-4o
+- temp media-baja
+
+Para el refinado:
+- gpt-4o
+- temp baja
+
+Para la imagen:
+- gpt-image-1.5
+- quality high
+- 1536x1024
+
+Esto da una mezcla buena entre:
+- obediencia
+- realismo
+- composicion editorial
+
+
+COSAS QUE NO HAY QUE HACER
+
+1. No mandar solo titulo + resumen al generador de imagen.
+2. No pedir "ultra realistic cinematic" sin contexto real.
+3. No abusar de palabras como:
+   - magical
+   - dreamy
+   - ethereal
+   - stunning
+   - breathtaking
+   - luxurious
+   - perfect
+4. No dejar que el modelo invente geografia.
+5. No dejar que meta logos, texto o moviles.
+6. No dejar que el prompt se convierta en una pieza de prosa artistica vaga.
+7. No mezclar demasiadas escenas en una sola imagen.
+
+
+PATRONES QUE SI FUNCIONAN
+
+1. Materiales concretos
+- adobe
+- lino
+- ceramica
+- corcho
+- piedra
+- arena
+- madera envejecida
+- algodon lavado
+
+2. Luz concreta
+- manana clara
+- media manana luminosa
+- tarde clara
+- luz alta de golden hour aun util
+
+3. Composicion concreta
+- encuadre horizontal amplio
+- escena contenida
+- profundidad natural
+- pocas figuras
+- fondo real
+
+4. Imperfeccion real
+- telas arrugadas
+- barro real
+- grano minimo natural
+- sombra creible
+- arquitectura vivida
+
+
+GUIA DE ADAPTACION RAPIDA A OTROS CASOS
+
+CASO A - PRODUCTO DE HOGAR
+
+En el dossier anade:
+- estancia donde se usa
+- material principal
+- acabado
+- publico objetivo
+- tono de marca
+
+Y cambia mentalmente:
+- "evento" por "producto"
+- "programa" por "contexto de uso"
+- "incluye" por "elementos visibles"
+
+
+CASO B - COSMETICA
+
+Anade:
+- textura del producto
+- ingredientes
+- ritual de uso
+- cuarto de bano / tocador / spa realista
+
+Evita:
+- gotas imposibles
+- piel plastica
+- laboratorios futuristas de anuncio barato
+
+
+CASO C - ARTICULO DE BLOG
+
+Anade:
+- tesis del articulo
+- emocion buscada
+- escena real que simboliza el contenido
+
+Evita:
+- metaforas obvias
+- montajes demasiado conceptuales
+
+
+CASO D - FICHA DE HOTEL / VIAJE / EXPERIENCIA
+
+Muy parecido a Retiru.
+Es el caso donde este flujo mejor encaja.
+
+
+PSEUDOCODIGO DE IMPLEMENTACION
+
+function buildDossier(input):
+  - recorta descripcion
+  - infiere estacion si hay fecha
+  - calcula duracion si aplica
+  - resume programa / uso / narrativa
+  - compone bloques rotulados
+  - devuelve string unico
+
+function buildPromptWithLLM(dossier):
+  - llama a GPT-4o con PROMPT_BUILDER_SYSTEM
+  - limpia la respuesta
+  - llama a GPT-4o con PROMPT_REALISM_REFINER_SYSTEM
+  - limpia la respuesta
+  - concatena IMAGE_REALISM_TAIL
+  - valida longitud
+  - devuelve prompt final
+
+function generateImage(prompt):
+  - llama a /v1/images/generations
+  - model: gpt-image-1.5
+  - size: 1536x1024
+  - quality: high
+  - output_format: png
+  - devuelve buffer o url
+
+
+CHECKLIST DE CALIDAD
+
+Antes de dar una imagen por buena, preguntate:
+
+1. Parece una foto real hecha por una persona?
+2. El lugar parece concreto y no inventado?
+3. Hay materiales reales visibles?
+4. La luz es creible?
+5. Se entiende el tema del contenido sin parecer una fantasia?
+6. Hay algun rastro de ilustracion o CGI?
+7. Hay exceso de pose o de perfeccion plastica?
+
+Si falla algo de eso, vuelve al prompt.
+
+
+IDEA CLAVE FINAL
+
+El secreto de este sistema no es "usar un modelo mejor".
+El secreto es obligar al sistema a pensar como:
+
+- editor visual
+- director de arte
+- fotografo de localizacion
+- revisor anti-look-IA
+
+Primero piensa.
+Luego redacta.
+Luego refina.
+Y solo al final genera.
+
+Eso es lo que convierte una ficha en una portada con aspecto de fotografia real.
+

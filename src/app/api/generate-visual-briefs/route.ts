@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
 import { buildSingleVisualPrompt, decomposePostIntoVisuals, callAI, type VisualBriefInput } from '@/lib/ai';
+import { DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI, listProjectReferenceImages } from '@/lib/projects/reference-images';
 import type { SingleVisualAIResponse, ContentItem } from '@/types';
 
 export const maxDuration = 300;
@@ -78,6 +79,7 @@ async function processOneVisual(
   job: VisualJob,
   project: any,
   userId: string,
+  referenceImageUrls: string[],
   supabase: any,
 ): Promise<VisualResult | null> {
   const { system, user: userPrompt, agentKey } = buildSingleVisualPrompt(project, {
@@ -86,12 +88,15 @@ async function processOneVisual(
     totalVisuals: job.totalVisualsForPost,
     label: job.label,
     slideContext: job.slideContext,
+  }, {
+    referenceImageCount: referenceImageUrls.length,
   });
 
   const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
     agentKey,
     userId,
     maxTokens: 4096,
+    inputImages: referenceImageUrls,
   });
 
   const rawData = aiResponse.data as unknown as Record<string, unknown> | null;
@@ -208,6 +213,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }
 
+    const referenceImages = await listProjectReferenceImages(
+      supabase,
+      project_id,
+      DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
+    );
+    const referenceImageUrls = referenceImages.map(image => image.image_url);
+
     let query = supabase
       .from('content_items')
       .select('*')
@@ -318,7 +330,7 @@ export async function POST(request: NextRequest) {
 
             let result: VisualResult | null = null;
             try {
-              result = await processOneVisual(job, project, user.id, supabase);
+              result = await processOneVisual(job, project, user.id, referenceImageUrls, supabase);
             } catch (err) {
               console.error(`[generate-visual-briefs] Failed visual ${job.contentItemId}[${job.visualIndex}]:`, err);
             }

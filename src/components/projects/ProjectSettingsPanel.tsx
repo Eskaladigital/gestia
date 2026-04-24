@@ -200,7 +200,7 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
           <div>
             <h2 className="font-display text-lg font-bold tracking-tight">Ajustes del proyecto</h2>
             <p className="text-surface-400 text-xs font-medium mt-0.5">
-              Objetivos, tono, formatos y configuración avanzada
+              Objetivos, tono, formatos y configuración avanzada antes de lanzar IA
             </p>
           </div>
         </div>

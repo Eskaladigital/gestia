@@ -10,7 +10,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "npx supabase db push",
-    "screenshot:portfolio": "node scripts/screenshot-portfolio.js"
+    "screenshot:portfolio": "node scripts/screenshot-portfolio.js",
+    "images:regenerate-project": "node scripts/regenerate-project-images.js",
+    "images:import-project-references": "node scripts/import-project-reference-images.js"
   },
   "dependencies": {
     "@sparticuz/chromium": "^143.0.4",

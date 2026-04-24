@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl } from '@/lib/utils';
+import { IMAGE_GENERATION_MODEL } from '@/lib/ai/constants';
 import { Button } from '@/components/ui/Button';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { buildImageFilename } from './ContentGallery';
@@ -445,7 +446,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                   )}
                 </div>
                 <p className="text-xs text-surface-500 -mt-2">
-                  Genera la imagen de cada visual usando gpt-image-1.5. Puedes descargarla o regenerarla.
+                  Genera la imagen de cada visual usando {IMAGE_GENERATION_MODEL}. Puedes descargarla o regenerarla.
                 </p>
                 {visuals.map(visual => {
                   const hasImage = visual.image_status === 'ready' && visual.image_url;

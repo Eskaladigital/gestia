@@ -59,12 +59,12 @@ src/
 │   ├── ui/
 │   ├── layout/              # Sidebar responsive (drawer móvil + sidebar escritorio); nav marketing + off-canvas móvil
 │   ├── onboarding/
-│   ├── calendar/            # Vista calendario, grid, tabla/lista, editor de post
+│   ├── calendar/            # Vista calendario, grid, tabla/lista, editor de post, galería de imágenes con espejo
 │   ├── strategy/
-│   └── projects/            # Acciones IA, ajustes, marca, listados
+│   └── projects/            # BrandCard, BusinessCard, CompetitorsCard (editables), acciones IA, ajustes, listados
 ├── lib/
 │   ├── supabase/            # Client, Server, Middleware, project-queries
-│   ├── ai/                  # Cliente LLM, prompts, providers, constants
+│   ├── ai/                  # Cliente LLM, prompts (estrategia con ADN visual), providers, constants
 │   ├── scraping/            # Scraping (fetch + Apify opcional) + screenshots-puppeteer.ts (Storage)
 │   ├── auth/                # Roles (user / admin / agency)
 │   └── utils.ts
@@ -73,7 +73,7 @@ src/
 ├── hooks/
 └── middleware.ts            # Auth/sesión (Next 16 puede avisar middleware → proxy)
 
-supabase/migrations/         # 001 … 016 (ejecutar en orden)
+supabase/migrations/         # 001 … 019 (ejecutar en orden)
 ```
 
 ## Interfaz responsive
@@ -88,6 +88,7 @@ supabase/migrations/         # 001 … 016 (ejecutar en orden)
 - **Vista cuadrícula**: en **móvil** se muestra un **mes compacto** con el día y pequeños indicadores por tipo de contenido; al seleccionar un día aparece el detalle de las publicaciones. En **tablet/escritorio** se mantiene la cuadrícula semanal ampliada.
 - **Vista lista**: cada ítem es una **tarjeta** con una **franja vertical de color** e **icono + etiqueta** del formato (p. ej. Story, Reel, Carrusel) para ver de un vistazo el tipo de publicación; se muestran idea, copy (sin truncar con `pre-wrap`), CTA, objetivo y hashtags cuando existan.
 - **Editor de post**: en móvil actúa como **panel inferior** (bottom sheet); en escritorio, **modal centrado**.
+- **Imágenes generadas**: cada visual del calendario puede generar una imagen IA (`generate-image`). Sobre cada imagen hay botones de **copiar**, **regenerar**, **descargar** y **espejo** (flip horizontal). El espejo persiste en BD (`image_flip_horizontal`) y se aplica también a descargas individuales y ZIP.
 
 ## PWA (instalable)
 
@@ -101,12 +102,12 @@ supabase/migrations/         # 001 … 016 (ejecutar en orden)
 
 1. **Datos** → Supabase con RLS por usuario; proyectos pueden archivarse (`deleted_at`, migración 008). Roles admin y suscripciones (012+).
 2. **Scraping** → `RealScrapingProvider`: petición HTTP a la web del proyecto; si el texto es insuficiente o falla el fetch, se puede usar **Apify** (Website Content Crawler / búsqueda para competencia) según variables de entorno. Búsqueda orgánica opcional vía **SearchAPI.io** o **SerpAPI** (`SEARCHAPI_API_KEY`, `SERPAPI_KEY`).
-3. **Inteligencia** → Llamadas LLM con prompts alineados al onboarding; en **Config IA** se pueden ajustar agentes y claves de proveedor almacenadas de forma segura (ver migraciones `003`, `005`).
+3. **Inteligencia** → Llamadas LLM con prompts alineados al onboarding; en **Config IA** se pueden ajustar agentes y claves de proveedor almacenadas de forma segura (ver migraciones `003`, `005`). El prompt de estrategia (`buildStrategyPrompt`) inyecta **ADN visual** de la marca (colores, keywords, identidad) y aplica una **jerarquía de prioridad**: reglas IA del proyecto → sliders de tono del usuario → ADN de marca → análisis del negocio → análisis competitivo. Cada pilar generado debe justificarse con fortalezas del negocio o debilidades de la competencia.
 4. **Aplicación** → Next.js App Router (Server Components + Client Components).
 
 ## Base de datos (migraciones)
 
-En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001` → `016`):
+En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001` → `019`):
 
 | Archivo | Contenido (resumen) |
 |--------|----------------------|
@@ -126,6 +127,9 @@ En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001`
 | `014_admin_profile_eskala_digital_com.sql` | Ajuste de perfil admin / email corporativo (entorno concreto) |
 | `015_fix_admin_rls_recursion.sql` | Evita recursión RLS en policies de admin (función `SECURITY DEFINER`) |
 | `016_auto_trial_on_signup.sql` | Trial 30 días al registrarse (`selected_plan` en metadata del signup) |
+| `017_content_item_visuals.sql` | Tabla `content_item_visuals` para almacenar visuals por ítem del calendario |
+| `018_visual_generated_images.sql` | Campos de imagen generada en `content_item_visuals` (`image_url`, `image_status`, etc.) |
+| `019_content_item_visuals_image_flip.sql` | Columna `image_flip_horizontal` (espejo persistente por visual) |
 
 **Storage:** crea en Supabase un bucket público llamado **`screenshots`** (o déjalo que la primera captura lo intente crear vía service role). Las miniaturas del análisis web se suben ahí.
 
@@ -142,7 +146,7 @@ npm install
 ### 2. Configurar Supabase
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ejecuta las migraciones del directorio `supabase/migrations/` **en orden** (`001` → `016`).
+2. Ejecuta las migraciones del directorio `supabase/migrations/` **en orden** (`001` → `019`).
 3. En **Authentication → Providers**, habilita Email y, si quieres, Google (OAuth).
 4. En **Authentication → URL configuration**, añade la URL de tu app (local y producción) y rutas de callback (p. ej. `/callback`).
 
@@ -193,10 +197,11 @@ npm run start
 
 1. Registro / inicio de sesión (opcional `?plan=…` en registro para trial según 016).
 2. Crear proyecto → **onboarding** (pasos del formulario); puede incluir análisis de **marca** (`analyze-brand`).
-3. En la ficha del proyecto, **Fase 1 — Base**: analizar web → analizar competidores → generar estrategia (botones independientes; el estado del pipeline se refleja en la UI).
+3. En la ficha del proyecto, **Fase 1 — Base**: analizar web → analizar competidores → generar estrategia (botones independientes; el estado del pipeline se refleja en la UI). Las secciones de **identidad de marca** (`BrandCard`), **ficha del negocio** (`BusinessCard`) y **competidores** (`CompetitorsCard`) son **editables** directamente desde el dashboard; los cambios se persisten en Supabase y se utilizan al regenerar la estrategia.
 4. **Analizar web** además del texto guarda **miniaturas** (Puppeteer) de hasta 3 URLs en el bucket Supabase **`screenshots`** y enlaza `screenshot_url` en cada fila de `scraped_content`. El proceso puede alargarse varios minutos en la primera ejecución (descarga de Chromium, red lenta, etc.). Requiere Node con Chrome embebido (típico en `npm run dev` / `next start` en tu PC o VPS); en muchos despliegues serverless no hay navegador — usa `DISABLE_PUPPETEER_SCREENSHOTS=1` o un host con Node “completo”.
 5. **Fase 2 — Calendario**: solo disponible cuando existe estrategia guardada. Primera vez genera el mes actual; si ya hay posts, puedes **añadir** publicaciones al mes o **reemplazar** todo el mes (modal). El calendario puede incluir `production_specs` (slides, duración, tipo de medio) y un paso posterior de **briefs visuales** (`generate-visual-briefs`).
-6. Revisar y editar posts en la vista **Calendario** (cuadrícula o lista); exportar según lo que exponga la UI (p. ej. JSON).
+6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). Las imágenes se muestran en galería con opciones de **copiar, regenerar, descargar y espejo horizontal**. El espejo (`image_flip_horizontal`) es persistente y se aplica a descargas individuales y ZIP.
+7. Revisar y editar posts en la vista **Calendario** (cuadrícula o lista); exportar según lo que exponga la UI (p. ej. JSON).
 
 Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al completar de nuevo pasos correctamente (p. ej. calendario generado) puede volver a **`ready`** según la lógica actual de las rutas API.
 
@@ -210,6 +215,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 | `POST /api/generate-strategy` | Estrategia de contenido |
 | `POST /api/generate-calendar` | Calendario (`calendar_mode`: append / replace, etc.) |
 | `POST /api/generate-visual-briefs` | Brief creativo + prompt generativo por ítem del calendario |
+| `POST /api/generate-image` | Genera imagen IA para un visual del calendario (guarda URL en `content_item_visuals`) |
 | `GET/POST/PATCH /api/projects` | Listar activos, crear; `PATCH` también sirve para onboarding y **papelera** (`deleted_at`: ISO string o `null` para restaurar) |
 | `PATCH /api/projects/[id]` | Ajustes del proyecto (tono, distribución semanal, cuota, etc.) |
 | `DELETE /api/projects/[id]` | Borrado definitivo (si hay `deleted_at`, solo tras archivar en papelera) |
@@ -242,7 +248,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [ ] Integración Firecrawl explícita si quieres otro proveedor de extracción
 - [ ] Streaming de respuestas IA (SSE)
 - [ ] Exportación a CSV / Google Sheets
-- [ ] Generación de imágenes (DALL-E u otros)
+- [x] Generación de imágenes IA (con espejo horizontal persistente y descarga)
 - [ ] Multi-plataforma ampliada (TikTok, LinkedIn, X, etc.)
 - [ ] Publicación programada vía APIs de redes
 - [ ] Planes y pagos (Stripe)
