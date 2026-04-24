@@ -7,6 +7,15 @@
  *   node scripts/regenerate-project-images.js --project-id=<uuid>
  *   node scripts/regenerate-project-images.js --project-name=Furgocasa --limit=10
  *   node scripts/regenerate-project-images.js --project-name=Furgocasa --skip=35
+ *   node scripts/regenerate-project-images.js --project-name=Furgocasa --limit=3 --debug --dump-references=tmp/refs
+ *   node scripts/regenerate-project-images.js --project-name=Furgocasa --limit=3 --no-references
+ *
+ * Flags de diagnóstico:
+ *   --debug                 Imprime metadatos de cada referencia antes/después
+ *                           de normalizar, tamaño del buffer enviado, etc.
+ *   --dump-references=<dir> Vuelca los PNG normalizados a <dir> para inspección
+ *                           manual (ver si sharp los está dejando bien).
+ *   --no-references         Fuerza a generar sin referencias (contraste).
  *
  * Requiere en .env.local o entorno:
  *   NEXT_PUBLIC_SUPABASE_URL
@@ -296,8 +305,13 @@ async function normalizeReferenceBuffer(input) {
     .toBuffer();
 }
 
-async function downloadReferenceImages(referenceImages) {
+async function downloadReferenceImages(referenceImages, opts = {}) {
+  const { debug = false, dumpDir = null } = opts;
   const files = [];
+
+  if (dumpDir && !fs.existsSync(dumpDir)) {
+    fs.mkdirSync(dumpDir, { recursive: true });
+  }
 
   for (let i = 0; i < referenceImages.length; i++) {
     const image = referenceImages[i];
@@ -311,12 +325,73 @@ async function downloadReferenceImages(referenceImages) {
       throw new Error(`La referencia ${image.original_filename} llegó vacía (${rawBuffer.length} bytes)`);
     }
 
+    if (debug) {
+      try {
+        const raw = await sharp(rawBuffer).metadata();
+        console.log(
+          `    · ref#${i + 1} IN  ${image.original_filename} → ` +
+          `${raw.format} ${raw.width}x${raw.height} space=${raw.space} channels=${raw.channels} ` +
+          `depth=${raw.depth} hasAlpha=${raw.hasAlpha} orientation=${raw.orientation ?? '-'} ` +
+          `icc=${raw.icc ? 'yes' : 'no'} bytes=${rawBuffer.length}`
+        );
+      } catch (metaErr) {
+        console.log(`    · ref#${i + 1} IN  (sharp no pudo leer metadatos: ${metaErr.message})`);
+      }
+    }
+
     const normalized = await normalizeReferenceBuffer(rawBuffer);
+
+    if (debug) {
+      try {
+        const nrm = await sharp(normalized).metadata();
+        console.log(
+          `    · ref#${i + 1} OUT ${nrm.format} ${nrm.width}x${nrm.height} space=${nrm.space} ` +
+          `channels=${nrm.channels} depth=${nrm.depth} hasAlpha=${nrm.hasAlpha} ` +
+          `bytes=${normalized.length}`
+        );
+      } catch (metaErr) {
+        console.log(`    · ref#${i + 1} OUT (sharp no pudo leer metadatos normalizados: ${metaErr.message})`);
+      }
+    }
+
+    if (dumpDir) {
+      const outPath = path.join(dumpDir, `reference-${i + 1}.png`);
+      fs.writeFileSync(outPath, normalized);
+      if (debug) console.log(`    · ref#${i + 1} volcado a ${outPath}`);
+    }
+
     const filename = `reference-${i + 1}.${NORMALIZED_REFERENCE_EXTENSION}`;
     files.push(await toFile(normalized, filename, { type: NORMALIZED_REFERENCE_MIME }));
   }
 
   return files;
+}
+
+function dumpOpenAIError(err) {
+  console.error('  ✗ OpenAI error:');
+  console.error(`      name:    ${err?.name}`);
+  console.error(`      status:  ${err?.status}`);
+  console.error(`      code:    ${err?.code}`);
+  console.error(`      type:    ${err?.type}`);
+  console.error(`      message: ${err?.message}`);
+  const reqId = err?.requestID || err?.request_id || err?.headers?.['x-request-id'];
+  if (reqId) console.error(`      reqId:   ${reqId}`);
+  if (err?.error) {
+    try {
+      console.error('      error:   ' + JSON.stringify(err.error, null, 2).replace(/\n/g, '\n      '));
+    } catch {
+      console.error('      error:   ' + String(err.error));
+    }
+  }
+  if (err?.response) {
+    const status = err.response.status;
+    const headers = err.response.headers;
+    console.error(`      response.status:  ${status}`);
+    if (headers && typeof headers.get === 'function') {
+      const reqIdHdr = headers.get('x-request-id') || headers.get('openai-request-id');
+      if (reqIdHdr) console.error(`      response.reqId:   ${reqIdHdr}`);
+    }
+  }
 }
 
 function isOpenAIReferenceRejection(err) {
@@ -382,10 +457,15 @@ async function saveError(supabase, visualId, message) {
   }
 }
 
-async function generateOneImage({ supabase, openai, projectId, visual, referenceImages }) {
+async function generateOneImage({ supabase, openai, projectId, visual, referenceImages, debug = false, dumpDir = null }) {
   await markGenerating(supabase, visual.id);
 
   const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
+
+  if (debug) {
+    console.log(`  · prompt length: ${prompt.length} chars`);
+    console.log(`  · referencias a enviar: ${referenceImages.length}`);
+  }
 
   const generateWithoutReferences = () => openai.images.generate({
     model: IMAGE_MODEL,
@@ -398,7 +478,10 @@ async function generateOneImage({ supabase, openai, projectId, visual, reference
   let response;
   if (referenceImages.length > 0) {
     try {
-      const files = await downloadReferenceImages(referenceImages);
+      const files = await downloadReferenceImages(referenceImages, { debug, dumpDir });
+      if (debug) {
+        console.log(`  · llamando images.edit con ${files.length} ficheros (${IMAGE_MODEL} ${IMAGE_SIZE} ${IMAGE_QUALITY})`);
+      }
       response = await openai.images.edit({
         model: IMAGE_MODEL,
         image: files,
@@ -407,8 +490,9 @@ async function generateOneImage({ supabase, openai, projectId, visual, reference
         quality: IMAGE_QUALITY,
       });
     } catch (editErr) {
+      dumpOpenAIError(editErr);
       if (!isOpenAIReferenceRejection(editErr)) throw editErr;
-      console.warn(`  ⚠ OpenAI rechazó las referencias (${editErr.message}). Regenerando sin referencias.`);
+      console.warn(`  ⚠ OpenAI rechazó las referencias. Regenerando sin referencias.`);
       response = await generateWithoutReferences();
     }
   } else {
@@ -461,6 +545,12 @@ async function main() {
   const limit = Number.isFinite(limitArg) && limitArg > 0 ? limitArg : null;
   const skipArg = parseInt(getArg('skip') || '', 10);
   const skip = Number.isFinite(skipArg) && skipArg > 0 ? skipArg : 0;
+  const debug = hasFlag('debug');
+  const noRefs = hasFlag('no-references');
+  const dumpDirArg = getArg('dump-references');
+  const dumpDir = dumpDirArg
+    ? (path.isAbsolute(dumpDirArg) ? dumpDirArg : path.join(ROOT, dumpDirArg))
+    : null;
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
@@ -471,7 +561,8 @@ async function main() {
   }
 
   const openai = new OpenAI({ apiKey: openaiKey });
-  const referenceImages = await fetchProjectReferenceImages(supabase, project.id);
+  const rawReferenceImages = await fetchProjectReferenceImages(supabase, project.id);
+  const referenceImages = noRefs ? [] : rawReferenceImages;
   const fetchLimit = skip > 0 ? null : limit;
   let visuals = await fetchProjectVisuals(supabase, project.id, fetchLimit);
   if (skip > 0) {
@@ -490,7 +581,9 @@ async function main() {
   console.log(`Total visuals a regenerar: ${visuals.length}`);
   console.log(`Modelo imagen: ${IMAGE_MODEL} · ${IMAGE_SIZE} · ${IMAGE_QUALITY}`);
   console.log(`Refiner: ${REFINER_MODEL}`);
-  console.log(`Referencias de producto: ${referenceImages.length}`);
+  console.log(`Referencias de producto: ${referenceImages.length}${noRefs && rawReferenceImages.length ? ` (forzado --no-references, había ${rawReferenceImages.length})` : ''}`);
+  if (debug) console.log('Modo debug activado.');
+  if (dumpDir) console.log(`Volcado de referencias normalizadas: ${dumpDir}`);
   console.log('');
 
   let ok = 0;
@@ -512,6 +605,8 @@ async function main() {
         projectId: project.id,
         visual,
         referenceImages,
+        debug,
+        dumpDir,
       });
       ok++;
       console.log(`  ✓ ${result.imageUrl}`);
@@ -519,6 +614,7 @@ async function main() {
       failed++;
       const message = err?.message || String(err);
       await saveError(supabase, visual.id, message);
+      if (debug) dumpOpenAIError(err);
       console.error(`  ✗ ${message}`);
     }
   }

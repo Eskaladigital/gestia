@@ -8,3 +8,5 @@ node_modules/
 .vercel
 # Notas locales con credenciales
 *supasbe*.txt
+# Carpeta de trabajo temporal (dumps de scripts, debug, etc.)
+tmp/
