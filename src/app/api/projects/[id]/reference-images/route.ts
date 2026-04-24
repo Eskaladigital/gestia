@@ -8,6 +8,9 @@ import {
   isProjectReferenceImagesTableError,
   listProjectReferenceImages,
   MAX_PROJECT_REFERENCE_IMAGES,
+  NORMALIZED_REFERENCE_EXTENSION,
+  NORMALIZED_REFERENCE_MIME,
+  normalizeReferenceImageBuffer,
 } from '@/lib/projects/reference-images';
 
 export const runtime = 'nodejs';
@@ -53,7 +56,14 @@ export async function POST(
     const currentPrimaryCount = existing.filter(image => image.is_primary).length;
     const maxSortOrder = existing.reduce((max, image) => Math.max(max, image.sort_order), -1);
 
-    const incomingPaths = files.map(file => buildProjectReferenceImageStoragePath(id, file.name));
+    const normalizedNameFor = (originalName: string): string => {
+      const stem = (originalName || 'referencia').replace(/\.[^.]+$/, '');
+      return `${stem}.${NORMALIZED_REFERENCE_EXTENSION}`;
+    };
+
+    const incomingPaths = files.map(file =>
+      buildProjectReferenceImageStoragePath(id, normalizedNameFor(file.name))
+    );
     const newUniqueCount = incomingPaths.filter(path => !existingByPath.has(path)).length;
     if (existing.length + newUniqueCount > MAX_PROJECT_REFERENCE_IMAGES) {
       return NextResponse.json(
@@ -71,14 +81,25 @@ export async function POST(
         return NextResponse.json({ error: `El archivo "${file.name}" no es una imagen válida.` }, { status: 400 });
       }
 
-      const storagePath = buildProjectReferenceImageStoragePath(id, file.name);
+      const storagePath = buildProjectReferenceImageStoragePath(id, normalizedNameFor(file.name));
       const existingRow = existingByPath.get(storagePath);
-      const buffer = Buffer.from(await file.arrayBuffer());
+
+      const rawBuffer = Buffer.from(await file.arrayBuffer());
+      let uploadBuffer: Buffer;
+      try {
+        uploadBuffer = await normalizeReferenceImageBuffer(rawBuffer);
+      } catch (normalizeErr: unknown) {
+        const message = normalizeErr instanceof Error ? normalizeErr.message : 'Error desconocido';
+        return NextResponse.json(
+          { error: `No se pudo procesar "${file.name}" como imagen: ${message}` },
+          { status: 400 }
+        );
+      }
 
       const { error: uploadErr } = await service.storage
         .from('project-reference-images')
-        .upload(storagePath, buffer, {
-          contentType: file.type || 'image/jpeg',
+        .upload(storagePath, uploadBuffer, {
+          contentType: NORMALIZED_REFERENCE_MIME,
           upsert: true,
         });
 
@@ -101,8 +122,8 @@ export async function POST(
         storage_path: storagePath,
         image_url: pub.publicUrl,
         original_filename: file.name,
-        mime_type: file.type || 'image/jpeg',
-        file_size_bytes: file.size,
+        mime_type: NORMALIZED_REFERENCE_MIME,
+        file_size_bytes: uploadBuffer.length,
         is_primary: existingRow?.is_primary ?? shouldAutoPrimary,
         sort_order: existingRow?.sort_order ?? nextSortOrder++,
       });

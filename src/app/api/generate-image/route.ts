@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   downloadReferenceImagesAsFiles,
+  isOpenAIReferenceImageRejection,
   listProjectReferenceImages,
 } from '@/lib/projects/reference-images';
 
@@ -207,23 +208,42 @@ export async function POST(request: NextRequest) {
     );
     const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
 
-    console.log(`[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars`);
+    console.log(`[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs: ${referenceImages.length}`);
 
-    const response = referenceImages.length > 0
-      ? await openai.images.edit({
+    async function generateWithoutReferences() {
+      return openai.images.generate({
+        model: IMAGE_GENERATION_MODEL,
+        prompt,
+        n: 1,
+        size: IMAGE_GENERATION_SIZE,
+        quality: IMAGE_GENERATION_QUALITY,
+      });
+    }
+
+    let response: Awaited<ReturnType<typeof openai.images.generate>>;
+    if (referenceImages.length > 0) {
+      try {
+        const referenceFiles = await downloadReferenceImagesAsFiles(referenceImages);
+        response = await openai.images.edit({
           model: IMAGE_GENERATION_MODEL,
-          image: await downloadReferenceImagesAsFiles(referenceImages),
+          image: referenceFiles,
           prompt,
-          size: IMAGE_GENERATION_SIZE,
-          quality: IMAGE_GENERATION_QUALITY,
-        })
-      : await openai.images.generate({
-          model: IMAGE_GENERATION_MODEL,
-          prompt,
-          n: 1,
           size: IMAGE_GENERATION_SIZE,
           quality: IMAGE_GENERATION_QUALITY,
         });
+      } catch (editErr) {
+        if (!isOpenAIReferenceImageRejection(editErr)) {
+          throw editErr;
+        }
+        console.warn(
+          `[generate-image] ${visual_id}: OpenAI rechazó las referencias (${(editErr as any)?.message}). ` +
+          `Volviendo a generar sin referencias para no bloquear la pieza.`
+        );
+        response = await generateWithoutReferences();
+      }
+    } else {
+      response = await generateWithoutReferences();
+    }
 
     const b64 = response.data?.[0]?.b64_json;
     if (!b64) {

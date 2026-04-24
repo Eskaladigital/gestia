@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toFile } from 'openai';
+import sharp from 'sharp';
 import type { ProjectReferenceImage } from '@/types';
 
 export const PROJECT_REFERENCE_IMAGES_BUCKET = 'project-reference-images';
@@ -81,26 +82,77 @@ export function buildProductReferenceGuidance(referenceCount: number): string {
   ].join('\n');
 }
 
+export const NORMALIZED_REFERENCE_MIME = 'image/png';
+export const NORMALIZED_REFERENCE_EXTENSION = 'png';
+export const MAX_REFERENCE_IMAGE_DIMENSION = 2048;
+
+/**
+ * Normaliza cualquier buffer de imagen (JPEG, PNG, WebP, CMYK, RGBA, con EXIF
+ * de orientación, perfil ICC raro, etc.) a un PNG 8-bit en sRGB aplanado sobre
+ * fondo blanco, sin metadatos, y como máximo de 2048 px de lado.
+ *
+ * Esto es lo que espera comer cualquier modelo de OpenAI sin quejarse con
+ * "Invalid image file or mode for image N".
+ */
+export async function normalizeReferenceImageBuffer(input: Buffer): Promise<Buffer> {
+  return sharp(input, { failOn: 'none', sequentialRead: true })
+    .rotate()
+    .resize({
+      width: MAX_REFERENCE_IMAGE_DIMENSION,
+      height: MAX_REFERENCE_IMAGE_DIMENSION,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColorspace('srgb')
+    .png({ compressionLevel: 8 })
+    .toBuffer();
+}
+
+/**
+ * Descarga las referencias y las devuelve como archivos aptos para `images.edit`.
+ *
+ * Cada imagen pasa por el normalizador (sharp) para garantizar que OpenAI nunca
+ * la rechace por modo de color, orientación EXIF, metadatos o MIME ambiguo.
+ */
 export async function downloadReferenceImagesAsFiles(
   referenceImages: ProjectReferenceImage[]
 ): Promise<Awaited<ReturnType<typeof toFile>>[]> {
   const files = [];
 
-  for (const image of referenceImages) {
+  for (let i = 0; i < referenceImages.length; i++) {
+    const image = referenceImages[i];
     const response = await fetch(image.image_url);
     if (!response.ok) {
       throw new Error(`No se pudo descargar la referencia ${image.original_filename}: HTTP ${response.status}`);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const mimeType = image.mime_type || response.headers.get('content-type') || 'image/jpeg';
-    const file = await toFile(buffer, image.original_filename || 'referencia.jpg', {
-      type: mimeType,
-    });
+    const rawBuffer = Buffer.from(await response.arrayBuffer());
+    if (rawBuffer.length < 100) {
+      throw new Error(`La referencia ${image.original_filename} llegó vacía (${rawBuffer.length} bytes)`);
+    }
+
+    const normalized = await normalizeReferenceImageBuffer(rawBuffer);
+    const filename = `reference-${i + 1}.${NORMALIZED_REFERENCE_EXTENSION}`;
+    const file = await toFile(normalized, filename, { type: NORMALIZED_REFERENCE_MIME });
     files.push(file);
   }
 
   return files;
+}
+
+export function isOpenAIReferenceImageRejection(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const status = (err as { status?: number }).status;
+  const message = String((err as { message?: string }).message || '').toLowerCase();
+  if (status && status !== 400) return false;
+  return (
+    message.includes('invalid image file') ||
+    message.includes('invalid image') ||
+    message.includes('invalid file') ||
+    message.includes('mode for image') ||
+    message.includes('unsupported image')
+  );
 }
 
 export function extractImageBase64FromResponse(

@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const sharp = require('sharp');
 const openaiPkg = require('openai');
 const OpenAI = openaiPkg.default || openaiPkg;
 const { toFile } = openaiPkg;
@@ -276,21 +277,60 @@ async function fetchProjectReferenceImages(supabase, projectId, limit = MAX_REFE
   return data || [];
 }
 
+const NORMALIZED_REFERENCE_MIME = 'image/png';
+const NORMALIZED_REFERENCE_EXTENSION = 'png';
+const MAX_REFERENCE_DIMENSION = 2048;
+
+async function normalizeReferenceBuffer(input) {
+  return sharp(input, { failOn: 'none', sequentialRead: true })
+    .rotate()
+    .resize({
+      width: MAX_REFERENCE_DIMENSION,
+      height: MAX_REFERENCE_DIMENSION,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColorspace('srgb')
+    .png({ compressionLevel: 8 })
+    .toBuffer();
+}
+
 async function downloadReferenceImages(referenceImages) {
   const files = [];
 
-  for (const image of referenceImages) {
+  for (let i = 0; i < referenceImages.length; i++) {
+    const image = referenceImages[i];
     const response = await fetch(image.image_url);
     if (!response.ok) {
       throw new Error(`No se pudo descargar la referencia ${image.original_filename}: HTTP ${response.status}`);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const mimeType = image.mime_type || response.headers.get('content-type') || 'image/jpeg';
-    files.push(await toFile(buffer, image.original_filename || 'referencia.jpg', { type: mimeType }));
+    const rawBuffer = Buffer.from(await response.arrayBuffer());
+    if (rawBuffer.length < 100) {
+      throw new Error(`La referencia ${image.original_filename} llegó vacía (${rawBuffer.length} bytes)`);
+    }
+
+    const normalized = await normalizeReferenceBuffer(rawBuffer);
+    const filename = `reference-${i + 1}.${NORMALIZED_REFERENCE_EXTENSION}`;
+    files.push(await toFile(normalized, filename, { type: NORMALIZED_REFERENCE_MIME }));
   }
 
   return files;
+}
+
+function isOpenAIReferenceRejection(err) {
+  if (!err) return false;
+  const status = err.status;
+  const message = String(err.message || '').toLowerCase();
+  if (status && status !== 400) return false;
+  return (
+    message.includes('invalid image file') ||
+    message.includes('invalid image') ||
+    message.includes('invalid file') ||
+    message.includes('mode for image') ||
+    message.includes('unsupported image')
+  );
 }
 
 async function markGenerating(supabase, visualId) {
@@ -346,21 +386,34 @@ async function generateOneImage({ supabase, openai, projectId, visual, reference
   await markGenerating(supabase, visual.id);
 
   const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
-  const response = referenceImages.length > 0
-    ? await openai.images.edit({
+
+  const generateWithoutReferences = () => openai.images.generate({
+    model: IMAGE_MODEL,
+    prompt,
+    n: 1,
+    size: IMAGE_SIZE,
+    quality: IMAGE_QUALITY,
+  });
+
+  let response;
+  if (referenceImages.length > 0) {
+    try {
+      const files = await downloadReferenceImages(referenceImages);
+      response = await openai.images.edit({
         model: IMAGE_MODEL,
-        image: await downloadReferenceImages(referenceImages),
+        image: files,
         prompt,
-        size: IMAGE_SIZE,
-        quality: IMAGE_QUALITY,
-      })
-    : await openai.images.generate({
-        model: IMAGE_MODEL,
-        prompt,
-        n: 1,
         size: IMAGE_SIZE,
         quality: IMAGE_QUALITY,
       });
+    } catch (editErr) {
+      if (!isOpenAIReferenceRejection(editErr)) throw editErr;
+      console.warn(`  ⚠ OpenAI rechazó las referencias (${editErr.message}). Regenerando sin referencias.`);
+      response = await generateWithoutReferences();
+    }
+  } else {
+    response = await generateWithoutReferences();
+  }
 
   const b64 = response.data?.[0]?.b64_json;
   if (!b64) throw new Error('La API no devolvió b64_json');

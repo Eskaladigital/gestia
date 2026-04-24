@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const sharp = require('sharp');
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULT_PROJECT_NAME = 'Furgocasa';
@@ -22,6 +23,9 @@ const DEFAULT_SOURCE_DIR = 'IA_blog';
 const BUCKET = 'project-reference-images';
 const MAX_REFERENCE_IMAGES = 10;
 const DEFAULT_PRIMARY_IMAGES = 4;
+const NORMALIZED_MIME = 'image/png';
+const NORMALIZED_EXTENSION = 'png';
+const MAX_REFERENCE_DIMENSION = 2048;
 
 function loadEnvLocal() {
   const p = path.join(ROOT, '.env.local');
@@ -79,11 +83,24 @@ function buildStoragePath(projectId, filename) {
   return `${projectId}/${safeName}`;
 }
 
-function guessMimeType(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.png') return 'image/png';
-  if (ext === '.webp') return 'image/webp';
-  return 'image/jpeg';
+async function normalizeImageBuffer(input) {
+  return sharp(input, { failOn: 'none', sequentialRead: true })
+    .rotate()
+    .resize({
+      width: MAX_REFERENCE_DIMENSION,
+      height: MAX_REFERENCE_DIMENSION,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColorspace('srgb')
+    .png({ compressionLevel: 8 })
+    .toBuffer();
+}
+
+function normalizedFilename(originalName) {
+  const stem = String(originalName || 'referencia').replace(/\.[^.]+$/, '');
+  return `${stem}.${NORMALIZED_EXTENSION}`;
 }
 
 function listLocalImages(sourceDir) {
@@ -206,15 +223,15 @@ async function main() {
 
   for (const filePath of files) {
     const filename = path.basename(filePath);
-    const storagePath = buildStoragePath(project.id, filename);
+    const storagePath = buildStoragePath(project.id, normalizedFilename(filename));
     const existingRow = existingByPath.get(storagePath);
-    const mimeType = guessMimeType(filePath);
-    const buffer = fs.readFileSync(filePath);
+    const rawBuffer = fs.readFileSync(filePath);
+    const buffer = await normalizeImageBuffer(rawBuffer);
 
-    console.log(`Subiendo: ${filename}`);
+    console.log(`Subiendo (normalizado a PNG): ${filename} → ${path.basename(storagePath)} (${(buffer.length / 1024).toFixed(0)} KB)`);
 
     const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(storagePath, buffer, {
-      contentType: mimeType,
+      contentType: NORMALIZED_MIME,
       upsert: true,
     });
     if (uploadErr) throw new Error(`Error subiendo ${filename}: ${uploadErr.message}`);
@@ -232,7 +249,7 @@ async function main() {
       storage_path: storagePath,
       image_url: pub.publicUrl,
       original_filename: filename,
-      mime_type: mimeType,
+      mime_type: NORMALIZED_MIME,
       file_size_bytes: buffer.length,
       is_primary: existingRow?.is_primary ?? shouldAutoPrimary,
       sort_order: existingRow?.sort_order ?? nextSortOrder++,
