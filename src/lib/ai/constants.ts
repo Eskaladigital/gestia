@@ -233,18 +233,16 @@ export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
 export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
 
 /**
- * Tamaño literal que acepta el SDK de OpenAI Images. Mantenemos un union
- * estricto para que TypeScript valide los `size:` que pasamos a
- * `openai.images.generate` / `openai.images.edit` sin necesidad de casts.
+ * Tamaños que usamos realmente en la app. Lo limitamos a estos 3 porque
+ * son los únicos comunes a `openai.images.generate` Y `openai.images.edit`
+ * (la API de edit NO acepta 1024x1792 ni 1792x1024). Mantener el union
+ * estricto evita casts y permite que TypeScript valide el `size:` que se
+ * pasa a ambas funciones del SDK sin sorpresas en build.
  */
 export type OpenAIImageSize =
   | '1024x1024'
   | '1024x1536'
-  | '1536x1024'
-  | '1024x1792'
-  | '1792x1024'
-  | '512x512'
-  | '256x256';
+  | '1536x1024';
 
 /** Tamaño legacy / fallback. Usa `resolveImageSize(orientation)` para nuevas llamadas. */
 export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1024x1536';
