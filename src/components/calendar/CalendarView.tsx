@@ -14,9 +14,11 @@ import { BriefsProgressModal } from '../projects/BriefsProgressModal';
 interface CalendarViewProps {
   items: ContentItem[];
   projectId: string;
+  /** Orientación de imagen del proyecto (migración 022). null si la columna aún no existe. */
+  imageOrientation?: string | null;
 }
 
-export function CalendarView({ items, projectId }: CalendarViewProps) {
+export function CalendarView({ items, projectId, imageOrientation }: CalendarViewProps) {
   const router = useRouter();
   const [view, setView] = useState<'list' | 'calendar' | 'content'>('calendar');
   const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
@@ -219,7 +221,7 @@ export function CalendarView({ items, projectId }: CalendarViewProps) {
         </>
       )}
       {view === 'content' && (
-        <ContentGallery items={localItems} projectId={projectId} />
+        <ContentGallery items={localItems} projectId={projectId} imageOrientation={imageOrientation ?? null} />
       )}
 
       {editingItem && (

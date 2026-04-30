@@ -7,6 +7,7 @@ import { downloadImageFromUrl, imageBlobFlippedHorizontally } from '@/lib/utils'
 import type { ContentItem, ContentItemVisual } from '@/types';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { FORMAT_CONFIG, TYPE_LABELS } from './CalendarTable';
+import { aspectClassForOrientation } from '@/lib/ai/constants';
 
 /**
  * Genera el nombre de archivo para una imagen visual.
@@ -54,6 +55,8 @@ function formatWeekRange(start: Date, end: Date): string {
 interface ContentGalleryProps {
   items: ContentItem[];
   projectId: string;
+  /** Orientación de las imágenes IA del proyecto (vertical/cuadrado/horizontal). */
+  imageOrientation?: string | null;
 }
 
 interface PostWithVisuals {
@@ -69,7 +72,8 @@ interface WeekGroup {
   posts: PostWithVisuals[];
 }
 
-export function ContentGallery({ items, projectId }: ContentGalleryProps) {
+export function ContentGallery({ items, projectId, imageOrientation }: ContentGalleryProps) {
+  const aspectClass = aspectClassForOrientation(imageOrientation);
   const supabase = createClient();
   const [visualsMap, setVisualsMap] = useState<Record<string, ContentItemVisual[]>>({});
   const [loading, setLoading] = useState(true);
@@ -600,7 +604,7 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                 <img
                                   src={visual.image_url!}
                                   alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                  className={`w-full aspect-[3/2] object-cover ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
+                                  className={`w-full ${aspectClass} object-cover ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
                                   loading="lazy"
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -610,12 +614,12 @@ export function ContentGallery({ items, projectId }: ContentGalleryProps) {
                                 </div>
                               </div>
                             ) : hasError ? (
-                              <div className="aspect-[3/2] bg-red-50 flex flex-col items-center justify-center gap-2 px-4">
+                              <div className={`${aspectClass} bg-red-50 flex flex-col items-center justify-center gap-2 px-4`}>
                                 <span className="text-2xl">⚠️</span>
                                 <span className="text-xs text-red-700 font-mono text-center">{visual.image_error || 'Error desconocido'}</span>
                               </div>
                             ) : (
-                              <div className="aspect-[3/2] bg-surface-100 flex flex-col items-center justify-center gap-2">
+                              <div className={`${aspectClass} bg-surface-100 flex flex-col items-center justify-center gap-2`}>
                                 <span className="text-3xl opacity-30">🖼️</span>
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-surface-400">Pendiente de generar</span>
                               </div>

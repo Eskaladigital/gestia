@@ -13,7 +13,20 @@ export default async function CalendarPage({ params }: { params: Promise<{ id: s
   if (!user) redirect('/login');
 
   const userIsAdmin = await isAdmin(supabase, user.id);
-  const { data: project } = await fetchProjectForDashboard(supabase, user.id, id, userIsAdmin, 'name');
+  let { data: project } = await fetchProjectForDashboard(
+    supabase,
+    user.id,
+    id,
+    userIsAdmin,
+    'name, image_orientation'
+  );
+
+  // Fallback si la migración 022 (image_orientation) aún no está aplicada
+  // en este entorno: reintentamos sin esa columna y asumimos default vertical.
+  if (!project) {
+    const retry = await fetchProjectForDashboard(supabase, user.id, id, userIsAdmin, 'name');
+    project = retry.data;
+  }
 
   if (!project) redirect(userIsAdmin ? '/administrator/projects' : '/projects');
 
@@ -37,7 +50,11 @@ export default async function CalendarPage({ params }: { params: Promise<{ id: s
       </div>
 
       {items && items.length > 0 ? (
-        <CalendarView items={items} projectId={id} />
+        <CalendarView
+          items={items}
+          projectId={id}
+          imageOrientation={(project as { image_orientation?: string | null }).image_orientation ?? null}
+        />
       ) : (
         <div className="bg-white rounded-xl border-2 border-dashed border-surface-300 p-12 text-center">
           <div className="w-14 h-14 bg-surface-100 rounded-xl flex items-center justify-center mx-auto mb-4">

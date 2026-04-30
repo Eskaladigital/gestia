@@ -271,6 +271,22 @@ export function resolveImageSize(orientation: ImageOrientation | string | null |
   return IMAGE_SIZE_BY_ORIENTATION[DEFAULT_IMAGE_ORIENTATION];
 }
 
+/**
+ * Clase de Tailwind con el aspect-ratio real de las imágenes generadas para
+ * cada orientación. Coincide con los tamaños reales de OpenAI:
+ * 1024×1536 → 2/3, 1024×1024 → 1/1, 1536×1024 → 3/2.
+ *
+ * Se usa en la galería de contenido y donde haya que reservar el hueco de la
+ * imagen ANTES de que cargue (placeholder, error, miniaturas, etc.).
+ */
+export function aspectClassForOrientation(
+  orientation: ImageOrientation | string | null | undefined
+): string {
+  if (orientation === 'cuadrado') return 'aspect-square';
+  if (orientation === 'horizontal') return 'aspect-[3/2]';
+  return 'aspect-[2/3]';
+}
+
 export const IMAGE_ORIENTATION_LABELS: Record<ImageOrientation, { label: string; ratio: string; hint: string; icon: string }> = {
   vertical: {
     label: 'Vertical',
