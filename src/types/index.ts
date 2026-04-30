@@ -24,6 +24,8 @@ export type ScrapingSource = 'mock' | 'firecrawl' | 'apify' | 'custom';
 export type UserPlan = 'free' | 'pro' | 'agency';
 export type UserRole = 'admin' | 'agency' | 'user';
 export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'trial';
+/** Orientación global de imágenes IA del proyecto (migración 022). */
+export type ImageOrientation = 'vertical' | 'cuadrado' | 'horizontal';
 
 export type AIProvider = 'openai' | 'anthropic' | 'google';
 export type AgentKey = 'analyze_site' | 'analyze_competitors' | 'generate_strategy' | 'generate_calendar' | 'brand_recognition' | 'generate_visual_briefs' | 'visual_briefs_story' | 'visual_briefs_video' | 'visual_briefs_carousel' | 'visual_briefs_feed';
@@ -176,6 +178,8 @@ export interface Project {
   monthly_fee?: number | null;
   /** Reglas IA personalizadas por proyecto; migración 010 */
   ai_rules?: string | null;
+  /** Orientación global de imágenes IA generadas; migración 022 (default 'vertical'). */
+  image_orientation?: ImageOrientation;
   status: ProjectStatus;
   onboarding_step: number;
   brand_colors: BrandColorEntry[];

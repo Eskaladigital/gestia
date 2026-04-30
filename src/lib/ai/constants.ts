@@ -1,4 +1,4 @@
-import type { AgentKey, AIProvider } from '@/types';
+import type { AgentKey, AIProvider, ImageOrientation } from '@/types';
 
 /** Orden oficial del pipeline, refleja los pasos de procesamiento en la app. */
 export const AGENT_PIPELINE_ORDER: AgentKey[] = [
@@ -231,6 +231,50 @@ export function resolveSupportedModel(provider: AIProvider, model?: string | nul
 
 export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
 export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
-export const IMAGE_GENERATION_SIZE = '1536x1024';
+/** Tamaño legacy / fallback. Usa `resolveImageSize(orientation)` para nuevas llamadas. */
+export const IMAGE_GENERATION_SIZE = '1024x1536';
 export const IMAGE_GENERATION_QUALITY = 'high';
 export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.17;
+
+/** Orientación por defecto de un proyecto cuando la columna aún no existe (pre-migración 022). */
+export const DEFAULT_IMAGE_ORIENTATION: ImageOrientation = 'vertical';
+
+/**
+ * Tamaños soportados por gpt-image-2 / gpt-image-1 según orientación.
+ * - vertical   → 9:16 aproximado (móvil, Stories, Reels, TikTok)
+ * - cuadrado   → 1:1 (feed clásico Instagram, LinkedIn)
+ * - horizontal → 16:9 aproximado (web, blog, LinkedIn artículo)
+ */
+export const IMAGE_SIZE_BY_ORIENTATION: Record<ImageOrientation, string> = {
+  vertical: '1024x1536',
+  cuadrado: '1024x1024',
+  horizontal: '1536x1024',
+};
+
+export function resolveImageSize(orientation: ImageOrientation | string | null | undefined): string {
+  if (orientation && (orientation === 'vertical' || orientation === 'cuadrado' || orientation === 'horizontal')) {
+    return IMAGE_SIZE_BY_ORIENTATION[orientation];
+  }
+  return IMAGE_SIZE_BY_ORIENTATION[DEFAULT_IMAGE_ORIENTATION];
+}
+
+export const IMAGE_ORIENTATION_LABELS: Record<ImageOrientation, { label: string; ratio: string; hint: string; icon: string }> = {
+  vertical: {
+    label: 'Vertical',
+    ratio: '9:16',
+    hint: 'Instagram Stories, Reels, TikTok, móvil',
+    icon: '📱',
+  },
+  cuadrado: {
+    label: 'Cuadrado',
+    ratio: '1:1',
+    hint: 'Feed Instagram, LinkedIn',
+    icon: '🟦',
+  },
+  horizontal: {
+    label: 'Horizontal',
+    ratio: '16:9',
+    hint: 'Web, blog, LinkedIn artículo, YouTube',
+    icon: '🖥️',
+  },
+};

@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
-import { isDeletedAtColumnError, isMonthlyFeeColumnError, isAiRulesColumnError } from '@/lib/supabase/project-queries';
+import {
+  isDeletedAtColumnError,
+  isMonthlyFeeColumnError,
+  isAiRulesColumnError,
+  isImageOrientationColumnError,
+} from '@/lib/supabase/project-queries';
 import type {
   ClientType,
   CommercialLevel,
   Complexity,
+  ImageOrientation,
   PrimaryGoal,
   WeeklyFormatDistribution,
 } from '@/types';
@@ -13,6 +19,7 @@ const CLIENT_TYPES: ClientType[] = ['premium', 'medio', 'low_cost', 'b2b', 'b2c'
 const PRIMARY_GOALS: PrimaryGoal[] = ['ventas', 'leads', 'branding', 'viralidad', 'comunidad'];
 const COMMERCIAL_LEVELS: CommercialLevel[] = ['bajo', 'medio', 'alto'];
 const COMPLEXITY_LEVELS: Complexity[] = ['basico', 'medio', 'experto'];
+const IMAGE_ORIENTATIONS: ImageOrientation[] = ['vertical', 'cuadrado', 'horizontal'];
 
 type PatchBody = {
   client_type?: ClientType | null;
@@ -30,6 +37,7 @@ type PatchBody = {
   /** Cliente puede enviar número o string decimal */
   monthly_fee?: number | null | string;
   ai_rules?: string | null;
+  image_orientation?: ImageOrientation;
 };
 
 function clampIntTone(n: unknown): number | undefined {
@@ -171,6 +179,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       else if (body.monthly_fee === null || body.monthly_fee === '') update.monthly_fee = null;
     }
 
+    if (body.image_orientation !== undefined) {
+      if (!IMAGE_ORIENTATIONS.includes(body.image_orientation)) {
+        return NextResponse.json(
+          { error: 'image_orientation no válida (vertical | cuadrado | horizontal)' },
+          { status: 400 }
+        );
+      }
+      update.image_orientation = body.image_orientation;
+    }
+
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });
     }
@@ -212,6 +230,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       warnings.push('Las reglas IA no se guardaron (falta columna ai_rules — migración 010).');
       payload = rest;
       const retry = await supabase.from('projects').update(payload).eq('id', id).eq('user_id', user.id).select().single();
+      project = retry.data;
+      upErr = retry.error;
+    }
+
+    if (upErr && 'image_orientation' in payload && isImageOrientationColumnError(upErr)) {
+      const { image_orientation: _drop, ...rest } = payload;
+      if (Object.keys(rest).length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Falta la columna image_orientation. Ejecuta supabase/migrations/022_project_image_orientation.sql.',
+          },
+          { status: 503 }
+        );
+      }
+      warnings.push(
+        'La orientación de imagen no se guardó (falta columna image_orientation — migración 022).'
+      );
+      payload = rest;
+      const retry = await supabase
+        .from('projects')
+        .update(payload)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
       project = retry.data;
       upErr = retry.error;
     }

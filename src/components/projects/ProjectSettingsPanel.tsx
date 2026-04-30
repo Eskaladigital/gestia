@@ -6,7 +6,18 @@ import { Select } from '@/components/ui/Select';
 import { Slider } from '@/components/ui/Slider';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import type { ClientType, CommercialLevel, Complexity, PrimaryGoal, WeeklyFormatDistribution } from '@/types';
+import {
+  DEFAULT_IMAGE_ORIENTATION,
+  IMAGE_ORIENTATION_LABELS,
+} from '@/lib/ai/constants';
+import type {
+  ClientType,
+  CommercialLevel,
+  Complexity,
+  ImageOrientation,
+  PrimaryGoal,
+  WeeklyFormatDistribution,
+} from '@/types';
 
 export type ProjectSettingsInitial = {
   client_type: ClientType | null;
@@ -23,8 +34,11 @@ export type ProjectSettingsInitial = {
   description: string | null;
   monthly_fee: number | null | undefined;
   ai_rules: string | null | undefined;
+  image_orientation: ImageOrientation | null | undefined;
   updated_at: string;
 };
+
+const IMAGE_ORIENTATION_OPTIONS: ImageOrientation[] = ['vertical', 'cuadrado', 'horizontal'];
 
 const inputClass =
   'w-full px-3 py-2 border-2 border-surface-900 bg-white text-surface-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500';
@@ -93,6 +107,9 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
   const [description, setDescription] = useState(initial.description || '');
   const [monthlyFeeInput, setMonthlyFeeInput] = useState(feeToInput(initial.monthly_fee));
   const [aiRules, setAiRules] = useState(initial.ai_rules || '');
+  const [imageOrientation, setImageOrientation] = useState<ImageOrientation>(
+    initial.image_orientation || DEFAULT_IMAGE_ORIENTATION
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -113,6 +130,7 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
     setDescription(initial.description || '');
     setMonthlyFeeInput(feeToInput(initial.monthly_fee));
     setAiRules(initial.ai_rules || '');
+    setImageOrientation(initial.image_orientation || DEFAULT_IMAGE_ORIENTATION);
   }, [initial.updated_at]);
 
   const totalWeekly = dist.story + dist.carrusel + dist.publicacion + dist.reel;
@@ -160,6 +178,7 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
           description: description.trim() || null,
           monthly_fee: parsedFee === null ? null : Math.round(parsedFee * 100) / 100,
           ai_rules: aiRules.trim() || null,
+          image_orientation: imageOrientation,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -186,6 +205,7 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
     description,
     monthlyFeeInput,
     aiRules,
+    imageOrientation,
     distOk,
     projectId,
     router,
@@ -420,6 +440,63 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Section: Orientación de imagen IA */}
+            <div className="border-2 border-surface-900 p-4">
+              <div className="flex items-center justify-between mb-1 pb-2 border-b-2 border-surface-200">
+                <p className="text-[10px] font-bold text-surface-900 uppercase tracking-[0.2em]">
+                  Orientación de imagen IA
+                </p>
+                <span className="text-[10px] font-mono font-bold text-surface-500 uppercase tracking-wider">
+                  {IMAGE_ORIENTATION_LABELS[imageOrientation].ratio}
+                </span>
+              </div>
+              <p className="text-[11px] text-surface-500 leading-relaxed mb-3">
+                Aplica a todas las imágenes IA generadas en este proyecto.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                {IMAGE_ORIENTATION_OPTIONS.map(opt => {
+                  const meta = IMAGE_ORIENTATION_LABELS[opt];
+                  const selected = imageOrientation === opt;
+                  const previewClass =
+                    opt === 'vertical'
+                      ? 'w-6 h-10'
+                      : opt === 'cuadrado'
+                        ? 'w-9 h-9'
+                        : 'w-10 h-6';
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setImageOrientation(opt)}
+                      className={`flex flex-col items-center gap-2 p-3 border-2 text-center transition-all duration-150 ${
+                        selected
+                          ? 'border-surface-900 bg-surface-900 text-white shadow-brutal-sm'
+                          : 'border-surface-300 hover:border-surface-900 bg-white text-surface-900'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <div
+                        className={`${previewClass} border-2 ${
+                          selected ? 'border-white bg-white/20' : 'border-surface-900 bg-surface-50'
+                        }`}
+                      />
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-xs font-bold uppercase tracking-wider">
+                          {meta.icon} {meta.label}
+                        </span>
+                        <span className={`text-[10px] font-mono ${selected ? 'text-white/70' : 'text-surface-500'}`}>
+                          {meta.ratio}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-3">
+                {IMAGE_ORIENTATION_LABELS[imageOrientation].hint}
+              </p>
             </div>
 
             {/* Section: Tono */}

@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import {
+  DEFAULT_IMAGE_ORIENTATION,
   IMAGE_GENERATION_MODEL,
   IMAGE_GENERATION_QUALITY,
-  IMAGE_GENERATION_SIZE,
   IMAGE_PROMPT_REFINER_MODEL,
+  resolveImageSize,
 } from '@/lib/ai/constants';
+import type { ImageOrientation } from '@/types';
 import {
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   downloadReferenceImagesAsFiles,
@@ -166,17 +168,37 @@ export async function POST(request: NextRequest) {
 
   const service = createServiceSupabase();
 
-  const { data: visual, error: vErr } = await service
-    .from('content_item_visuals')
-    .select(`
+  const VISUAL_SELECT_WITH_ORIENTATION = `
+      *,
+      content_items!inner(
+        id, project_id,
+        projects!inner( id, user_id, image_orientation )
+      )
+    `;
+  const VISUAL_SELECT_LEGACY = `
       *,
       content_items!inner(
         id, project_id,
         projects!inner( id, user_id )
       )
-    `)
+    `;
+
+  let { data: visual, error: vErr } = await service
+    .from('content_item_visuals')
+    .select(VISUAL_SELECT_WITH_ORIENTATION)
     .eq('id', visual_id)
     .maybeSingle();
+
+  // Fallback si la migración 022 (image_orientation) aún no está aplicada.
+  if (vErr && /image_orientation/i.test(String(vErr.message || ''))) {
+    const retry = await service
+      .from('content_item_visuals')
+      .select(VISUAL_SELECT_LEGACY)
+      .eq('id', visual_id)
+      .maybeSingle();
+    visual = retry.data;
+    vErr = retry.error;
+  }
 
   if (vErr || !visual) {
     return NextResponse.json({ error: 'Visual no encontrado' }, { status: 404 });
@@ -186,6 +208,10 @@ export async function POST(request: NextRequest) {
   if (!project || project.user_id !== user.id) {
     return NextResponse.json({ error: 'No autorizado para este proyecto' }, { status: 403 });
   }
+
+  const projectOrientation: ImageOrientation =
+    (project.image_orientation as ImageOrientation | undefined) || DEFAULT_IMAGE_ORIENTATION;
+  const imageSize = resolveImageSize(projectOrientation);
 
   if (!visual.visual_prompt || visual.visual_prompt.trim().length < MIN_PROMPT_LENGTH) {
     return NextResponse.json(
@@ -216,14 +242,17 @@ export async function POST(request: NextRequest) {
     );
     const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
 
-    console.log(`[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs: ${referenceImages.length}`);
+    console.log(
+      `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs: ${referenceImages.length}, ` +
+      `orientation: ${projectOrientation} (${imageSize})`
+    );
 
     async function generateWithoutReferences() {
       return openai.images.generate({
         model: IMAGE_GENERATION_MODEL,
         prompt,
         n: 1,
-        size: IMAGE_GENERATION_SIZE,
+        size: imageSize as `${number}x${number}`,
         quality: IMAGE_GENERATION_QUALITY,
       });
     }
@@ -236,7 +265,7 @@ export async function POST(request: NextRequest) {
           model: IMAGE_GENERATION_MODEL,
           image: referenceFiles,
           prompt,
-          size: IMAGE_GENERATION_SIZE,
+          size: imageSize as `${number}x${number}`,
           quality: IMAGE_GENERATION_QUALITY,
         });
       } catch (editErr) {

@@ -185,6 +185,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         ? Number(project.monthly_fee)
         : null,
     ai_rules: project.ai_rules ?? null,
+    image_orientation: project.image_orientation ?? null,
     updated_at: project.updated_at,
   };
 

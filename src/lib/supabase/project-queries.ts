@@ -34,6 +34,14 @@ export function isAiRulesColumnError(error: { message?: string; code?: string } 
   return m.includes('ai_rules') && (m.includes('schema cache') || m.includes('could not find'));
 }
 
+/** PostgREST cuando la migración 022 (image_orientation) no está aplicada. */
+export function isImageOrientationColumnError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const m = (error.message || '').toLowerCase();
+  const c = String(error.code || '');
+  return c === '42703' || (m.includes('image_orientation') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column')));
+}
+
 export async function fetchUserProjectsList(client: SupabaseClient, userId: string) {
   const activeRes = await client
     .from('projects')
