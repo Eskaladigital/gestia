@@ -112,6 +112,14 @@ class OpenAIProvider implements LLMProvider {
         ...(opts.jsonMode !== false ? { response_format: { type: 'json_object' as const } } : {}),
       });
 
+      const finishReason = response.choices[0]?.finish_reason;
+      if (finishReason === 'length') {
+        throw new Error(
+          `La respuesta de la IA se truncó por límite de tokens (max_completion_tokens=${opts.maxTokens}). ` +
+            `Sube el "max tokens" del agente en Config IA o reduce el tamaño de la tarea.`
+        );
+      }
+
       return {
         content: response.choices[0]?.message?.content || '',
         usage: {

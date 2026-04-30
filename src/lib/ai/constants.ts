@@ -97,7 +97,10 @@ content_pillars, tone_guidelines, thematic_lines, recommendations.`,
     provider: 'openai',
     model: 'gpt-5.4',
     temperature: 0.9,
-    maxTokens: 8192,
+    // Un mes con 22+ posts y scene_summary detallado por slide (ficha técnica con
+    // plano/sujeto/acción/hora/lugar) puede superar fácilmente 8k tokens de salida.
+    // Subimos el techo para que el JSON no llegue truncado y falle el parseo.
+    maxTokens: 20000,
     defaultSystemPrompt: `Eres un editor senior y copywriter de redes sociales.
 
 Reglas:
