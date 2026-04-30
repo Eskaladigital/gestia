@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
         model: IMAGE_GENERATION_MODEL,
         prompt,
         n: 1,
-        size: imageSize as `${number}x${number}`,
+        size: imageSize,
         quality: IMAGE_GENERATION_QUALITY,
       });
     }
@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
           model: IMAGE_GENERATION_MODEL,
           image: referenceFiles,
           prompt,
-          size: imageSize as `${number}x${number}`,
+          size: imageSize,
           quality: IMAGE_GENERATION_QUALITY,
         });
       } catch (editErr) {

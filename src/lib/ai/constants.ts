@@ -231,8 +231,23 @@ export function resolveSupportedModel(provider: AIProvider, model?: string | nul
 
 export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
 export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
+
+/**
+ * Tamaño literal que acepta el SDK de OpenAI Images. Mantenemos un union
+ * estricto para que TypeScript valide los `size:` que pasamos a
+ * `openai.images.generate` / `openai.images.edit` sin necesidad de casts.
+ */
+export type OpenAIImageSize =
+  | '1024x1024'
+  | '1024x1536'
+  | '1536x1024'
+  | '1024x1792'
+  | '1792x1024'
+  | '512x512'
+  | '256x256';
+
 /** Tamaño legacy / fallback. Usa `resolveImageSize(orientation)` para nuevas llamadas. */
-export const IMAGE_GENERATION_SIZE = '1024x1536';
+export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1024x1536';
 export const IMAGE_GENERATION_QUALITY = 'high';
 export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.17;
 
@@ -245,14 +260,14 @@ export const DEFAULT_IMAGE_ORIENTATION: ImageOrientation = 'vertical';
  * - cuadrado   → 1:1 (feed clásico Instagram, LinkedIn)
  * - horizontal → 16:9 aproximado (web, blog, LinkedIn artículo)
  */
-export const IMAGE_SIZE_BY_ORIENTATION: Record<ImageOrientation, string> = {
+export const IMAGE_SIZE_BY_ORIENTATION: Record<ImageOrientation, OpenAIImageSize> = {
   vertical: '1024x1536',
   cuadrado: '1024x1024',
   horizontal: '1536x1024',
 };
 
-export function resolveImageSize(orientation: ImageOrientation | string | null | undefined): string {
-  if (orientation && (orientation === 'vertical' || orientation === 'cuadrado' || orientation === 'horizontal')) {
+export function resolveImageSize(orientation: ImageOrientation | string | null | undefined): OpenAIImageSize {
+  if (orientation === 'vertical' || orientation === 'cuadrado' || orientation === 'horizontal') {
     return IMAGE_SIZE_BY_ORIENTATION[orientation];
   }
   return IMAGE_SIZE_BY_ORIENTATION[DEFAULT_IMAGE_ORIENTATION];
