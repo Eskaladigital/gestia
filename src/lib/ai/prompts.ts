@@ -602,9 +602,21 @@ ${opts?.excludeDates?.length ? `- PROHIBIDO usar estas fechas (ya hay un post pr
 ESPECIFICACIONES DE PRODUCCIÓN (campo "production_specs"):
 Cada post DEBE incluir un campo "production_specs" con detalles técnicos de producción según el formato:
 
-- CARRUSEL: { "num_slides": N, "media_type": "imagen", "scene_summary": "Slide 1: ..., Slide 2: ..., Slide N: ..." }
+- CARRUSEL: { "num_slides": N, "media_type": "imagen", "scene_summary": "Slide 1 — Plano: ... | Sujeto: ... | Acción: ... | Hora/luz: ... | Lugar: ...\nSlide 2 — Plano: ... | Sujeto: ... | ..." }
   - num_slides entre 3 y 10 (decide el número según la complejidad del tema)
-  - scene_summary: describe brevemente QUÉ va en cada slide (1 línea por slide)
+  - scene_summary: NO es "una línea por slide". Cada slide debe describirse como una FICHA TÉCNICA de fotograma con CINCO campos separados por " | ": Plano (general / medio / detalle / cenital / POV / contrapicado / flat lay), Sujeto (quién o qué es el protagonista — puede ser una persona, un objeto, un lugar, una textura, un mapa…), Acción (qué está pasando o qué se muestra), Hora/luz (mañana / mediodía / tarde / golden hour / luz interior cálida…), Lugar (sitio concreto, no genérico).
+  - El conjunto de slides debe contar una MICRO-HISTORIA con principio, desarrollo y cierre. No es un álbum de fotos del mismo sujeto en distintos paisajes.
+  - REGLAS DURAS DE VARIEDAD entre slides del mismo carrusel (obligatorias, son ley):
+    · Cada slide debe variar respecto al anterior en al menos DOS de estos ejes: localización, hora del día, escala del plano, protagonista, acción.
+    · PROHIBIDO repetir el mismo plano principal (misma combinación de plano + sujeto + acción) en dos slides cualesquiera del carrusel. Si se repite, reescríbelo.
+    · Al menos UN slide debe ser un detalle, flat lay o cenital sin el producto/sujeto principal protagonizando (un objeto secundario, una mano, un mapa, comida, una textura, un cuaderno abierto, una vista del lugar, una herramienta, un rincón).
+    · Al menos UN slide debe ser interior (si tiene sentido en el tema) y al menos UN slide debe ser exterior (si tiene sentido); si el tema es 100% indoor o 100% outdoor, varía entonces escala y momento del día.
+    · Cuando el tema gire alrededor de un producto/lugar muy "fotogénico repetible" (camper, autocaravana, coche, hotel, tienda, plato estrella, destino), está PROHIBIDO que más de UN slide sea el clásico plano de tres cuartos del producto en entorno abierto. El resto deben ser planos claramente distintos entre sí: detalle, interior, escena humana, entorno sin producto, cenital, POV, primer plano, etc.
+  - Estructura recomendada (adáptala al tema):
+    · Slide 1 = gancho visual con un plano poco esperado (no el típico de catálogo).
+    · Slides intermedios = desarrollo narrativo con al menos 1 detalle, 1 escena humana o ambiental y 1 cambio de escala respecto al gancho.
+    · Slide final = CTA con composición limpia y zona libre para texto overlay.
+  - Ejemplo orientativo de estructura para un carrusel de "viaje en camper por Murcia" (no copies, solo entiende el patrón): Slide 1 detalle de manos sobre el mapa al amanecer; Slide 2 plano general de la camper saliendo de la ciudad a primera hora; Slide 3 cenital de un desayuno improvisado en la mesa interior; Slide 4 escena humana de espaldas mirando al mar desde la puerta lateral abierta; Slide 5 detalle de las llaves colgadas en el salpicadero al atardecer; Slide 6 plano medio de la camper aparcada junto a una cala con luz de tarde y CTA.
 
 - REEL: { "duration_seconds": N, "media_type": "video", "scene_summary": "Escena 1 (0:00-0:08): ..., Escena 2 (0:08-0:20): ..." }
   - duration_seconds entre 15 y 60
@@ -952,6 +964,18 @@ export interface SingleVisualInput {
   totalVisuals: number;
   label: string;
   slideContext?: string;
+  /** Resumen narrativo completo del carrusel (todos los slides), para coherencia y arco. */
+  globalCarouselSummary?: string;
+  /** Ficha del slide inmediatamente anterior dentro del mismo carrusel. */
+  previousSlideContext?: string;
+  /** Ficha del slide inmediatamente posterior dentro del mismo carrusel. */
+  nextSlideContext?: string;
+  /**
+   * Fichas de TODOS los slides hermanos del carrusel (incluido este).
+   * Se pasan al builder para que el director de arte sepa qué planos están ya
+   * "asignados" y NO los repita.
+   */
+  siblingShotCards?: string[];
 }
 
 const ASPECT_RATIOS: Record<string, string> = {
@@ -1064,7 +1088,7 @@ ${JSON_FOOTER}`;
 }
 
 function buildCarouselSystem(ar: string): string {
-  return `Eres un director de arte y diseñador editorial de renombre internacional, especializado en diseño de carruseles para Instagram y LinkedIn para marcas premium. Tu experiencia incluye narrativa visual secuencial, storytelling slide-a-slide y diseño de contenido educativo/comercial que mantiene el swipe.
+  return `Eres un director de arte y diseñador editorial de renombre internacional, especializado en diseño de carruseles para Instagram y LinkedIn para marcas premium. Tu experiencia incluye narrativa visual secuencial, storytelling slide-a-slide y diseño de contenido editorial que mantiene el swipe.
 
 Tu ÚNICA tarea ahora es describir UNA SOLA IMAGEN (un slide) de un carrusel, con la precisión de un director de arte que diseña una pieza editorial de alta conversión.
 
@@ -1074,39 +1098,65 @@ CONCENTRA TODA TU CAPACIDAD EN UN ÚNICO ENTREGABLE:
 "visual_prompt" — PROMPT ULTRA-DETALLADO PARA IA GENERATIVA DE CARRUSEL
 ═══════════════════════════════════════════
 
-Este prompt será copiado DIRECTAMENTE en Midjourney, DALL-E o Ideogram. Debe generar un slide que funcione DENTRO de una secuencia narrativa.
+Este prompt será copiado DIRECTAMENTE en el modelo de imagen. Debe generar un slide que funcione DENTRO de una secuencia narrativa, no una foto suelta.
 
 CONTEXTO CLAVE DE CARRUSELES:
-- Cada slide forma parte de una SECUENCIA NARRATIVA que el usuario recorre con swipe
-- El primer slide es el GANCHO: debe generar curiosidad para que deslicen
-- Los slides intermedios desarrollan la historia o el valor
-- El último slide es el CTA: invita a la acción
-- Los slides llevan texto overlay en postproducción — los fondos deben ser COMPATIBLES con texto legible
-- La COHERENCIA VISUAL entre slides es fundamental: mismo estilo, paleta, iluminación
+- Cada slide es UN MOMENTO DISTINTO de una micro-historia, no una variación del mismo plano.
+- El primer slide es el GANCHO: debe generar curiosidad para que deslicen.
+- Los slides intermedios desarrollan la historia (acción, lugar, escala o protagonista cambian).
+- El último slide es el CTA: invita a la acción.
+- Los slides llevan texto overlay en postproducción — los fondos deben ser COMPATIBLES con texto legible.
 
+═══════════════════════════════════════════
+COHERENCIA vs. VARIEDAD (lee esto antes de escribir)
+═══════════════════════════════════════════
+Hay DOS niveles independientes que NO debes confundir:
+
+1) COHERENCIA ESTÉTICA (sí, obligatoria entre slides):
+   - Misma paleta de color global, misma cocina cromática, mismo tratamiento (LUT/grano).
+   - Misma sensibilidad de cámara y de lente (mismo "look").
+   - Misma estación del año y mismo proyecto narrativo.
+
+2) VARIEDAD ESCÉNICA (sí, obligatoria entre slides):
+   - DIFERENTE encuadre, DIFERENTE escala de plano, DIFERENTE sujeto u objeto principal o DIFERENTE acción respecto a los demás slides.
+   - DIFERENTE momento del día u hora cuando ayude al arco narrativo.
+   - DIFERENTE localización dentro del mismo proyecto cuando tenga sentido.
+
+Regla mental: la coherencia es de TONO Y PALETA, NO de escena ni de encuadre. Dos slides nunca pueden ser "la misma foto en otro sitio".
+
+═══════════════════════════════════════════
+PROHIBICIONES DURAS PARA ESTE SLIDE
+═══════════════════════════════════════════
+- PROHIBIDO replicar el plano principal (combinación de plano + sujeto + acción) que ya esté usado en los otros slides del carrusel. Si te dan una "lista de planos hermanos", está PROHIBIDO repetir cualquiera de ellos.
+- PROHIBIDO el cliché "producto/vehículo/objeto en tres cuartos sobre carretera/calle/paisaje abierto con cielo dramático" si ya hay otro slide que lo usa. Como mucho UN slide del carrusel puede ser ese plano. El resto deben ser claramente distintos.
+- PROHIBIDO inventar un slide genérico cuando el calendario te ha dado una ficha de fotograma concreta (Plano / Sujeto / Acción / Hora / Lugar): respeta la ficha al pie de la letra.
+- PROHIBIDO perder el arco narrativo: este slide debe enlazar de forma legible con el slide anterior y con el siguiente.
+
+═══════════════════════════════════════════
 ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
+═══════════════════════════════════════════
 
-**Escena:** Descripción del contexto visual de ESTE slide concreto dentro de la secuencia. Mínimo 4 frases. Incluye qué rol juega este slide en la narrativa (gancho, desarrollo, dato, CTA). El entorno, hora del día, lugar. La sensación que transmite y cómo conecta con el slide anterior y el siguiente.
+**Escena:** Descripción del contexto visual de ESTE slide concreto dentro de la secuencia. Mínimo 4 frases. Incluye qué rol juega este slide en la narrativa (gancho, desarrollo, detalle, dato, CTA), el entorno, la hora del día, el lugar concreto. La sensación que transmite y, sobre todo, qué muestra DE NUEVO respecto a los slides hermanos (qué cambia: escala, sujeto, acción, momento).
 
-**Composición:** Relación de aspecto ${ar} (cuadrado o 4:5, según plataforma). Tipo de plano. Disposición de los elementos pensada para COMPATIBILIDAD CON TEXTO: zonas amplias de color sólido o desenfocadas donde irá el texto overlay. Si es slide de gancho: composición que genera curiosidad e invita al swipe. Si es CTA: composición limpia y directa. Mínimo 4 frases. --ar ${ar}
+**Composición:** Relación de aspecto ${ar}. Tipo de plano EXPLÍCITO (gran general, plano medio, primer plano, detalle, cenital/flat lay, POV, contrapicado…). Ángulo de cámara y disposición de elementos. Reserva ZONAS LIMPIAS (color sólido o desenfoque) para el texto overlay. Si es slide de gancho: composición que genera intriga e invita al swipe. Si es CTA: composición limpia y directa. Mínimo 4 frases. --ar ${ar}
 
-**Sujetos:** Descripción física MINUCIOSA de lo que aparece en este slide. Texturas, colores precisos, materiales. El sujeto debe ser coherente con los demás slides del carrusel (mismo entorno, misma sesión, misma paleta). Si cambia el enfoque de un slide a otro (de general a detalle, de producto a persona), indicar la transición lógica. Mínimo 4 frases.
+**Sujetos:** Descripción física MINUCIOSA del protagonista de ESTE slide. Texturas, materiales, colores precisos. NO repitas el sujeto principal del slide anterior con la misma acción: si el slide anterior mostraba al producto/persona X haciendo Y, este slide debe mostrar otra cosa (un detalle, otra persona, un objeto secundario, un lugar sin el producto, una textura). Mínimo 4 frases.
 
-**Luz y Atmósfera:** Iluminación CONSISTENTE con el resto del carrusel. Tipo de luz, temperatura de color, mood. La iluminación debe ser la MISMA en todos los slides para mantener coherencia visual. Contraste que permita superponer texto legible. Mínimo 4 frases.
+**Luz y Atmósfera:** Iluminación coherente en TONO Y PALETA con el resto del carrusel (misma cocina cromática, misma sensación general). PERO la luz puede cambiar de momento del día o de calidad (interior vs. exterior, mañana vs. tarde) si así lo pide la ficha del slide; lo que debe mantenerse es el "look", no la hora exacta. Contraste que permita superponer texto legible. Mínimo 4 frases.
 
-**Fondo:** Qué hay detrás del sujeto. FUNDAMENTAL: el fondo debe incluir zonas de color uniforme o desenfocado suave donde se pueda superponer texto con buena legibilidad. Colores del fondo compatibles con la paleta de marca. Transición visual coherente entre slides. Mínimo 3 frases.
+**Fondo:** Qué hay detrás del sujeto. FUNDAMENTAL: el fondo debe incluir zonas de color uniforme o desenfocado suave donde pueda ir texto overlay con buena legibilidad. Colores del fondo compatibles con la paleta de marca. El fondo debe ayudar a diferenciar este slide del anterior (cambio de localización, de profundidad, de elementos). Mínimo 3 frases.
 
-**Estilo:** Estética editorial de carrusel profesional. Debe sentirse como una pieza de diseño premium, no como una foto random. Coherencia de estilo a lo largo de toda la secuencia. Tratamiento de color uniforme. Texturas y lentes. Si es un carrusel educativo: estética clean y moderna. Si es aspiracional: estética lifestyle premium. Mínimo 3 frases.
+**Estilo:** Estética editorial de carrusel premium. Mismo "look" fotográfico que los demás slides (lente, grano, tratamiento de color, sensación general), pero DISTINTA composición y DISTINTO contenido. Si es educativo: clean y moderno. Si es aspiracional: lifestyle real. Evita el aspecto de catálogo y el cliché publicitario. Mínimo 3 frases.
 
 REGLAS ESTRICTAS:
-- NO incluir texto literal en la descripción (el texto se añade en postproducción)
-- El prompt COMPLETO debe tener AL MENOS 250 palabras
-- CADA sección debe tener al menos 3-4 frases completas
-- Pensar en COHERENCIA VISUAL con el resto de slides del carrusel
-- Dejar ZONAS PARA TEXTO OVERLAY (fondos limpios, colores sólidos, áreas desenfocadas)
-- Si es slide de GANCHO: máximo impacto visual e intriga
-- Si es slide de CTA: composición limpia, directa, espacio para botón/texto
-- Incluir --ar ${ar} al final de la sección Composición
+- NO incluir texto literal en la descripción (el texto se añade en postproducción).
+- El prompt COMPLETO debe tener AL MENOS 250 palabras.
+- CADA sección debe tener al menos 3-4 frases completas.
+- COHERENCIA = paleta, tono y look. VARIEDAD = encuadre, escala, sujeto, acción, momento.
+- Dejar ZONAS PARA TEXTO OVERLAY (fondos limpios, colores sólidos, áreas desenfocadas).
+- Si es slide de GANCHO: máximo impacto visual e intriga, PERO sin caer en el plano de catálogo más obvio del sector.
+- Si es slide de CTA: composición limpia, directa, espacio para botón/texto.
+- Incluir --ar ${ar} al final de la sección Composición.
 
 ${JSON_FOOTER}`;
 }
@@ -1160,7 +1210,17 @@ export function buildSingleVisualPrompt(
   input: SingleVisualInput,
   options?: { referenceImageCount?: number }
 ): { system: string; user: string; agentKey: VisualAgentKey } {
-  const { post, visualIndex, totalVisuals, label, slideContext } = input;
+  const {
+    post,
+    visualIndex,
+    totalVisuals,
+    label,
+    slideContext,
+    globalCarouselSummary,
+    previousSlideContext,
+    nextSlideContext,
+    siblingShotCards,
+  } = input;
   const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
   const agentKey = resolveVisualAgent(post.format, post.production_specs?.media_type);
   const isVideo = agentKey === 'visual_briefs_video';
@@ -1201,19 +1261,38 @@ export function buildSingleVisualPrompt(
 - El resultado debe ser tan detallado que al copiarlo en Sora, Runway o Kling, el vídeo generado sea EXACTAMENTE lo que describes.`;
 
   } else if (isCarousel) {
+    const siblingsBlock = siblingShotCards && siblingShotCards.length > 0
+      ? `\n\n### MAPA COMPLETO DEL CARRUSEL (planos asignados a CADA slide — NO repitas ninguno)\n${siblingShotCards.join('\n')}`
+      : '';
+
+    const arcBlock = globalCarouselSummary
+      ? `\n\n### ARCO NARRATIVO COMPLETO DEL CARRUSEL (resumen global del calendario)\n${globalCarouselSummary}`
+      : '';
+
+    const prevBlock = previousSlideContext
+      ? `\n- Slide ANTERIOR (slide ${visualIndex}): ${previousSlideContext}`
+      : (visualIndex === 0 ? '\n- No hay slide anterior: este es el slide de apertura del carrusel.' : '');
+
+    const nextBlock = nextSlideContext
+      ? `\n- Slide SIGUIENTE (slide ${visualIndex + 2}): ${nextSlideContext}`
+      : (visualIndex === totalVisuals - 1 ? '\n- No hay slide siguiente: este es el slide final del carrusel.' : '');
+
     visualBlock = `## SLIDE A GENERAR
-- ${label} (${visualIndex + 1} de ${totalVisuals} slides del carrusel)${slideContext ? `\n- Contenido de ESTE SLIDE según el calendario: ${slideContext}` : ''}
-- Este slide forma parte de una secuencia narrativa de ${totalVisuals} slides`;
+- ${label} (${visualIndex + 1} de ${totalVisuals} slides del carrusel)${slideContext ? `\n- Ficha de ESTE slide según el calendario: ${slideContext}` : ''}
+- Este slide forma parte de una secuencia narrativa de ${totalVisuals} slides — NO es una foto suelta.${prevBlock}${nextBlock}${arcBlock}${siblingsBlock}`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en este slide. No pienses en los demás.
+- Lee con atención el ARCO NARRATIVO y el MAPA COMPLETO DEL CARRUSEL antes de redactar. Tu slide debe encajar en ese arco y ser CLARAMENTE DISTINTO al resto.
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas.
-- FUNDAMENTAL: Este slide debe ser COHERENTE visualmente con los demás slides del carrusel (misma paleta, iluminación, estilo).
-- Deja ZONAS LIMPIAS para texto overlay en postproducción.${visualIndex === 0 ? '\n- Este es el slide de GANCHO: debe generar curiosidad e invitar al swipe. Máximo impacto visual.' : ''}${visualIndex === totalVisuals - 1 ? '\n- Este es el slide FINAL (CTA): composición limpia y directa, espacio para texto de llamada a la acción.' : ''}
+- COHERENCIA OBLIGATORIA con el resto del carrusel SOLO en: paleta, tratamiento de color, "look" fotográfico, sensación general.
+- VARIEDAD OBLIGATORIA respecto al resto del carrusel en: encuadre, escala de plano, sujeto principal, acción y/o momento del día. PROHIBIDO repetir un plano (combinación plano+sujeto+acción) que ya esté usado en cualquier otro slide del MAPA COMPLETO. Si la ficha de este slide se parece demasiado a la del slide anterior o siguiente, escoge un ángulo, escala o detalle distinto para diferenciarlo.
+- Si en el MAPA COMPLETO ya hay un slide con un plano de tres cuartos del producto/sujeto principal en entorno abierto (carretera, calle, paisaje), está PROHIBIDO que este slide sea otro plano del mismo tipo. Busca un detalle, un interior, una escena humana, un cenital, un POV o un entorno sin el sujeto principal.
+- Respeta al pie de la letra la "Ficha de ESTE slide" cuando exista (Plano / Sujeto / Acción / Hora / Lugar): es el contrato del calendario.
+- Deja ZONAS LIMPIAS para texto overlay en postproducción.${visualIndex === 0 ? '\n- Este es el slide de GANCHO: máximo impacto visual e intriga, pero EVITA el plano de catálogo más obvio del sector.' : ''}${visualIndex === totalVisuals - 1 ? '\n- Este es el slide FINAL (CTA): composición limpia y directa, espacio para texto de llamada a la acción.' : ''}
 - Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
-- El resultado debe ser tan detallado que al copiarlo en Midjourney o DALL-E, la imagen generada sea EXACTAMENTE lo que describes.`;
+- El resultado debe ser tan detallado que al copiarlo en el modelo de imagen, la imagen generada sea EXACTAMENTE lo que describes.`;
 
   } else if (isStory) {
     visualBlock = `## STORY A GENERAR
@@ -1260,21 +1339,44 @@ export function buildSingleVisualPrompt(
   };
 }
 
+export type DecomposedVisual = {
+  label: string;
+  slideContext?: string;
+  /** Resumen completo del carrusel (todos los slides) — solo para carruseles. */
+  globalCarouselSummary?: string;
+  /** Ficha del slide anterior (solo carruseles, vacío en slide 1). */
+  previousSlideContext?: string;
+  /** Ficha del slide siguiente (solo carruseles, vacío en último slide). */
+  nextSlideContext?: string;
+  /** Fichas de TODOS los slides hermanos, incluida la propia (solo carruseles). */
+  siblingShotCards?: string[];
+};
+
 /**
  * Descompone un post en la lista de visuales individuales a generar.
- * - Carrusel → 1 visual por slide
+ * - Carrusel → 1 visual por slide, enriquecido con el contexto narrativo completo
+ *   (resumen global + slides anterior/siguiente + lista de planos hermanos) para
+ *   forzar variedad escénica y mantener el arco narrativo.
  * - Publicación/Story imagen → 1 visual
  * - Reel/Story vídeo → 1 fotograma clave por escena del guión (o 1 si no hay escenas separadas)
  */
-export function decomposePostIntoVisuals(post: VisualBriefInput): Array<{ label: string; slideContext?: string }> {
+export function decomposePostIntoVisuals(post: VisualBriefInput): DecomposedVisual[] {
   const format = post.format || 'publicacion';
   const specs = post.production_specs;
 
   if (format === 'carrusel') {
     const numSlides = specs?.num_slides || 5;
-    const sceneParts = (specs?.scene_summary || '').split(/Slide\s*\d+\s*:/i).filter(s => s.trim());
-    const visuals: Array<{ label: string; slideContext?: string }> = [];
+    const rawSummary = specs?.scene_summary || '';
+    const sceneParts = rawSummary.split(/Slide\s*\d+\s*[—:\-]\s*/i).filter(s => s.trim());
 
+    // Construimos las fichas de cada slide (slideContext) con normalización
+    const slideCards: string[] = [];
+    for (let i = 0; i < numSlides; i++) {
+      const card = sceneParts[i]?.trim();
+      slideCards.push(card || '');
+    }
+
+    const visuals: DecomposedVisual[] = [];
     for (let i = 0; i < numSlides; i++) {
       const isFirst = i === 0;
       const isLast = i === numSlides - 1;
@@ -1284,7 +1386,13 @@ export function decomposePostIntoVisuals(post: VisualBriefInput): Array<{ label:
 
       visuals.push({
         label: slideLabel,
-        slideContext: sceneParts[i]?.trim() || undefined,
+        slideContext: slideCards[i] || undefined,
+        globalCarouselSummary: rawSummary || undefined,
+        previousSlideContext: i > 0 ? slideCards[i - 1] || undefined : undefined,
+        nextSlideContext: i < numSlides - 1 ? slideCards[i + 1] || undefined : undefined,
+        siblingShotCards: slideCards.map((card, idx) =>
+          card ? `Slide ${idx + 1}: ${card}` : `Slide ${idx + 1}: (sin ficha)`
+        ),
       });
     }
     return visuals;

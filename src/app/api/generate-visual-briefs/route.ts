@@ -28,6 +28,10 @@ interface VisualJob {
   totalVisualsForPost: number;
   label: string;
   slideContext?: string;
+  globalCarouselSummary?: string;
+  previousSlideContext?: string;
+  nextSlideContext?: string;
+  siblingShotCards?: string[];
   post: VisualBriefInput;
 }
 
@@ -58,6 +62,10 @@ function buildVisualQueue(posts: ContentItem[]): VisualJob[] {
         totalVisualsForPost: visuals.length,
         label: visuals[i].label,
         slideContext: visuals[i].slideContext,
+        globalCarouselSummary: visuals[i].globalCarouselSummary,
+        previousSlideContext: visuals[i].previousSlideContext,
+        nextSlideContext: visuals[i].nextSlideContext,
+        siblingShotCards: visuals[i].siblingShotCards,
         post: briefInput,
       });
     }
@@ -88,6 +96,10 @@ async function processOneVisual(
     totalVisuals: job.totalVisualsForPost,
     label: job.label,
     slideContext: job.slideContext,
+    globalCarouselSummary: job.globalCarouselSummary,
+    previousSlideContext: job.previousSlideContext,
+    nextSlideContext: job.nextSlideContext,
+    siblingShotCards: job.siblingShotCards,
   }, {
     referenceImageCount: referenceImageUrls.length,
   });
