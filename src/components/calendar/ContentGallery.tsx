@@ -90,6 +90,15 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     contentItemId: string;
   } | null>(null);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [reportModal, setReportModal] = useState<{
+    visualId: string;
+    contentItemId: string;
+    label: string;
+    existing: string;
+  } | null>(null);
+  const [reportText, setReportText] = useState('');
+  const [savingReport, setSavingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const visualsMapRef = useRef(visualsMap);
   visualsMapRef.current = visualsMap;
@@ -205,7 +214,15 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
         ...prev,
         [contentItemId]: list.map(v =>
           v.id === visualId
-            ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null, image_flip_horizontal: false }
+            ? {
+                ...v,
+                image_url: imageUrl,
+                image_status: 'ready' as const,
+                image_error: null,
+                image_flip_horizontal: false,
+                user_feedback: null,
+                user_feedback_at: null,
+              }
             : v
         ),
       };
@@ -270,6 +287,70 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     setEditingPromptId(null);
     setEditingPromptText('');
   }, [editingPromptText, supabase]);
+
+  const openReportModal = useCallback((visual: ContentItemVisual, contentItemId: string) => {
+    const existing = (visual.user_feedback || '').trim();
+    setReportModal({
+      visualId: visual.id,
+      contentItemId,
+      label: visual.label || `Visual ${visual.visual_index + 1}`,
+      existing,
+    });
+    setReportText(existing);
+    setReportError(null);
+  }, []);
+
+  const closeReportModal = useCallback(() => {
+    setReportModal(null);
+    setReportText('');
+    setReportError(null);
+    setSavingReport(false);
+  }, []);
+
+  const submitReport = useCallback(async (clear: boolean) => {
+    if (!reportModal) return;
+    const feedback = clear ? '' : reportText.trim();
+    if (!clear && feedback.length < 5) {
+      setReportError('Describe el error con al menos unas palabras (mínimo 5 caracteres).');
+      return;
+    }
+    setSavingReport(true);
+    setReportError(null);
+    try {
+      const res = await fetch('/api/report-image-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visual_id: reportModal.visualId, feedback }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({} as any));
+        setReportError(data?.error || 'No se pudo guardar el reporte');
+        setSavingReport(false);
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      setVisualsMap(prev => {
+        const list = prev[reportModal.contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [reportModal.contentItemId]: list.map(v =>
+            v.id === reportModal.visualId
+              ? {
+                  ...v,
+                  user_feedback: feedback || null,
+                  user_feedback_at: feedback ? nowIso : null,
+                }
+              : v
+          ),
+        };
+      });
+      closeReportModal();
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Error desconocido');
+      setSavingReport(false);
+    }
+  }, [reportModal, reportText, closeReportModal]);
 
   const totalVisuals = useMemo(() =>
     Object.values(visualsMap).reduce((sum, list) => sum + list.length, 0),
@@ -371,23 +452,27 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
 
   return (
     <div className="space-y-4">
-      {/* Stats bar */}
-      <div className="flex flex-wrap items-center gap-3 border-2 border-surface-900 bg-white px-4 py-3">
-        <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest">
-          {weekGroups.reduce((s, g) => s + g.posts.length, 0)} posts
-        </span>
-        <span className="text-[10px] font-mono font-bold bg-violet-600 text-white px-2 py-0.5 uppercase tracking-widest">
-          {totalVisuals} visuals
-        </span>
-        <span className="text-[10px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 uppercase tracking-widest">
-          {readyCount} imágenes listas
-        </span>
-        {totalVisuals - readyCount > 0 && (
-          <span className="text-[10px] font-mono font-bold bg-amber-500 text-white px-2 py-0.5 uppercase tracking-widest">
-            {totalVisuals - readyCount} pendientes
+      {/* Stats bar
+          En tablet (sm-lg) los stats van arriba y los botones de acción debajo,
+          alineados a la derecha, para evitar que el ml-auto desplace los botones a una línea aparte sin orden. */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3 border-2 border-surface-900 bg-white px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest">
+            {weekGroups.reduce((s, g) => s + g.posts.length, 0)} posts
           </span>
-        )}
-        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[10px] font-mono font-bold bg-violet-600 text-white px-2 py-0.5 uppercase tracking-widest">
+            {totalVisuals} visuals
+          </span>
+          <span className="text-[10px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 uppercase tracking-widest">
+            {readyCount} imágenes listas
+          </span>
+          {totalVisuals - readyCount > 0 && (
+            <span className="text-[10px] font-mono font-bold bg-amber-500 text-white px-2 py-0.5 uppercase tracking-widest">
+              {totalVisuals - readyCount} pendientes
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
           {totalVisuals - readyCount > 0 && (
             <button
               type="button"
@@ -558,6 +643,22 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                 </button>
                                 {hasImage && (
                                   <>
+                                    <button
+                                      type="button"
+                                      title={
+                                        visual.user_feedback
+                                          ? `Error reportado: "${visual.user_feedback.slice(0, 120)}${visual.user_feedback.length > 120 ? '…' : ''}" — al regenerar se aplicará esta corrección.`
+                                          : 'Reportar un error de la imagen (se usará al regenerar para corregirlo)'
+                                      }
+                                      onClick={() => openReportModal(visual, item.id)}
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                        visual.user_feedback
+                                          ? 'bg-red-600 text-white hover:bg-red-700'
+                                          : 'bg-white text-surface-900 hover:bg-surface-100'
+                                      }`}
+                                    >
+                                      {visual.user_feedback ? 'Error ✓' : 'Reportar'}
+                                    </button>
                                     <button
                                       type="button"
                                       title="Voltear horizontal (espejo) — se guarda en el proyecto"
@@ -754,6 +855,100 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
           onComplete={() => setImageGenQueue(null)}
           onClose={() => setImageGenQueue(null)}
         />
+      )}
+
+      {/* Report image error modal */}
+      {reportModal && (
+        <div
+          className="fixed inset-0 z-[210] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => !savingReport && closeReportModal()}
+        >
+          <div
+            className="relative w-full max-w-xl bg-white border-4 border-surface-900 shadow-brutal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b-2 border-surface-900 bg-red-600 text-white px-4 py-3">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest opacity-80">
+                  Reportar error de imagen
+                </span>
+                <span className="text-sm font-bold truncate">{reportModal.label}</span>
+              </div>
+              <button
+                type="button"
+                onClick={closeReportModal}
+                disabled={savingReport}
+                className="text-xs font-bold uppercase tracking-wider border-2 border-white bg-red-700 hover:bg-red-800 px-3 py-1 disabled:opacity-50"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="px-4 py-4 space-y-3">
+              <p className="text-xs text-surface-600 leading-relaxed">
+                Describe con tus palabras qué está mal en la imagen. Cuanto más concreto,
+                mejor (por ejemplo: <em>“el volante está deformado y la puerta superior
+                aparece abierta pero dentro se ve otra puerta distinta”</em>). Al pulsar{' '}
+                <strong>Regenerar</strong> la IA usará este texto para corregir
+                específicamente esos errores sin cambiar el resto de la escena.
+              </p>
+
+              {reportModal.existing && !reportText.trim() && (
+                <div className="text-[11px] font-mono bg-amber-50 border-2 border-amber-300 px-3 py-2">
+                  Ya había un reporte guardado. Puedes editarlo o borrarlo.
+                </div>
+              )}
+
+              <textarea
+                value={reportText}
+                onChange={e => setReportText(e.target.value)}
+                placeholder="Ej.: La furgoneta tiene dos volantes, las ruedas son de distinto tamaño, hay una persona con tres brazos en el fondo…"
+                rows={6}
+                maxLength={2000}
+                className="w-full border-2 border-surface-900 px-3 py-2 text-sm font-mono focus:outline-none focus:border-red-600 resize-y min-h-[120px]"
+                autoFocus
+                disabled={savingReport}
+              />
+              <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-surface-500">
+                <span>{reportText.length} / 2000</span>
+                {reportError && <span className="text-red-600">{reportError}</span>}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t-2 border-surface-900 bg-surface-50 px-4 py-3">
+              {reportModal.existing ? (
+                <button
+                  type="button"
+                  onClick={() => void submitReport(true)}
+                  disabled={savingReport}
+                  className="text-[11px] font-bold uppercase tracking-wider border-2 border-surface-900 bg-white text-surface-900 hover:bg-surface-100 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50"
+                >
+                  Borrar reporte
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={closeReportModal}
+                  disabled={savingReport}
+                  className="text-[11px] font-bold uppercase tracking-wider border-2 border-surface-900 bg-white text-surface-900 hover:bg-surface-100 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitReport(false)}
+                  disabled={savingReport}
+                  className="text-[11px] font-bold uppercase tracking-wider border-2 border-surface-900 bg-red-600 text-white hover:bg-red-700 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50"
+                >
+                  {savingReport ? 'Guardando…' : 'Guardar reporte'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

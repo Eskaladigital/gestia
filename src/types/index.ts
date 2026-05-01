@@ -412,6 +412,15 @@ export interface ContentItemVisual {
   image_error: string | null;
   /** Espejo horizontal guardado en BD (vista y descargas). */
   image_flip_horizontal?: boolean;
+  /**
+   * Texto del último error reportado por el usuario sobre la imagen generada.
+   * Se inyecta en el prompt al regenerar para que la IA corrija puntos concretos
+   * (objetos deformes, elementos fuera de sitio, piel plástica, etc.).
+   * Se limpia automáticamente al regenerar con éxito.
+   */
+  user_feedback?: string | null;
+  /** Fecha en la que se reportó el último error. */
+  user_feedback_at?: string | null;
   created_at: string;
   updated_at: string;
 }

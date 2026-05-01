@@ -81,7 +81,32 @@ function appendReferenceHandlingInstructions(prompt: string, referenceCount: num
 Si hay imágenes de referencia del producto, úsalas para respetar forma, proporciones, acabados, colores y rasgos distintivos del producto real, pero NO copies necesariamente el mismo ángulo, la misma altura de cámara, la misma distancia ni el mismo encuadre de esas referencias. La composición final debe obedecer a la escena descrita en este prompt y mantener variedad de planos entre piezas del proyecto.`;
 }
 
-async function buildFinalPrompt(openai: OpenAI, rawPrompt: string, referenceCount = 0): Promise<string> {
+/**
+ * Antepone al prompt las CORRECCIONES OBLIGATORIAS del usuario: una lista de
+ * errores reportados sobre la versión anterior de esta misma imagen que deben
+ * quedar resueltos en la siguiente generación.
+ *
+ * El bloque se inserta DESPUÉS del refiner para que no sea reescrito ni
+ * diluido, y antes de la cola de realismo para que todas las instrucciones
+ * fotográficas finales sigan aplicando.
+ */
+function applyUserFeedbackToPrompt(prompt: string, userFeedback: string | null | undefined): string {
+  const feedback = (userFeedback || '').trim();
+  if (!feedback) return prompt;
+  return `${prompt}
+
+CORRECCIONES OBLIGATORIAS DEL USUARIO SOBRE LA VERSIÓN ANTERIOR DE ESTA MISMA IMAGEN (prioridad absoluta; si la nueva imagen repite cualquiera de estos errores se considerará fallida):
+${feedback}
+
+Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el encuadre principal descritos en el prompt: solo arréglalas de forma natural.`;
+}
+
+async function buildFinalPrompt(
+  openai: OpenAI,
+  rawPrompt: string,
+  referenceCount = 0,
+  userFeedback: string | null = null,
+): Promise<string> {
   const cleaned = cleanPrompt(rawPrompt);
 
   let prompt: string;
@@ -104,7 +129,9 @@ async function buildFinalPrompt(openai: OpenAI, rawPrompt: string, referenceCoun
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
   }
 
-  prompt = `${appendReferenceHandlingInstructions(prompt, referenceCount)}\n\n${IMAGE_REALISM_TAIL}`;
+  prompt = appendReferenceHandlingInstructions(prompt, referenceCount);
+  prompt = applyUserFeedbackToPrompt(prompt, userFeedback);
+  prompt = `${prompt}\n\n${IMAGE_REALISM_TAIL}`;
 
   if (prompt.length > MAX_PROMPT_LENGTH) {
     prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
@@ -240,11 +267,17 @@ export async function POST(request: NextRequest) {
       project.id,
       DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
     );
-    const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
+    const userFeedback: string | null =
+      typeof (visual as any).user_feedback === 'string' && (visual as any).user_feedback.trim()
+        ? (visual as any).user_feedback.trim()
+        : null;
+
+    const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length, userFeedback);
 
     console.log(
       `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs: ${referenceImages.length}, ` +
-      `orientation: ${projectOrientation} (${imageSize})`
+      `orientation: ${projectOrientation} (${imageSize})` +
+      (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '')
     );
 
     async function generateWithoutReferences() {
@@ -317,12 +350,16 @@ export async function POST(request: NextRequest) {
 
     // 1) UPDATE CRÍTICO: url/status/error. Si esto falla, abortamos y devolvemos
     //    error al cliente. Nunca decimos "ready" si la BD no está realmente persistida.
+    //    Si había feedback del usuario, lo limpiamos ahora: la regeneración ya lo
+    //    aplicó y no debe arrastrarse a próximas regeneraciones.
     const { data: savedRow, error: saveErr } = await service
       .from('content_item_visuals')
       .update({
         image_url: imageUrl,
         image_status: 'ready',
         image_error: null,
+        user_feedback: null,
+        user_feedback_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', visual_id)
