@@ -194,14 +194,14 @@ export function BusinessCard({
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal mb-6 overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b-2 border-surface-900">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 sm:px-6 py-4 border-b-2 border-surface-900">
+        <div className="min-w-0 flex-1">
           <h2 className="font-display text-lg font-bold text-surface-900 mb-1">Ficha del negocio / Análisis Web</h2>
           <p className="text-surface-400 text-xs font-medium mt-0.5">
             Resultado del análisis de la web. Los ajustes operativos están en <strong>Ajustes del proyecto</strong>.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 ml-auto shrink-0">
           {hasData && (
             <button
               onClick={() => {

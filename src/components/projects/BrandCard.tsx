@@ -423,12 +423,12 @@ export function BrandCard({
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal overflow-hidden mb-6">
-      <div className="flex items-center justify-between px-6 py-4 border-b-2 border-surface-900">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b-2 border-surface-900">
+        <div className="flex items-center gap-3 min-w-0">
           {localData.brandFaviconUrl && (
-            <img src={localData.brandFaviconUrl} alt="Favicon" className="w-6 h-6 rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
+            <img src={localData.brandFaviconUrl} alt="Favicon" className="w-6 h-6 rounded shrink-0" onError={(e) => (e.currentTarget.style.display = 'none')} />
           )}
-          <div>
+          <div className="min-w-0">
             <h2 className="font-display font-bold text-surface-900">Identidad visual / ADN</h2>
             {localData.brandAnalyzedAt && (
               <p className="text-[10px] text-surface-400 font-mono uppercase tracking-wider">
@@ -437,7 +437,7 @@ export function BrandCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 ml-auto">
           {!manualAnalyzeDisabled && !isEditing ? (
             <button
               onClick={analyzeBrand}

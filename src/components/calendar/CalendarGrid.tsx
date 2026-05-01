@@ -167,9 +167,12 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2 sm:gap-3">
+      {/* Header
+          Mobile  (< sm):  navegación arriba, atajos de mes debajo (envueltos).
+          Tablet  (sm-lg): navegación arriba, atajos de mes debajo en fila completa.
+          Desktop (xl+):   navegación a la izquierda, atajos a la derecha en una sola línea. */}
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <button onClick={prevMonth} className="p-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-surface-900">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
           </button>
@@ -179,21 +182,19 @@ export function CalendarGrid({ items, onSelectItem, onItemsChange }: CalendarGri
           <button onClick={nextMonth} className="p-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-surface-900">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
           </button>
-          <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest ml-auto sm:ml-0">{postsThisMonth} posts</span>
+          <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest ml-auto xl:ml-0">{postsThisMonth} posts</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex flex-wrap gap-1">
-            {Array.from(monthsWithContent).map(key => {
-              const [y, m] = key.split('-').map(Number);
-              const isActive = y === currentYear && m === currentMonth;
-              return (
-                <button key={key} onClick={() => { setCurrentYear(y); setCurrentMonth(m); }}
-                  className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider border-2 transition-all ${isActive ? 'bg-brand-600 text-white border-surface-900 shadow-brutal-sm' : 'bg-white text-surface-500 border-surface-200 hover:border-surface-900 hover:text-surface-900'}`}>
-                  {MONTH_NAMES[m].slice(0, 3)}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex flex-wrap gap-1">
+          {Array.from(monthsWithContent).map(key => {
+            const [y, m] = key.split('-').map(Number);
+            const isActive = y === currentYear && m === currentMonth;
+            return (
+              <button key={key} onClick={() => { setCurrentYear(y); setCurrentMonth(m); }}
+                className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider border-2 transition-all ${isActive ? 'bg-brand-600 text-white border-surface-900 shadow-brutal-sm' : 'bg-white text-surface-500 border-surface-200 hover:border-surface-900 hover:text-surface-900'}`}>
+                {MONTH_NAMES[m].slice(0, 3)}
+              </button>
+            );
+          })}
         </div>
       </div>
 

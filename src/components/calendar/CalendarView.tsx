@@ -118,9 +118,12 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
 
   return (
     <div>
-      {/* Controls bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
+      {/* Controls bar
+          Mobile  (< sm):  todo apilado en columna.
+          Tablet  (sm-lg): tabs arriba, botones de acción debajo en grid 2 cols (ordenados, sin desorden).
+          Desktop (xl+):   tabs a la izquierda, botones de acción a la derecha en una sola línea. */}
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest shrink-0">{localItems.length} posts</span>
           <div className="flex border-2 border-surface-900 p-0">
             <button
@@ -155,11 +158,11 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
             </button>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:flex-row xl:items-center gap-2 w-full xl:w-auto">
           {pendingBriefsCount > 0 && (
             <button
               onClick={() => handleGenerateVisualBriefs()}
-              className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full sm:w-auto"
+              className="text-xs font-bold text-white uppercase tracking-wider px-3 sm:px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-center"
             >
               Generar briefs pendientes ({pendingBriefsCount})
             </button>
@@ -170,7 +173,7 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
               handleGenerateVisualBriefs(allIds);
             }}
             disabled={localItems.length === 0}
-            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 bg-white border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-3 sm:px-4 py-2 bg-white border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-center"
           >
             Regenerar todos los briefs
           </button>
@@ -179,14 +182,14 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
               <button
                 onClick={handleGeneratePendingImages}
                 disabled={!!allImagesQueue}
-                className="text-xs font-bold text-white uppercase tracking-wider px-4 py-2 bg-violet-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 w-full sm:w-auto"
+                className="text-xs font-bold text-white uppercase tracking-wider px-3 sm:px-4 py-2 bg-violet-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 text-center"
               >
                 Generar imágenes pendientes
               </button>
               <button
                 onClick={handleGenerateAllImages}
                 disabled={!!allImagesQueue}
-                className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 bg-white border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                className="text-xs font-bold text-surface-900 uppercase tracking-wider px-3 sm:px-4 py-2 bg-white border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-center"
               >
                 Regenerar todas las imágenes
               </button>
@@ -194,7 +197,7 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
           )}
           <button
             onClick={handleExportJSON}
-            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-4 py-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full sm:w-auto"
+            className="text-xs font-bold text-surface-900 uppercase tracking-wider px-3 sm:px-4 py-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-center"
           >
             Exportar JSON
           </button>

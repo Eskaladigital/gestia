@@ -374,9 +374,11 @@ export function CalendarTable({
 
                       {/* Content */}
                       <div className="flex-1 min-w-0 px-4 sm:px-5 py-4">
-                        {/* Header row */}
-                        <div className="flex items-start justify-between gap-3 mb-2">
-                          <div className="flex items-center gap-2 flex-wrap">
+                        {/* Header row: en pantallas estrechas (móvil + tablet vertical) las
+                            acciones (estado/editar/borrar) bajan a una segunda línea para evitar
+                            que choquen con los badges de la izquierda. */}
+                        <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3 mb-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
                             <span className="text-sm font-bold text-surface-900 shrink-0 font-mono">
                               {new Date(item.scheduled_date).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' })}
                             </span>
@@ -408,7 +410,7 @@ export function CalendarTable({
                               </div>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
                             <select
                               value={item.status}
                               onChange={(e) => handleStatusChange(item.id, e.target.value as ContentItemStatus)}
@@ -456,7 +458,7 @@ export function CalendarTable({
 
                         {expandedBrief === item.id && item.visual_prompt && (
                           <div className="mt-4 border-t-2 border-surface-900 pt-4 space-y-4">
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-surface-900 text-white px-2 py-0.5">Prompts Visuales</span>
                                 <span className="text-[10px] text-surface-500 font-mono">
@@ -468,7 +470,7 @@ export function CalendarTable({
                                   })()}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5 ml-auto">
                                 {visualsCache[item.id] && visualsCache[item.id].length > 1 && (
                                   <button
                                     type="button"
@@ -509,11 +511,11 @@ export function CalendarTable({
                                   const hasError = visual.image_status === 'error';
                                   return (
                                     <div key={visual.id} className="border-2 border-surface-900 overflow-hidden">
-                                      <div className="flex items-center justify-between bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
+                                      <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
                                         <span className="text-[10px] font-bold uppercase tracking-widest text-surface-700">
                                           {visual.label || `Visual ${visual.visual_index + 1}`}
                                         </span>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex flex-wrap items-center gap-1.5 ml-auto">
                                           <button
                                             type="button"
                                             onClick={() => handleCopyPrompt(visual.visual_prompt, visual.id)}
