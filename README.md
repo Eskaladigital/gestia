@@ -73,7 +73,7 @@ src/
 ├── hooks/
 └── middleware.ts            # Auth/sesión (Next 16 puede avisar middleware → proxy)
 
-supabase/migrations/         # 001 … 019 (ejecutar en orden)
+supabase/migrations/         # 001 … 023 (ejecutar en orden)
 ```
 
 ## Interfaz responsive
@@ -88,7 +88,7 @@ supabase/migrations/         # 001 … 019 (ejecutar en orden)
 - **Vista cuadrícula**: en **móvil** se muestra un **mes compacto** con el día y pequeños indicadores por tipo de contenido; al seleccionar un día aparece el detalle de las publicaciones. En **tablet/escritorio** se mantiene la cuadrícula semanal ampliada.
 - **Vista lista**: cada ítem es una **tarjeta** con una **franja vertical de color** e **icono + etiqueta** del formato (p. ej. Story, Reel, Carrusel) para ver de un vistazo el tipo de publicación; se muestran idea, copy (sin truncar con `pre-wrap`), CTA, objetivo y hashtags cuando existan.
 - **Editor de post**: en móvil actúa como **panel inferior** (bottom sheet); en escritorio, **modal centrado**.
-- **Imágenes generadas**: cada visual del calendario puede generar una imagen IA (`generate-image`). Sobre cada imagen hay botones de **copiar**, **regenerar**, **descargar** y **espejo** (flip horizontal). El espejo persiste en BD (`image_flip_horizontal`) y se aplica también a descargas individuales y ZIP.
+- **Imágenes generadas**: cada visual del calendario puede generar una imagen IA (`generate-image`). Sobre cada imagen hay botones de **copiar**, **regenerar**, **descargar**, **espejo** (flip horizontal) y **reportar error**. El espejo persiste en BD (`image_flip_horizontal`) y se aplica también a descargas individuales y ZIP. El **reporte de error** (`user_feedback` en `content_item_visuals`) permite al usuario describir en lenguaje natural qué está mal en la imagen (por ejemplo *"el volante aparece deformado"*); ese texto se inyecta como **corrección obligatoria** en el prompt al **regenerar** y se limpia automáticamente cuando la regeneración termina con éxito. La **orientación** de las imágenes del proyecto es configurable (vertical 9:16, cuadrado 1:1 u horizontal 16:9, migración 022) y afecta tanto a la generación IA como al layout de la galería.
 
 ## PWA (instalable)
 
@@ -102,12 +102,14 @@ supabase/migrations/         # 001 … 019 (ejecutar en orden)
 
 1. **Datos** → Supabase con RLS por usuario; proyectos pueden archivarse (`deleted_at`, migración 008). Roles admin y suscripciones (012+).
 2. **Scraping** → `RealScrapingProvider`: petición HTTP a la web del proyecto; si el texto es insuficiente o falla el fetch, se puede usar **Apify** (Website Content Crawler / búsqueda para competencia) según variables de entorno. Búsqueda orgánica opcional vía **SearchAPI.io** o **SerpAPI** (`SEARCHAPI_API_KEY`, `SERPAPI_KEY`).
-3. **Inteligencia** → Llamadas LLM con prompts alineados al onboarding; en **Config IA** se pueden ajustar agentes y claves de proveedor almacenadas de forma segura (ver migraciones `003`, `005`). El prompt de estrategia (`buildStrategyPrompt`) inyecta **ADN visual** de la marca (colores, keywords, identidad) y aplica una **jerarquía de prioridad**: reglas IA del proyecto → sliders de tono del usuario → ADN de marca → análisis del negocio → análisis competitivo. Cada pilar generado debe justificarse con fortalezas del negocio o debilidades de la competencia.
+3. **Inteligencia** → Llamadas LLM con prompts alineados al onboarding; en **Config IA** se pueden ajustar agentes y claves de proveedor almacenadas de forma segura (ver migraciones `003`, `005`, `020`). El prompt de estrategia (`buildStrategyPrompt`) inyecta **ADN visual** de la marca (colores, keywords, identidad) y aplica una **jerarquía de prioridad**: reglas IA del proyecto → sliders de tono del usuario → ADN de marca → análisis del negocio → análisis competitivo. Cada pilar generado debe justificarse con fortalezas del negocio o debilidades de la competencia.
+   - **Carruseles con variedad narrativa** (`buildCalendarPrompt` + `buildCarouselSystem`): para cada carrusel, el editor del calendario escribe una **ficha técnica por slide** (Plano / Sujeto / Acción / Hora-luz / Lugar) y aplica reglas duras de variedad (prohibido repetir el mismo plano dos veces, obligatorio mezclar interior/exterior, detalle, escena humana y entorno). El director de arte del slide recibe además el **mapa completo** del carrusel y las fichas de los slides anterior y siguiente, para que cada slide encaje en un arco narrativo y no acabe siendo seis fotos casi iguales.
+   - **Reglas IA por proyecto** (`ai_rules`, migración 010): campo libre de texto que se inyecta en cabeza de todos los prompts de la pipeline como **cinturón de seguridad** (p. ej. reglas de marca, modelos de producto permitidos, clichés prohibidos del sector).
 4. **Aplicación** → Next.js App Router (Server Components + Client Components).
 
 ## Base de datos (migraciones)
 
-En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001` → `019`):
+En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001` → `023`):
 
 | Archivo | Contenido (resumen) |
 |--------|----------------------|
@@ -130,6 +132,10 @@ En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001`
 | `017_content_item_visuals.sql` | Tabla `content_item_visuals` para almacenar visuals por ítem del calendario |
 | `018_visual_generated_images.sql` | Campos de imagen generada en `content_item_visuals` (`image_url`, `image_status`, etc.) |
 | `019_content_item_visuals_image_flip.sql` | Columna `image_flip_horizontal` (espejo persistente por visual) |
+| `020_ai_agent_configs_expand_and_refresh_models.sql` | Amplía el catálogo de `agent_key` (story/video/carrusel/feed) y refresca defaults OpenAI |
+| `021_project_reference_images.sql` | Tabla `project_reference_images` (hasta N imágenes reales del producto por proyecto, bucket `product-references`) |
+| `022_project_image_orientation.sql` | Campo `projects.image_orientation` (`vertical` / `cuadrado` / `horizontal`) para la salida de `generate-image` |
+| `023_content_item_visuals_user_feedback.sql` | Campos `user_feedback` y `user_feedback_at` para reportar errores de imagen y corregirlos al regenerar |
 
 **Storage:** crea en Supabase un bucket público llamado **`screenshots`** (o déjalo que la primera captura lo intente crear vía service role). Las miniaturas del análisis web se suben ahí.
 
@@ -146,7 +152,7 @@ npm install
 ### 2. Configurar Supabase
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ejecuta las migraciones del directorio `supabase/migrations/` **en orden** (`001` → `019`).
+2. Ejecuta las migraciones del directorio `supabase/migrations/` **en orden** (`001` → `023`).
 3. En **Authentication → Providers**, habilita Email y, si quieres, Google (OAuth).
 4. En **Authentication → URL configuration**, añade la URL de tu app (local y producción) y rutas de callback (p. ej. `/callback`).
 
@@ -200,7 +206,7 @@ npm run start
 3. En la ficha del proyecto, **Fase 1 — Base**: analizar web → analizar competidores → generar estrategia (botones independientes; el estado del pipeline se refleja en la UI). Las secciones de **identidad de marca** (`BrandCard`), **ficha del negocio** (`BusinessCard`) y **competidores** (`CompetitorsCard`) son **editables** directamente desde el dashboard; los cambios se persisten en Supabase y se utilizan al regenerar la estrategia.
 4. **Analizar web** además del texto guarda **miniaturas** (Puppeteer) de hasta 3 URLs en el bucket Supabase **`screenshots`** y enlaza `screenshot_url` en cada fila de `scraped_content`. El proceso puede alargarse varios minutos en la primera ejecución (descarga de Chromium, red lenta, etc.). Requiere Node con Chrome embebido (típico en `npm run dev` / `next start` en tu PC o VPS); en muchos despliegues serverless no hay navegador — usa `DISABLE_PUPPETEER_SCREENSHOTS=1` o un host con Node “completo”.
 5. **Fase 2 — Calendario**: solo disponible cuando existe estrategia guardada. Primera vez genera el mes actual; si ya hay posts, puedes **añadir** publicaciones al mes o **reemplazar** todo el mes (modal). El calendario puede incluir `production_specs` (slides, duración, tipo de medio) y un paso posterior de **briefs visuales** (`generate-visual-briefs`).
-6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). Las imágenes se muestran en galería con opciones de **copiar, regenerar, descargar y espejo horizontal**. El espejo (`image_flip_horizontal`) es persistente y se aplica a descargas individuales y ZIP.
+6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). Las imágenes se muestran en galería con opciones de **copiar, regenerar, descargar, espejo horizontal y reportar error**. El espejo (`image_flip_horizontal`) es persistente y se aplica a descargas individuales y ZIP. Si la imagen tiene defectos (deformaciones, objetos fuera de sitio, clichés no deseados), pulsa **Reportar** y describe con palabras qué está mal: la siguiente regeneración recibirá ese texto como *corrección obligatoria* en el prompt y lo limpiará al terminar con éxito. La **orientación** de las imágenes del proyecto (vertical / cuadrado / horizontal) se configura desde la ficha del proyecto y se aplica a todas las generaciones.
 7. Revisar y editar posts en la vista **Calendario** (cuadrícula o lista); exportar según lo que exponga la UI (p. ej. JSON).
 
 Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al completar de nuevo pasos correctamente (p. ej. calendario generado) puede volver a **`ready`** según la lógica actual de las rutas API.
@@ -215,7 +221,8 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 | `POST /api/generate-strategy` | Estrategia de contenido |
 | `POST /api/generate-calendar` | Calendario (`calendar_mode`: append / replace, etc.) |
 | `POST /api/generate-visual-briefs` | Brief creativo + prompt generativo por ítem del calendario |
-| `POST /api/generate-image` | Genera imagen IA para un visual del calendario (guarda URL en `content_item_visuals`) |
+| `POST /api/generate-image` | Genera imagen IA para un visual del calendario (guarda URL en `content_item_visuals`). Si hay `user_feedback`, lo inyecta en el prompt como corrección obligatoria y lo limpia al terminar con éxito. |
+| `POST /api/report-image-error` | Guarda en `content_item_visuals.user_feedback` un texto libre del usuario describiendo un error de la imagen; se usa al regenerar. |
 | `GET/POST/PATCH /api/projects` | Listar activos, crear; `PATCH` también sirve para onboarding y **papelera** (`deleted_at`: ISO string o `null` para restaurar) |
 | `PATCH /api/projects/[id]` | Ajustes del proyecto (tono, distribución semanal, cuota, etc.) |
 | `DELETE /api/projects/[id]` | Borrado definitivo (si hay `deleted_at`, solo tras archivar en papelera) |
@@ -249,6 +256,10 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [ ] Streaming de respuestas IA (SSE)
 - [ ] Exportación a CSV / Google Sheets
 - [x] Generación de imágenes IA (con espejo horizontal persistente y descarga)
+- [x] Reporte de error por imagen con texto libre, aplicado como corrección al regenerar
+- [x] Carruseles con variedad narrativa forzada (ficha técnica por slide + mapa completo al director de arte)
+- [x] Orientación de imagen por proyecto (vertical / cuadrado / horizontal)
+- [x] Referencias visuales del producto por proyecto (subida de fotos reales para coherencia con el producto sin perder variedad de planos)
 - [ ] Multi-plataforma ampliada (TikTok, LinkedIn, X, etc.)
 - [ ] Publicación programada vía APIs de redes
 - [ ] Planes y pagos (Stripe)
