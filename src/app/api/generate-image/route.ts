@@ -129,11 +129,30 @@ ${feedback}
 Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el encuadre principal descritos en el prompt: solo arréglalas de forma natural.`;
 }
 
+/**
+ * Inyecta al final del prompt las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES
+ * del proyecto (planta de un espacio, identidad de marca, sujetos prohibidos…).
+ * Es el último seguro: aunque el visual_prompt se haya escrito ignorando estas
+ * reglas, el modelo de imagen las recibe en el último kilómetro como verdad
+ * ineludible y las prioriza sobre cualquier descripción genérica.
+ */
+function applyPhysicalConstraintsToPrompt(prompt: string, physicalConstraints: string | null | undefined): string {
+  const text = (physicalConstraints || '').trim();
+  if (!text) return prompt;
+  return `${prompt}
+
+REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO (prioridad máxima — si la imagen las contradice, se considerará fallida):
+${text}
+
+PROHIBIDO contradecir lo anterior: la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos son fijos. Acabados, luz, hora, color y ángulo siguen siendo libres.`;
+}
+
 async function buildFinalPrompt(
   openai: OpenAI,
   rawPrompt: string,
   referenceCount = 0,
   userFeedback: string | null = null,
+  physicalConstraints: string | null = null,
 ): Promise<string> {
   const cleaned = cleanPrompt(rawPrompt);
 
@@ -159,6 +178,7 @@ async function buildFinalPrompt(
 
   prompt = appendReferenceHandlingInstructions(prompt, referenceCount);
   prompt = applyUserFeedbackToPrompt(prompt, userFeedback);
+  prompt = applyPhysicalConstraintsToPrompt(prompt, physicalConstraints);
   prompt = `${prompt}\n\n${IMAGE_REALISM_TAIL}`;
 
   if (prompt.length > MAX_PROMPT_LENGTH) {
@@ -341,11 +361,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const projectPhysicalConstraints: string | null =
+      typeof (project as { physical_constraints?: unknown }).physical_constraints === 'string' &&
+      ((project as { physical_constraints?: string }).physical_constraints || '').trim()
+        ? ((project as { physical_constraints?: string }).physical_constraints as string).trim()
+        : null;
+
     let prompt = await buildFinalPrompt(
       openai,
       visual.visual_prompt,
       selectedReferenceImages.length,
-      userFeedback
+      userFeedback,
+      projectPhysicalConstraints
     );
     if (selectedReferenceImages.length > 0) {
       prompt = applyReferenceCaptionsToPrompt(prompt, selectedReferenceImages, selectorReasoning);
@@ -356,7 +383,8 @@ export async function POST(request: NextRequest) {
       `seleccionadas/totales: ${selectedReferenceImages.length}/${allPrimaryReferenceImages.length}, ` +
       `orientation: ${projectOrientation} (${imageSize})` +
       (selectorReasoning ? `, selector: "${selectorReasoning}"` : '') +
-      (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '')
+      (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '') +
+      (projectPhysicalConstraints ? `, physical_constraints: ${projectPhysicalConstraints.length} chars` : '')
     );
 
     async function generateWithoutReferences() {

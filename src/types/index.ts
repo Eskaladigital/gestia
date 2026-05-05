@@ -180,6 +180,14 @@ export interface Project {
   ai_rules?: string | null;
   /** Orientación global de imágenes IA generadas; migración 022 (default 'vertical'). */
   image_orientation?: ImageOrientation;
+  /**
+   * Reglas físicas e identitarias inviolables del producto (planta de un
+   * espacio, identidad de marca, sujetos prohibidos…). Migración 025.
+   * Texto libre. Si está vacío, no se inyecta nada en el pipeline.
+   */
+  physical_constraints?: string | null;
+  /** Última edición (manual o IA) de las reglas inviolables. Migración 025. */
+  physical_constraints_at?: string | null;
   status: ProjectStatus;
   onboarding_step: number;
   brand_colors: BrandColorEntry[];

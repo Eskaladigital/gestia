@@ -42,6 +42,13 @@ export function isImageOrientationColumnError(error: { message?: string; code?: 
   return c === '42703' || (m.includes('image_orientation') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column')));
 }
 
+/** PostgREST cuando la migración 025 (physical_constraints) no está aplicada. */
+export function isPhysicalConstraintsColumnError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const m = (error.message || '').toLowerCase();
+  return m.includes('physical_constraints') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
+}
+
 export async function fetchUserProjectsList(client: SupabaseClient, userId: string) {
   const activeRes = await client
     .from('projects')

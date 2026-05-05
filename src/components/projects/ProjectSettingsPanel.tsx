@@ -35,6 +35,7 @@ export type ProjectSettingsInitial = {
   monthly_fee: number | null | undefined;
   ai_rules: string | null | undefined;
   image_orientation: ImageOrientation | null | undefined;
+  physical_constraints: string | null | undefined;
   updated_at: string;
 };
 
@@ -107,10 +108,12 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
   const [description, setDescription] = useState(initial.description || '');
   const [monthlyFeeInput, setMonthlyFeeInput] = useState(feeToInput(initial.monthly_fee));
   const [aiRules, setAiRules] = useState(initial.ai_rules || '');
+  const [physicalConstraints, setPhysicalConstraints] = useState(initial.physical_constraints || '');
   const [imageOrientation, setImageOrientation] = useState<ImageOrientation>(
     initial.image_orientation || DEFAULT_IMAGE_ORIENTATION
   );
   const [saving, setSaving] = useState(false);
+  const [suggestingConstraints, setSuggestingConstraints] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
@@ -130,6 +133,7 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
     setDescription(initial.description || '');
     setMonthlyFeeInput(feeToInput(initial.monthly_fee));
     setAiRules(initial.ai_rules || '');
+    setPhysicalConstraints(initial.physical_constraints || '');
     setImageOrientation(initial.image_orientation || DEFAULT_IMAGE_ORIENTATION);
   }, [initial.updated_at]);
 
@@ -178,6 +182,7 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
           description: description.trim() || null,
           monthly_fee: parsedFee === null ? null : Math.round(parsedFee * 100) / 100,
           ai_rules: aiRules.trim() || null,
+          physical_constraints: physicalConstraints.trim() || null,
           image_orientation: imageOrientation,
         }),
       });
@@ -205,11 +210,53 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
     description,
     monthlyFeeInput,
     aiRules,
+    physicalConstraints,
     imageOrientation,
     distOk,
     projectId,
     router,
   ]);
+
+  const suggestConstraints = useCallback(async () => {
+    setSuggestingConstraints(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/suggest-physical-constraints`, {
+        method: 'POST',
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        suggestion?: string;
+        insufficient?: boolean;
+        message?: string;
+      };
+      if (!res.ok) throw new Error(data.error || 'Error sugiriendo reglas');
+      if (data.insufficient) {
+        setMessage({
+          type: 'err',
+          text:
+            data.message ||
+            'No hay suficiente información todavía para sugerir reglas. Sube imágenes de referencia con descripción IA o rellena la descripción del proyecto.',
+        });
+        return;
+      }
+      const suggestion = (data.suggestion || '').trim();
+      if (!suggestion) {
+        setMessage({ type: 'err', text: 'La IA no devolvió ninguna sugerencia.' });
+        return;
+      }
+      setPhysicalConstraints(suggestion);
+      setMessage({
+        type: 'ok',
+        text:
+          'Sugerencia generada. Revísala y pulsa "Guardar cambios" para aplicarla.',
+      });
+    } catch (e: unknown) {
+      setMessage({ type: 'err', text: e instanceof Error ? e.message : 'Error sugiriendo reglas' });
+    } finally {
+      setSuggestingConstraints(false);
+    }
+  }, [projectId]);
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal mb-6 overflow-hidden">
@@ -356,7 +403,36 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
                     placeholder="Ej: NO usar la palabra «rutas». Siempre incluir CTA de WhatsApp…"
                   />
                   <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-1.5">
-                    Se inyectan en los prompts de Estrategia y Calendario
+                    Reglas BLANDAS de tono, copy y comunicación. Se inyectan en Estrategia y Calendario.
+                  </p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider">
+                      Reglas físicas e identitarias inviolables del producto
+                    </label>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void suggestConstraints()}
+                      loading={suggestingConstraints}
+                    >
+                      Sugerir con IA
+                    </Button>
+                  </div>
+                  <textarea
+                    value={physicalConstraints}
+                    onChange={e => setPhysicalConstraints(e.target.value)}
+                    rows={6}
+                    className={inputClass}
+                    placeholder={
+                      'Ej. (camper): Camper sobre Fiat Ducato L3H2. De delante a atrás: cabina con asientos giratorios → salón con mesa a la izquierda y banco/cocina a la derecha → baño a la derecha → cama transversal al fondo. PROHIBIDO mostrar la cama pegada a la cabina sin baño/armario en medio.\n\n' +
+                      'Ej. (marca): Logo solo tipográfico (sin icono). Furgo corporativa blanca con franja granate. Empleados con polo azul marino.\n\n' +
+                      'Ej. (servicio): Perros con collar plano o arnés en H. PROHIBIDO collares de pinchos, ahorque o eléctricos. PROHIBIDO jaulas.'
+                    }
+                  />
+                  <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-1.5">
+                    Reglas DURAS de geometría, identidad de marca y sujetos. Se inyectan en Calendario, Briefs visuales y Generación de imagen como verdad ineludible. Pulsa &quot;Sugerir con IA&quot; para que la IA proponga un texto a partir del dossier y las imágenes de referencia subidas.
                   </p>
                 </div>
               </div>

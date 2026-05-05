@@ -271,6 +271,27 @@ ${includeAiRules && project.ai_rules?.trim() ? `\n## REGLAS IA DEL PROYECTO (obl
 `.trim();
 }
 
+/**
+ * Bloque de "verdad ineludible" del producto. Recoge planta y geometría real
+ * (camper, restaurante, gym), identidad gráfica de marca (logo, packaging) o
+ * sujetos/objetos prohibidos en imágenes (collares de adiestramiento, jaulas,
+ * uniformes). A diferencia de `ai_rules` (reglas blandas de tono/estilo), esto
+ * son hechos sobre la realidad del producto que la IA NUNCA puede contradecir.
+ *
+ * Si el proyecto no tiene `physical_constraints` rellenado, devuelve cadena
+ * vacía: el resto del prompt se mantiene tal cual.
+ */
+export function buildPhysicalConstraintsBlock(project: Project): string {
+  const text = (project.physical_constraints || '').trim();
+  if (!text) return '';
+  return [
+    '## REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES (verdad ineludible — no contradigas)',
+    text,
+    '',
+    'Estas reglas describen la realidad física e identitaria del producto del cliente. Acabados, luz, color, hora, ángulo y tipo de plano son libres; la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos NO. PROHIBIDO inventar adyacencias, distribuciones, logos, colores corporativos o sujetos que contradigan lo anterior.',
+  ].join('\n');
+}
+
 // ============================================================
 // 1. PROMPT: Análisis de negocio
 // ============================================================
@@ -655,7 +676,10 @@ FORMATO DE RESPUESTA JSON:
 }`,
     user: `Genera el calendario de contenido para ${month} ${year}:
 
-${buildProjectContext(project, { includeAiRules: true })}
+${buildProjectContext(project, { includeAiRules: true })}${(() => {
+  const block = buildPhysicalConstraintsBlock(project);
+  return block ? `\n\n${block}\n\nIMPORTANTE: al planificar el "scene_summary" de cada post (especialmente las fichas técnicas de carruseles y reels) NO propongas escenas que contradigan estas reglas. Si el producto es un espacio con una planta concreta, las acciones/lugares deben ser físicamente posibles en esa planta. Si la marca tiene una identidad gráfica fija, no inventes logos ni colores nuevos. Si hay sujetos prohibidos (jaulas, collares de pinchos, uniformes), no los menciones en ningún slide.` : '';
+})()}
 
 ## ESTRATEGIA APROBADA
 ${strategy}${opts?.priorMonthsDigest?.trim() ? `
@@ -1232,6 +1256,7 @@ export function buildSingleVisualPrompt(
 
   const brandBlock = `## IDENTIDAD DE MARCA\n${buildBrandContext(project)}`;
   const contextBlock = `## CONTEXTO DEL NEGOCIO\n${buildProjectContext(project, { includeAiRules: true })}`;
+  const physicalConstraintsBlock = buildPhysicalConstraintsBlock(project);
 
   const postBlock = `## PUBLICACIÓN${isVideo ? ' (VÍDEO)' : ''}
 - Formato: ${post.format || 'No especificado'}
@@ -1334,7 +1359,7 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}\n\n${brandBlock}\n\n${contextBlock}${productReferenceBlock ? `\n\n${productReferenceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${productReferenceBlock ? `\n\n${productReferenceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
     agentKey,
   };
 }

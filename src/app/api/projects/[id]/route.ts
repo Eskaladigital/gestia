@@ -5,6 +5,7 @@ import {
   isMonthlyFeeColumnError,
   isAiRulesColumnError,
   isImageOrientationColumnError,
+  isPhysicalConstraintsColumnError,
 } from '@/lib/supabase/project-queries';
 import type {
   ClientType,
@@ -38,6 +39,7 @@ type PatchBody = {
   monthly_fee?: number | null | string;
   ai_rules?: string | null;
   image_orientation?: ImageOrientation;
+  physical_constraints?: string | null;
 };
 
 function clampIntTone(n: unknown): number | undefined {
@@ -189,6 +191,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       update.image_orientation = body.image_orientation;
     }
 
+    if (body.physical_constraints !== undefined) {
+      if (body.physical_constraints === null || body.physical_constraints === '') {
+        update.physical_constraints = null;
+        update.physical_constraints_at = null;
+      } else {
+        update.physical_constraints = String(body.physical_constraints).slice(0, 20000);
+        update.physical_constraints_at = new Date().toISOString();
+      }
+    }
+
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });
     }
@@ -230,6 +242,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       warnings.push('Las reglas IA no se guardaron (falta columna ai_rules — migración 010).');
       payload = rest;
       const retry = await supabase.from('projects').update(payload).eq('id', id).eq('user_id', user.id).select().single();
+      project = retry.data;
+      upErr = retry.error;
+    }
+
+    if (
+      upErr &&
+      ('physical_constraints' in payload || 'physical_constraints_at' in payload) &&
+      isPhysicalConstraintsColumnError(upErr)
+    ) {
+      const { physical_constraints: _drop1, physical_constraints_at: _drop2, ...rest } = payload;
+      if (Object.keys(rest).length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Falta la columna physical_constraints. Ejecuta supabase/migrations/025_projects_physical_constraints.sql.',
+          },
+          { status: 503 }
+        );
+      }
+      warnings.push(
+        'Las reglas físicas no se guardaron (falta columna physical_constraints — migración 025).'
+      );
+      payload = rest;
+      const retry = await supabase
+        .from('projects')
+        .update(payload)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
       project = retry.data;
       upErr = retry.error;
     }
