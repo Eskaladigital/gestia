@@ -136,15 +136,23 @@ Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el en
  * reglas, el modelo de imagen las recibe en el último kilómetro como verdad
  * ineludible y las prioriza sobre cualquier descripción genérica.
  */
-function applyPhysicalConstraintsToPrompt(prompt: string, physicalConstraints: string | null | undefined): string {
+/** Sufijo fijo de reglas físicas (no truncar a la hora de recortar el cuerpo del prompt). */
+function physicalConstraintsSuffix(physicalConstraints: string | null | undefined): string {
   const text = (physicalConstraints || '').trim();
-  if (!text) return prompt;
-  return `${prompt}
+  if (!text) return '';
+  return `
 
 REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO (prioridad máxima — si la imagen las contradice, se considerará fallida):
 ${text}
 
 PROHIBIDO contradecir lo anterior: la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos son fijos. Acabados, luz, hora, color y ángulo siguen siendo libres.`;
+}
+
+const MAX_PHYSICAL_IN_IMAGE_PROMPT = 1800;
+
+function shrinkPhysicalSuffixForApi(suffix: string): string {
+  if (suffix.length <= MAX_PHYSICAL_IN_IMAGE_PROMPT) return suffix;
+  return `${suffix.slice(0, MAX_PHYSICAL_IN_IMAGE_PROMPT - 40)}… [reglas recortadas; acorta el texto en Ajustes del proyecto]`;
 }
 
 async function buildFinalPrompt(
@@ -178,12 +186,21 @@ async function buildFinalPrompt(
 
   prompt = appendReferenceHandlingInstructions(prompt, referenceCount);
   prompt = applyUserFeedbackToPrompt(prompt, userFeedback);
-  prompt = applyPhysicalConstraintsToPrompt(prompt, physicalConstraints);
-  prompt = `${prompt}\n\n${IMAGE_REALISM_TAIL}`;
 
-  if (prompt.length > MAX_PROMPT_LENGTH) {
-    prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
+  let phys = shrinkPhysicalSuffixForApi(physicalConstraintsSuffix(physicalConstraints));
+  const tail = `\n\n${IMAGE_REALISM_TAIL}`;
+  let roomForCore = MAX_PROMPT_LENGTH - phys.length - tail.length;
+  if (roomForCore < MIN_PROMPT_LENGTH) {
+    const need = MIN_PROMPT_LENGTH - roomForCore + 80;
+    phys = phys.length > need ? `${phys.slice(0, phys.length - need)}…` : '';
+    roomForCore = MAX_PROMPT_LENGTH - phys.length - tail.length;
   }
+  if (prompt.length > roomForCore) {
+    prompt = prompt.slice(0, Math.max(MIN_PROMPT_LENGTH, roomForCore));
+  }
+
+  prompt = `${prompt}${phys}${tail}`;
+
   if (prompt.length < MIN_PROMPT_LENGTH) {
     throw new Error(`El prompt visual es demasiado corto (${prompt.length} chars)`);
   }

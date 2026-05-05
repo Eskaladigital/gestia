@@ -108,12 +108,14 @@ supabase/migrations/         # 001 … 023 (ejecutar en orden)
 2. **Scraping** → `RealScrapingProvider`: petición HTTP a la web del proyecto; si el texto es insuficiente o falla el fetch, se puede usar **Apify** (Website Content Crawler / búsqueda para competencia) según variables de entorno. Búsqueda orgánica opcional vía **SearchAPI.io** o **SerpAPI** (`SEARCHAPI_API_KEY`, `SERPAPI_KEY`).
 3. **Inteligencia** → Llamadas LLM con prompts alineados al onboarding; en **Config IA** se pueden ajustar agentes y claves de proveedor almacenadas de forma segura (ver migraciones `003`, `005`, `020`). El prompt de estrategia (`buildStrategyPrompt`) inyecta **ADN visual** de la marca (colores, keywords, identidad) y aplica una **jerarquía de prioridad**: reglas IA del proyecto → sliders de tono del usuario → ADN de marca → análisis del negocio → análisis competitivo. Cada pilar generado debe justificarse con fortalezas del negocio o debilidades de la competencia.
    - **Carruseles con variedad narrativa** (`buildCalendarPrompt` + `buildCarouselSystem`): para cada carrusel, el editor del calendario escribe una **ficha técnica por slide** (Plano / Sujeto / Acción / Hora-luz / Lugar) y aplica reglas duras de variedad (prohibido repetir el mismo plano dos veces, obligatorio mezclar interior/exterior, detalle, escena humana y entorno). El director de arte del slide recibe además el **mapa completo** del carrusel y las fichas de los slides anterior y siguiente, para que cada slide encaje en un arco narrativo y no acabe siendo seis fotos casi iguales.
-   - **Reglas IA por proyecto** (`ai_rules`, migración 010): campo libre de texto que se inyecta en cabeza de todos los prompts de la pipeline como **cinturón de seguridad** (p. ej. reglas de marca, modelos de producto permitidos, clichés prohibidos del sector).
+   - **Reglas IA por proyecto** (`ai_rules`, migración 010): campo libre de texto que se inyecta en cabeza de todos los prompts de la pipeline como **cinturón de seguridad** BLANDO (p. ej. reglas de marca, tono, clichés de copy prohibidos, hashtags vetados).
+   - **Reglas físicas e identitarias inviolables** (`physical_constraints`, migración 025): campo de texto libre por proyecto con la verdad **DURA** sobre el producto: planta y adyacencias (camper, restaurante, gym), identidad gráfica fija (logo, colores corporativos, packaging) o sujetos/objetos prohibidos (jaulas, collares de pinchos, uniformes ajenos). Se redacta a mano o se sugiere automáticamente con `POST /api/projects/[id]/suggest-physical-constraints`, que combina el dossier del proyecto y las imágenes de referencia (con visión gpt-4o) para proponer un texto editable. Se inyecta como bloque de **prioridad máxima** en `buildCalendarPrompt`, `buildSingleVisualPrompt` y `/api/generate-image` y el modelo de imagen lo recibe blindado al final del prompt: si la "ficha del slide" del calendario contradice estas reglas, se reescribe la escena en el brief visual antes de pintarla.
+   - **Captions automáticos por imagen de referencia** (migración 024): al subir referencias en `POST /api/projects/[id]/reference-images` la API llama a `gpt-4o-mini` con visión y guarda una descripción libre (1-2 frases) por imagen. En `/api/generate-image`, si todas las refs tienen caption listo, un selector LLM elige las relevantes para el slide concreto (interior solo con interiores, exterior solo con exteriores, logo solo con logos…) y descarta el resto; si ninguna encaja, genera sin referencias. Las descripciones se editan y regeneran desde el card de referencias del proyecto.
 4. **Aplicación** → Next.js App Router (Server Components + Client Components).
 
 ## Base de datos (migraciones)
 
-En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001` → `023`):
+En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001` → `025`):
 
 | Archivo | Contenido (resumen) |
 |--------|----------------------|
@@ -140,6 +142,8 @@ En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001`
 | `021_project_reference_images.sql` | Tabla `project_reference_images` (hasta N imágenes reales del producto por proyecto, bucket `product-references`) |
 | `022_project_image_orientation.sql` | Campo `projects.image_orientation` (`vertical` / `cuadrado` / `horizontal`) para la salida de `generate-image` |
 | `023_content_item_visuals_user_feedback.sql` | Campos `user_feedback` y `user_feedback_at` para reportar errores de imagen y corregirlos al regenerar |
+| `024_project_reference_images_caption.sql` | Captions automáticos por imagen de referencia (`caption`, `caption_status`, `caption_at`, `caption_is_manual`). Se generan con visión al subir y permiten que la IA elija refs relevantes por slide |
+| `025_projects_physical_constraints.sql` | Reglas físicas e identitarias inviolables del producto por proyecto (`physical_constraints`, `physical_constraints_at`). Se inyectan como verdad ineludible en calendario, brief visual y generación de imagen |
 
 **Storage:** crea en Supabase un bucket público llamado **`screenshots`** (o déjalo que la primera captura lo intente crear vía service role). Las miniaturas del análisis web se suben ahí.
 
@@ -156,7 +160,7 @@ npm install
 ### 2. Configurar Supabase
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ejecuta las migraciones del directorio `supabase/migrations/` **en orden** (`001` → `023`).
+2. Ejecuta las migraciones del directorio `supabase/migrations/` **en orden** (`001` → `025`).
 3. En **Authentication → Providers**, habilita Email y, si quieres, Google (OAuth).
 4. En **Authentication → URL configuration**, añade la URL de tu app (local y producción) y rutas de callback (p. ej. `/callback`).
 
@@ -228,9 +232,11 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 | `POST /api/generate-image` | Genera imagen IA para un visual del calendario (guarda URL en `content_item_visuals`). Si hay `user_feedback`, lo inyecta en el prompt como corrección obligatoria y lo limpia al terminar con éxito. |
 | `POST /api/report-image-error` | Guarda en `content_item_visuals.user_feedback` un texto libre del usuario describiendo un error de la imagen; se usa al regenerar. |
 | `GET/POST/PATCH /api/projects` | Listar activos, crear; `PATCH` también sirve para onboarding y **papelera** (`deleted_at`: ISO string o `null` para restaurar) |
-| `PATCH /api/projects/[id]` | Ajustes del proyecto (tono, distribución semanal, cuota, etc.) |
+| `PATCH /api/projects/[id]` | Ajustes del proyecto (tono, distribución semanal, cuota, `physical_constraints`, etc.) |
 | `DELETE /api/projects/[id]` | Borrado definitivo (si hay `deleted_at`, solo tras archivar en papelera) |
 | `PATCH /api/projects/[id]/strategy` | Editar campos de la estrategia vinculada al proyecto |
+| `POST /api/projects/[id]/suggest-physical-constraints` | Sugiere automáticamente las "Reglas físicas e identitarias inviolables" del proyecto a partir del dossier y las imágenes de referencia (gpt-4o + visión); el usuario revisa y guarda con el PATCH normal. |
+| `POST/PATCH/DELETE /api/projects/[id]/reference-images` | Subir referencias del producto, marcar primarias, editar caption manual, regenerar caption con IA o regenerar todas las pendientes (`regenerateAllPending`). |
 | `GET/PATCH /api/settings/ai` | Configuración IA |
 | `GET/PATCH /api/administrator/users` | Gestión de usuarios (admin) |
 | `POST /api/scrape` | Scrape puntual de una URL |

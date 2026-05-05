@@ -678,7 +678,7 @@ FORMATO DE RESPUESTA JSON:
 
 ${buildProjectContext(project, { includeAiRules: true })}${(() => {
   const block = buildPhysicalConstraintsBlock(project);
-  return block ? `\n\n${block}\n\nIMPORTANTE: al planificar el "scene_summary" de cada post (especialmente las fichas técnicas de carruseles y reels) NO propongas escenas que contradigan estas reglas. Si el producto es un espacio con una planta concreta, las acciones/lugares deben ser físicamente posibles en esa planta. Si la marca tiene una identidad gráfica fija, no inventes logos ni colores nuevos. Si hay sujetos prohibidos (jaulas, collares de pinchos, uniformes), no los menciones en ningún slide.` : '';
+  return block ? `\n\n${block}\n\nIMPORTANTE: al planificar el "scene_summary" de cada post (especialmente las fichas técnicas de carruseles y reels) NO propongas escenas que contradigan estas reglas. Si el producto es un espacio con una planta concreta, las acciones/lugares deben ser físicamente posibles en esa planta. Si la marca tiene una identidad gráfica fija, no inventes logos ni colores nuevos. Si hay sujetos prohibidos (jaulas, collares de pinchos, uniformes), no los menciones en ningún slide. Si al redactar una ficha te das cuenta de que contradice estas reglas, reformúlala entera: misma intención editorial y momento narrativo, pero geometría y adyacencias corregidas para que sean posibles.` : '';
 })()}
 
 ## ESTRATEGIA APROBADA
@@ -1257,6 +1257,12 @@ export function buildSingleVisualPrompt(
   const brandBlock = `## IDENTIDAD DE MARCA\n${buildBrandContext(project)}`;
   const contextBlock = `## CONTEXTO DEL NEGOCIO\n${buildProjectContext(project, { includeAiRules: true })}`;
   const physicalConstraintsBlock = buildPhysicalConstraintsBlock(project);
+  const physicalPriorityInstruction = physicalConstraintsBlock
+    ? `\n- Las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES del inicio de este mensaje tienen PRIORIDAD ABSOLUTA sobre cualquier otra instrucción si entran en conflicto: no inventes geometría, adyacencias, logos ni sujetos prohibidos. Reformula la escena para cumplirlas sin perder el objetivo del slide.`
+    : '';
+  const carouselShotCardLine = physicalConstraintsBlock
+    ? `- La "Ficha de ESTE slide" (Plano / Sujeto / Acción / Hora / Lugar) define la intención narrativa; si entrara en conflicto con las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES de arriba, PRIORIZA esas reglas: mantén el papel del slide en el arco (gancho, desarrollo, CTA…) pero corrige geometría y adyacencias para que sean físicamente posibles en el producto real.`
+    : '- Respeta al pie de la letra la "Ficha de ESTE slide" cuando exista (Plano / Sujeto / Acción / Hora / Lugar): es el contrato del calendario.';
 
   const postBlock = `## PUBLICACIÓN${isVideo ? ' (VÍDEO)' : ''}
 - Formato: ${post.format || 'No especificado'}
@@ -1276,7 +1282,7 @@ export function buildSingleVisualPrompt(
 - Este fotograma representa UN MOMENTO CONCRETO de esta escena del vídeo`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en este fotograma/escena. No pienses en los demás.
+- Concéntrate EXCLUSIVAMENTE en este fotograma/escena. No pienses en los demás.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 300 palabras, con las 7 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo, Movimiento).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y cinematográficos.
@@ -1307,14 +1313,14 @@ export function buildSingleVisualPrompt(
 - Este slide forma parte de una secuencia narrativa de ${totalVisuals} slides — NO es una foto suelta.${prevBlock}${nextBlock}${arcBlock}${siblingsBlock}`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Lee con atención el ARCO NARRATIVO y el MAPA COMPLETO DEL CARRUSEL antes de redactar. Tu slide debe encajar en ese arco y ser CLARAMENTE DISTINTO al resto.
+- Lee con atención el ARCO NARRATIVO y el MAPA COMPLETO DEL CARRUSEL antes de redactar. Tu slide debe encajar en ese arco y ser CLARAMENTE DISTINTO al resto.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas.
 - COHERENCIA OBLIGATORIA con el resto del carrusel SOLO en: paleta, tratamiento de color, "look" fotográfico, sensación general.
 - VARIEDAD OBLIGATORIA respecto al resto del carrusel en: encuadre, escala de plano, sujeto principal, acción y/o momento del día. PROHIBIDO repetir un plano (combinación plano+sujeto+acción) que ya esté usado en cualquier otro slide del MAPA COMPLETO. Si la ficha de este slide se parece demasiado a la del slide anterior o siguiente, escoge un ángulo, escala o detalle distinto para diferenciarlo.
 - Si en el MAPA COMPLETO ya hay un slide con un plano de tres cuartos del producto/sujeto principal en entorno abierto (carretera, calle, paisaje), está PROHIBIDO que este slide sea otro plano del mismo tipo. Busca un detalle, un interior, una escena humana, un cenital, un POV o un entorno sin el sujeto principal.
-- Respeta al pie de la letra la "Ficha de ESTE slide" cuando exista (Plano / Sujeto / Acción / Hora / Lugar): es el contrato del calendario.
+- ${carouselShotCardLine}
 - Deja ZONAS LIMPIAS para texto overlay en postproducción.${visualIndex === 0 ? '\n- Este es el slide de GANCHO: máximo impacto visual e intriga, pero EVITA el plano de catálogo más obvio del sector.' : ''}${visualIndex === totalVisuals - 1 ? '\n- Este es el slide FINAL (CTA): composición limpia y directa, espacio para texto de llamada a la acción.' : ''}
 - Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
 - El resultado debe ser tan detallado que al copiarlo en el modelo de imagen, la imagen generada sea EXACTAMENTE lo que describes.`;
@@ -1324,7 +1330,7 @@ export function buildSingleVisualPrompt(
 - ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta Story según el calendario: ${slideContext}` : ''}`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en esta Story. No pienses en las demás.
+- Concéntrate EXCLUSIVAMENTE en esta Story. No pienses en las demás.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas.
@@ -1339,7 +1345,7 @@ export function buildSingleVisualPrompt(
 - ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta imagen según el calendario: ${slideContext}` : ''}`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en esta imagen. No pienses en las demás.
+- Concéntrate EXCLUSIVAMENTE en esta imagen. No pienses en las demás.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y táctiles.
