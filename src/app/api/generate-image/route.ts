@@ -14,7 +14,9 @@ import {
   downloadReferenceImagesAsFiles,
   isOpenAIReferenceImageRejection,
   listProjectReferenceImages,
+  selectRelevantReferenceImages,
 } from '@/lib/projects/reference-images';
+import type { ProjectReferenceImage } from '@/types';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
 // enviarlas a OpenAI y tarda ~2-3 min con gpt-image-2 + referencias.
@@ -90,6 +92,32 @@ Si hay imágenes de referencia del producto, úsalas para respetar forma, propor
  * diluido, y antes de la cola de realismo para que todas las instrucciones
  * fotográficas finales sigan aplicando.
  */
+/**
+ * Añade al prompt una explicación de qué muestra CADA referencia que se le va
+ * a pasar a OpenAI, en el mismo orden en que se mandan. Sirve para que la IA
+ * no se confunda y para que respete la distribución (interior) o la silueta
+ * (exterior) según la pieza.
+ */
+function applyReferenceCaptionsToPrompt(
+  prompt: string,
+  selected: ProjectReferenceImage[],
+  selectorReasoning?: string,
+): string {
+  if (selected.length === 0) return prompt;
+  const lines: string[] = [];
+  lines.push('REFERENCIAS VISUALES PARA ESTE SLIDE EN CONCRETO (las imágenes adjuntas, EN ESTE ORDEN):');
+  selected.forEach((image, idx) => {
+    const cap = (image.caption || '').trim() || 'imagen sin descripción';
+    lines.push(`${idx + 1}. ${cap}`);
+  });
+  lines.push('');
+  lines.push('Estas referencias son la VERDAD del proyecto: respeta forma, proporciones, materiales, colores y, cuando proceda, la DISTRIBUCIÓN ESPACIAL exacta que se ve en ellas (posición de muebles, ventanas, puertas, ángulos del techo, planta interior). NO mezcles partes de unas referencias con otras si no encajan en una misma escena. NO inventes elementos que contradigan lo que se ve en las referencias.');
+  if (selectorReasoning) {
+    lines.push(`(Selector: ${selectorReasoning})`);
+  }
+  return `${prompt}\n\n${lines.join('\n')}`;
+}
+
 function applyUserFeedbackToPrompt(prompt: string, userFeedback: string | null | undefined): string {
   const feedback = (userFeedback || '').trim();
   if (!feedback) return prompt;
@@ -262,7 +290,7 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey });
-    const referenceImages = await listProjectReferenceImages(
+    const allPrimaryReferenceImages = await listProjectReferenceImages(
       service,
       project.id,
       DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
@@ -272,11 +300,62 @@ export async function POST(request: NextRequest) {
         ? (visual as any).user_feedback.trim()
         : null;
 
-    const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length, userFeedback);
+    // === Selector de referencias por slide ===
+    // Si TODAS las referencias del proyecto tienen caption listo, usamos un
+    // mini-LLM que decide qué refs son verdaderamente útiles para este slide
+    // concreto (intenta no mezclar interior/exterior, descarta fotos cuando
+    // el slide es un logo, etc.). Si alguna no tiene caption todavía, caemos
+    // al comportamiento legacy y mandamos todas.
+    const refsWithCaption = allPrimaryReferenceImages.filter(
+      image => image.caption && image.caption_status === 'ready'
+    );
+    let selectedReferenceImages = allPrimaryReferenceImages;
+    let selectorReasoning = '';
+    if (
+      allPrimaryReferenceImages.length > 0 &&
+      refsWithCaption.length === allPrimaryReferenceImages.length
+    ) {
+      const selection = await selectRelevantReferenceImages({
+        apiKey,
+        visualPrompt: visual.visual_prompt,
+        catalog: refsWithCaption.map(image => ({
+          id: image.id,
+          caption: image.caption || '',
+        })),
+        maxResults: DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
+      });
+      if (selection) {
+        selectorReasoning = selection.reasoning;
+        if (selection.selectedIds.length > 0) {
+          const order = new Map(selection.selectedIds.map((id, idx) => [id, idx]));
+          selectedReferenceImages = allPrimaryReferenceImages
+            .filter(image => order.has(image.id))
+            .sort(
+              (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)
+            );
+        } else {
+          // El selector ha decidido que NINGUNA referencia ayuda en este slide
+          // (típico: logo / paisaje sin producto). Generamos sin referencias.
+          selectedReferenceImages = [];
+        }
+      }
+    }
+
+    let prompt = await buildFinalPrompt(
+      openai,
+      visual.visual_prompt,
+      selectedReferenceImages.length,
+      userFeedback
+    );
+    if (selectedReferenceImages.length > 0) {
+      prompt = applyReferenceCaptionsToPrompt(prompt, selectedReferenceImages, selectorReasoning);
+    }
 
     console.log(
-      `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs: ${referenceImages.length}, ` +
+      `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs ` +
+      `seleccionadas/totales: ${selectedReferenceImages.length}/${allPrimaryReferenceImages.length}, ` +
       `orientation: ${projectOrientation} (${imageSize})` +
+      (selectorReasoning ? `, selector: "${selectorReasoning}"` : '') +
       (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '')
     );
 
@@ -291,9 +370,9 @@ export async function POST(request: NextRequest) {
     }
 
     let response: Awaited<ReturnType<typeof openai.images.generate>>;
-    if (referenceImages.length > 0) {
+    if (selectedReferenceImages.length > 0) {
       try {
-        const referenceFiles = await downloadReferenceImagesAsFiles(referenceImages);
+        const referenceFiles = await downloadReferenceImagesAsFiles(selectedReferenceImages);
         response = await openai.images.edit({
           model: IMAGE_GENERATION_MODEL,
           image: referenceFiles,

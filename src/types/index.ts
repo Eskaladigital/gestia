@@ -195,6 +195,8 @@ export interface Project {
   deleted_at?: string | null;
 }
 
+export type ProjectReferenceCaptionStatus = 'pending' | 'generating' | 'ready' | 'error';
+
 export interface ProjectReferenceImage {
   id: string;
   project_id: string;
@@ -205,6 +207,16 @@ export interface ProjectReferenceImage {
   file_size_bytes?: number | null;
   is_primary: boolean;
   sort_order: number;
+  /**
+   * Descripción corta de qué se ve en la imagen (1-2 frases).
+   * Generada por IA con visión al subir. Editable por el usuario.
+   * Se usa para que `/api/generate-image` decida qué referencias enviar
+   * al modelo de imagen según el slide concreto.
+   */
+  caption?: string | null;
+  caption_status?: ProjectReferenceCaptionStatus;
+  caption_at?: string | null;
+  caption_is_manual?: boolean;
   created_at: string;
   updated_at: string;
 }

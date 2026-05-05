@@ -5,15 +5,67 @@ import {
   buildProjectReferenceImageStoragePath,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   ensureProjectReferenceImagesBucket,
+  generateReferenceImageCaption,
   isProjectReferenceImagesTableError,
   listProjectReferenceImages,
   MAX_PROJECT_REFERENCE_IMAGES,
   NORMALIZED_REFERENCE_EXTENSION,
   NORMALIZED_REFERENCE_MIME,
   normalizeReferenceImageBuffer,
+  resolveOpenAIKeyForUser,
 } from '@/lib/projects/reference-images';
 
+// El captioning con visión puede tardar 1-3 s por imagen; con varias subidas
+// a la vez nos podemos pasar de los 60 s por defecto de Vercel.
 export const runtime = 'nodejs';
+export const maxDuration = 120;
+
+/**
+ * Genera y persiste el caption de una referencia.
+ * No lanza: si falla, marca caption_status = 'error' y lo registra.
+ */
+async function captionReferenceImage(
+  service: ReturnType<typeof createServiceSupabase>,
+  apiKey: string,
+  imageId: string,
+  imageUrl: string
+): Promise<void> {
+  try {
+    await service
+      .from('project_reference_images')
+      .update({ caption_status: 'generating' })
+      .eq('id', imageId);
+
+    const caption = await generateReferenceImageCaption({ apiKey, imageUrl });
+    if (!caption) {
+      await service
+        .from('project_reference_images')
+        .update({ caption_status: 'error', caption_at: new Date().toISOString() })
+        .eq('id', imageId);
+      return;
+    }
+
+    await service
+      .from('project_reference_images')
+      .update({
+        caption,
+        caption_status: 'ready',
+        caption_at: new Date().toISOString(),
+        caption_is_manual: false,
+      })
+      .eq('id', imageId);
+  } catch (err) {
+    console.warn('[reference-images] caption failed:', (err as Error)?.message);
+    try {
+      await service
+        .from('project_reference_images')
+        .update({ caption_status: 'error', caption_at: new Date().toISOString() })
+        .eq('id', imageId);
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 async function getOwnedProject(projectId: string, userId: string) {
   const supabase = await createServerSupabase();
@@ -143,8 +195,33 @@ export async function POST(
       throw new Error(upsertErr.message);
     }
 
-    const images = await listProjectReferenceImages(service, id);
-    return NextResponse.json({ success: true, images });
+    let imagesAfterUpsert = await listProjectReferenceImages(service, id);
+
+    // Captioning automático: para las referencias que no tengan caption listo y
+    // que NO sean ediciones manuales, le pedimos a la IA que las describa. Es
+    // síncrono pero limitado a las que se acaban de subir (en la práctica 1-4
+    // imágenes a la vez).
+    const incomingPathSet = new Set(rows.map(row => row.storage_path));
+    const needsCaption = imagesAfterUpsert.filter(
+      image =>
+        incomingPathSet.has(image.storage_path) &&
+        image.caption_is_manual !== true &&
+        (!image.caption || image.caption_status !== 'ready')
+    );
+
+    if (needsCaption.length > 0) {
+      const apiKey = await resolveOpenAIKeyForUser(service, user.id);
+      if (apiKey) {
+        await Promise.all(
+          needsCaption.map(image => captionReferenceImage(service, apiKey, image.id, image.image_url))
+        );
+        imagesAfterUpsert = await listProjectReferenceImages(service, id);
+      } else {
+        console.warn('[reference-images] sin API key OpenAI: se sube sin caption automático');
+      }
+    }
+
+    return NextResponse.json({ success: true, images: imagesAfterUpsert });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error subiendo imágenes de referencia';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -172,44 +249,124 @@ export async function PATCH(
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json() as {
+      imageId?: string;
+      isPrimary?: boolean;
+      caption?: string;
+      regenerateCaption?: boolean;
+      regenerateAllPending?: boolean;
+    };
+
+    // Acción especial: regenerar TODAS las descripciones pendientes/erróneas/sin
+    // caption del proyecto. No requiere imageId. Útil para retro-poblar las
+    // referencias antiguas que se subieron antes de existir el campo caption.
+    if (body.regenerateAllPending === true) {
+      const service = createServiceSupabase();
+      const all = await listProjectReferenceImages(service, id);
+      const targets = all.filter(image => {
+        if (image.caption_is_manual) return false;
+        const status = image.caption_status ?? 'pending';
+        return status !== 'ready' || !image.caption;
+      });
+      if (targets.length === 0) {
+        return NextResponse.json({ success: true, images: all, processed: 0 });
+      }
+      const apiKey = await resolveOpenAIKeyForUser(service, user.id);
+      if (!apiKey) {
+        return NextResponse.json(
+          { error: 'No hay API key de OpenAI configurada para generar descripciones.' },
+          { status: 422 }
+        );
+      }
+      // Captionar en paralelo. captionReferenceImage no lanza, así que un fallo
+      // suelto no aborta el lote: queda como caption_status='error' en su fila.
+      await Promise.all(
+        targets.map(image => captionReferenceImage(service, apiKey, image.id, image.image_url))
+      );
+      const refreshed = await listProjectReferenceImages(service, id);
+      return NextResponse.json({ success: true, images: refreshed, processed: targets.length });
+    }
+
     const imageId = typeof body.imageId === 'string' ? body.imageId : '';
-    const isPrimary = body.isPrimary;
-    if (!imageId || typeof isPrimary !== 'boolean') {
-      return NextResponse.json({ error: 'imageId e isPrimary son obligatorios' }, { status: 400 });
+    if (!imageId) {
+      return NextResponse.json({ error: 'imageId es obligatorio' }, { status: 400 });
+    }
+
+    const isPrimaryProvided = typeof body.isPrimary === 'boolean';
+    const captionProvided = typeof body.caption === 'string';
+    const regenerateCaption = body.regenerateCaption === true;
+
+    if (!isPrimaryProvided && !captionProvided && !regenerateCaption) {
+      return NextResponse.json(
+        { error: 'Indica al menos isPrimary, caption o regenerateCaption' },
+        { status: 400 }
+      );
     }
 
     const service = createServiceSupabase();
     const existing = await listProjectReferenceImages(service, id);
-    if (!existing.find(image => image.id === imageId)) {
+    const target = existing.find(image => image.id === imageId);
+    if (!target) {
       return NextResponse.json({ error: 'Imagen de referencia no encontrada' }, { status: 404 });
     }
 
-    if (isPrimary) {
-      const currentPrimaryCount = existing.filter(image => image.is_primary).length;
-      const alreadyPrimary = existing.some(image => image.id === imageId && image.is_primary);
-      if (!alreadyPrimary && currentPrimaryCount >= DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI) {
-        return NextResponse.json(
-          { error: `Máximo ${DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI} imágenes principales.` },
-          { status: 400 }
-        );
+    const update: Record<string, unknown> = {};
+
+    if (isPrimaryProvided) {
+      const isPrimary = body.isPrimary as boolean;
+      if (isPrimary) {
+        const currentPrimaryCount = existing.filter(image => image.is_primary).length;
+        if (!target.is_primary && currentPrimaryCount >= DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI) {
+          return NextResponse.json(
+            { error: `Máximo ${DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI} imágenes principales.` },
+            { status: 400 }
+          );
+        }
+      }
+      update.is_primary = isPrimary;
+    }
+
+    if (captionProvided) {
+      const trimmed = (body.caption as string).trim();
+      if (trimmed.length === 0) {
+        update.caption = null;
+        update.caption_status = 'pending';
+        update.caption_is_manual = false;
+        update.caption_at = null;
+      } else {
+        update.caption = trimmed.slice(0, 2000);
+        update.caption_status = 'ready';
+        update.caption_is_manual = true;
+        update.caption_at = new Date().toISOString();
       }
     }
 
-    const { error } = await service
-      .from('project_reference_images')
-      .update({ is_primary: isPrimary })
-      .eq('id', imageId)
-      .eq('project_id', id);
+    if (Object.keys(update).length > 0) {
+      const { error } = await service
+        .from('project_reference_images')
+        .update(update)
+        .eq('id', imageId)
+        .eq('project_id', id);
+      if (error) {
+        if (isProjectReferenceImagesTableError(error)) {
+          return NextResponse.json(
+            { error: 'Falta la tabla project_reference_images. Ejecuta la migración 021.' },
+            { status: 503 }
+          );
+        }
+        throw new Error(error.message);
+      }
+    }
 
-    if (error) {
-      if (isProjectReferenceImagesTableError(error)) {
+    if (regenerateCaption) {
+      const apiKey = await resolveOpenAIKeyForUser(service, user.id);
+      if (!apiKey) {
         return NextResponse.json(
-          { error: 'Falta la tabla project_reference_images. Ejecuta la migración 021.' },
-          { status: 503 }
+          { error: 'No hay API key de OpenAI configurada para regenerar el caption.' },
+          { status: 422 }
         );
       }
-      throw new Error(error.message);
+      await captionReferenceImage(service, apiKey, target.id, target.image_url);
     }
 
     const images = await listProjectReferenceImages(service, id);
