@@ -12,6 +12,8 @@ import {
 interface ProjectReferenceImagesCardProps {
   projectId: string;
   initialImages: ProjectReferenceImage[];
+  /** Si el proyecto ya tiene reglas físicas guardadas, para avisar antes de reemplazarlas. */
+  hasPhysicalConstraints?: boolean;
 }
 
 async function readApiError(res: Response): Promise<string> {
@@ -28,6 +30,7 @@ async function readApiError(res: Response): Promise<string> {
 export function ProjectReferenceImagesCard({
   projectId,
   initialImages,
+  hasPhysicalConstraints = false,
 }: ProjectReferenceImagesCardProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -38,6 +41,7 @@ export function ProjectReferenceImagesCard({
   const [editingCaptionId, setEditingCaptionId] = useState<string | null>(null);
   const [captionBusyId, setCaptionBusyId] = useState<string | null>(null);
   const [bulkCaptioning, setBulkCaptioning] = useState(false);
+  const [generatingRules, setGeneratingRules] = useState(false);
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -131,6 +135,80 @@ export function ProjectReferenceImagesCard({
     }
   }
 
+  // Herramienta de un clic: mira las fotos de referencia y redacta + guarda las
+  // "Reglas físicas e identitarias inviolables" del proyecto. Encadena tres pasos
+  // que antes eran manuales: (1) generar las descripciones IA pendientes de las
+  // fotos, (2) pedir al modelo que redacte las reglas mirando esas fotos, (3)
+  // guardarlas en el proyecto. El usuario las verá y podrá editarlas en Ajustes.
+  async function generatePhysicalConstraints() {
+    if (initialImages.length === 0) return;
+    const overwriteNote = hasPhysicalConstraints
+      ? 'El proyecto YA tiene reglas físicas guardadas y se REEMPLAZARÁN por unas nuevas. '
+      : '';
+    const ok = window.confirm(
+      `${overwriteNote}La IA mirará las fotos de referencia, redactará las "Reglas físicas e identitarias inviolables del producto" y las guardará en los Ajustes del proyecto. ¿Continuar?`
+    );
+    if (!ok) return;
+
+    setGeneratingRules(true);
+    setMessage(null);
+    try {
+      // 1) Asegurar que todas las fotos tienen descripción IA (alimenta la redacción).
+      if (pendingCaptionCount > 0) {
+        const capRes = await fetch(`/api/projects/${projectId}/reference-images`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ regenerateAllPending: true }),
+        });
+        if (!capRes.ok) throw new Error(await readApiError(capRes));
+      }
+
+      // 2) Redactar las reglas mirando el dossier + las fotos.
+      const sugRes = await fetch(`/api/projects/${projectId}/suggest-physical-constraints`, {
+        method: 'POST',
+      });
+      const sugData = (await sugRes.json().catch(() => ({}))) as {
+        error?: string;
+        suggestion?: string;
+        insufficient?: boolean;
+        message?: string;
+      };
+      if (!sugRes.ok) throw new Error(sugData.error || 'Error generando las reglas físicas');
+      if (sugData.insufficient) {
+        throw new Error(
+          sugData.message ||
+            'No hay suficiente información en las fotos para escribir reglas. Sube más imágenes reales del producto (interior, exterior, detalle) y vuelve a intentarlo.'
+        );
+      }
+      const suggestion = (sugData.suggestion || '').trim();
+      if (!suggestion) throw new Error('La IA no devolvió ninguna regla.');
+
+      // 3) Guardar las reglas en el proyecto (guardado parcial: solo este campo).
+      const saveRes = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ physical_constraints: suggestion }),
+      });
+      const saveData = (await saveRes.json().catch(() => ({}))) as { error?: string; warning?: string };
+      if (!saveRes.ok) throw new Error(saveData.error || 'Error guardando las reglas');
+
+      setMessage({
+        type: 'ok',
+        text: saveData.warning
+          ? `Reglas generadas, pero: ${saveData.warning}`
+          : 'Reglas físicas generadas desde las fotos y guardadas. Revísalas y ajústalas en "Ajustes del proyecto".',
+      });
+      router.refresh();
+    } catch (error: unknown) {
+      setMessage({
+        type: 'err',
+        text: error instanceof Error ? error.message : 'Error generando las reglas físicas',
+      });
+    } finally {
+      setGeneratingRules(false);
+    }
+  }
+
   async function regenerateCaption(imageId: string) {
     setCaptionBusyId(imageId);
     setMessage(null);
@@ -217,6 +295,17 @@ export function ProjectReferenceImagesCard({
               Generar {pendingCaptionCount} descripcion{pendingCaptionCount === 1 ? '' : 'es'} IA
             </Button>
           )}
+          {initialImages.length > 0 && (
+            <Button
+              variant="success"
+              size="md"
+              onClick={() => void generatePhysicalConstraints()}
+              loading={generatingRules}
+              disabled={uploading || bulkCaptioning}
+            >
+              ✨ Generar reglas físicas con IA
+            </Button>
+          )}
           <Button
             onClick={() => inputRef.current?.click()}
             loading={uploading}
@@ -238,6 +327,12 @@ export function ProjectReferenceImagesCard({
             Las referencias fijan el producto real, no el encuadre: la IA debe respetar forma, proporciones,
             acabados y detalles, pero seguirá decidiendo si conviene usar plano aéreo, plano abierto, primer plano,
             segundo plano o detalle según la pieza.
+          </p>
+          <p className="text-xs text-surface-600 mt-2 font-medium leading-relaxed">
+            Cuando tengas las fotos subidas, pulsa <strong>«✨ Generar reglas físicas con IA»</strong>: la IA mirará
+            estas imágenes y escribirá las <strong>reglas físicas e identitarias inviolables</strong> del producto
+            (geometría, materiales, identidad, prohibiciones) y las guardará en Ajustes. Es lo que hace que las
+            imágenes generadas se parezcan de verdad al producto real.
           </p>
           <div className="flex flex-wrap gap-2 mt-3 text-[10px] font-bold uppercase tracking-wider">
             <span className="border-2 border-surface-900 px-2 py-1 bg-white">

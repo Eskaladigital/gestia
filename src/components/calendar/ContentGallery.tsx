@@ -43,6 +43,11 @@ const WEEK_COLORS = [
   { bg: 'bg-rose-50/60', header: 'bg-rose-100 text-rose-900', accent: 'border-rose-500' },
 ];
 
+const MONTH_NAMES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
 function getMondayOfWeek(d: Date): Date {
   const date = new Date(d);
   const day = date.getDay();
@@ -122,6 +127,36 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
 
   const itemsWithBriefs = useMemo(() => items.filter(i => i.visual_prompt?.trim()), [items]);
 
+  // Navegación por mes (igual que en la vista Calendario)
+  const initialDate = useMemo(() => {
+    const times = itemsWithBriefs.map(i => new Date(i.scheduled_date).getTime());
+    return times.length ? new Date(Math.min(...times)) : new Date();
+  }, [itemsWithBriefs]);
+  const [currentMonth, setCurrentMonth] = useState(() => initialDate.getMonth());
+  const [currentYear, setCurrentYear] = useState(() => initialDate.getFullYear());
+
+  const monthsWithContent = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of itemsWithBriefs) {
+      const d = new Date(item.scheduled_date);
+      set.add(`${d.getFullYear()}-${d.getMonth()}`);
+    }
+    return Array.from(set).sort((a, b) => {
+      const [ay, am] = a.split('-').map(Number);
+      const [by, bm] = b.split('-').map(Number);
+      return ay - by || am - bm;
+    });
+  }, [itemsWithBriefs]);
+
+  function prevMonth() {
+    if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(y => y - 1); }
+    else setCurrentMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
+    else setCurrentMonth(m => m + 1);
+  }
+
   useEffect(() => {
     if (itemsWithBriefs.length === 0) {
       setLoading(false);
@@ -156,6 +191,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
       const visuals = visualsMap[item.id];
       if (!visuals || visuals.length === 0) continue;
       const d = new Date(item.scheduled_date);
+      if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) continue;
       const monday = getMondayOfWeek(d);
       const key = monday.toISOString().slice(0, 10);
       if (!groups[key]) groups[key] = { posts: [], monday };
@@ -174,7 +210,13 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
         posts: g.posts.sort((a, b) => a.item.scheduled_date.localeCompare(b.item.scheduled_date)),
       };
     });
-  }, [itemsWithBriefs, visualsMap]);
+  }, [itemsWithBriefs, visualsMap, currentMonth, currentYear]);
+
+  // Visuals del mes actualmente mostrado (para que los stats y acciones masivas coincidan con lo visible)
+  const monthVisuals = useMemo(
+    () => weekGroups.flatMap(g => g.posts).flatMap(p => p.visuals),
+    [weekGroups],
+  );
 
   const handleCopy = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -395,13 +437,17 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     }
   }, [reportModal, reportText, closeReportModal]);
 
-  const totalVisuals = useMemo(() =>
-    Object.values(visualsMap).reduce((sum, list) => sum + list.length, 0),
-  [visualsMap]);
+  const totalVisuals = useMemo(() => monthVisuals.length, [monthVisuals]);
 
   const readyCount = useMemo(() =>
-    Object.values(visualsMap).flat().filter(v => v.image_status === 'ready' && v.image_url).length,
-  [visualsMap]);
+    monthVisuals.filter(v => v.image_status === 'ready' && v.image_url).length,
+  [monthVisuals]);
+
+  // Total de visuals en todo el proyecto (para distinguir "sin visuals" de "mes vacío")
+  const hasAnyVisuals = useMemo(
+    () => Object.values(visualsMap).some(list => list.length > 0),
+    [visualsMap],
+  );
 
   const itemsById = useMemo(() => {
     const map: Record<string, ContentItem> = {};
@@ -410,9 +456,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
   }, [items]);
 
   const handleDownloadAllZip = useCallback(async () => {
-    const allReady = Object.values(visualsMap)
-      .flat()
-      .filter(v => v.image_status === 'ready' && v.image_url);
+    const allReady = monthVisuals.filter(v => v.image_status === 'ready' && v.image_url);
     if (allReady.length === 0) return;
 
     setDownloadingZip(true);
@@ -458,7 +502,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     } finally {
       setDownloadingZip(false);
     }
-  }, [visualsMap, itemsById, projectId]);
+  }, [monthVisuals, itemsById, projectId]);
 
   const lightboxVisual = useMemo(() => {
     if (!lightbox) return null;
@@ -486,7 +530,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     );
   }
 
-  if (weekGroups.length === 0 && !loading) {
+  if (!hasAnyVisuals && !loading) {
     return (
       <div className="border-2 border-surface-900 bg-surface-50 p-10 text-center">
         <p className="text-surface-500 font-bold uppercase tracking-wider text-sm mb-2">Briefs generados, sin visuals</p>
@@ -497,9 +541,46 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
 
   return (
     <div className="space-y-4">
+      {/* Navegación por mes (flechas + nombre + atajos), igual que en la vista Calendario */}
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <button onClick={prevMonth} className="p-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-surface-900">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <h2 className="font-display text-lg sm:text-xl font-black text-surface-900 uppercase tracking-wider min-w-[160px] sm:min-w-[200px] text-center">
+            {MONTH_NAMES[currentMonth]} {currentYear}
+          </h2>
+          <button onClick={nextMonth} className="p-2 border-2 border-surface-900 bg-white shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-surface-900">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+        {monthsWithContent.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {monthsWithContent.map(key => {
+              const [y, m] = key.split('-').map(Number);
+              const isActive = y === currentYear && m === currentMonth;
+              return (
+                <button key={key} onClick={() => { setCurrentYear(y); setCurrentMonth(m); }}
+                  className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider border-2 transition-all ${isActive ? 'bg-brand-600 text-white border-surface-900 shadow-brutal-sm' : 'bg-white text-surface-500 border-surface-200 hover:border-surface-900 hover:text-surface-900'}`}>
+                  {MONTH_NAMES[m].slice(0, 3)}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {weekGroups.length === 0 && (
+        <div className="border-2 border-surface-900 bg-surface-50 p-10 text-center">
+          <p className="text-surface-500 font-bold uppercase tracking-wider text-sm mb-2">Sin contenido este mes</p>
+          <p className="text-surface-400 text-xs">No hay visuals para {MONTH_NAMES[currentMonth]} {currentYear}. Usa las flechas o los atajos de mes para ver otros meses.</p>
+        </div>
+      )}
+
       {/* Stats bar
           En tablet (sm-lg) los stats van arriba y los botones de acción debajo,
           alineados a la derecha, para evitar que el ml-auto desplace los botones a una línea aparte sin orden. */}
+      {weekGroups.length > 0 && (
       <div className="flex flex-col lg:flex-row lg:items-center gap-3 border-2 border-surface-900 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest">
@@ -522,9 +603,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
             <button
               type="button"
               onClick={() => {
-                const pending = Object.values(visualsMap)
-                  .flat()
-                  .filter(v => v.image_status !== 'ready' || !v.image_url);
+                const pending = monthVisuals.filter(v => v.image_status !== 'ready' || !v.image_url);
                 if (pending.length === 0) return;
                 setImageGenQueue(pending.map(v => ({
                   visualId: v.id,
@@ -550,6 +629,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
           )}
         </div>
       </div>
+      )}
 
       {/* Week groups */}
       {weekGroups.map(week => {

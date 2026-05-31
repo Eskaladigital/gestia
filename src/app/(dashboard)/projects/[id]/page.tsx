@@ -288,6 +288,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <ProjectReferenceImagesCard
         projectId={id}
         initialImages={referenceImages as ProjectReferenceImage[]}
+        hasPhysicalConstraints={Boolean(project.physical_constraints)}
       />
 
       {/* Action buttons — incluye identidad visual como paso 1 */}
