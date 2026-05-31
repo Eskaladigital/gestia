@@ -4,9 +4,18 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl } from '@/lib/utils';
+import {
+  getVisualDisplayUrl,
+  getVisualDownloadParams,
+  visualHasSavedEdit,
+  visualHasVideo,
+  visualUsesCssFlip,
+} from '@/lib/visual-image';
 import type { ContentItem, ContentItemStatus, ContentItemVisual } from '@/types';
 import { PostEditor } from './PostEditor';
 import { ProductionSpecsDisplay } from './ProductionSpecsDisplay';
+import { ImageEditorModal } from './ImageEditorModal';
+import { VideoGenModal } from './VideoGenModal';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { buildImageFilename } from './ContentGallery';
 
@@ -104,6 +113,14 @@ export function CalendarTable({
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
+  const [imageEditorVisual, setImageEditorVisual] = useState<{
+    visual: ContentItemVisual;
+    contentItemId: string;
+  } | null>(null);
+  const [videoModalVisual, setVideoModalVisual] = useState<{
+    visual: ContentItemVisual;
+    contentItemId: string;
+  } | null>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const router = useRouter();
   const supabase = createClient();
@@ -146,6 +163,29 @@ export function CalendarTable({
   const handleDownloadImage = useCallback(async (url: string, filename: string, flipHorizontal?: boolean) => {
     await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
+
+  const handleDownloadVisual = useCallback(
+    async (visual: ContentItemVisual, filename: string) => {
+      const params = getVisualDownloadParams(visual);
+      if (!params) return;
+      await handleDownloadImage(params.url, filename, params.flipHorizontal);
+    },
+    [handleDownloadImage],
+  );
+
+  const patchVisualInCache = useCallback(
+    (contentItemId: string, visualId: string, patch: Partial<ContentItemVisual>) => {
+      setVisualsCache(prev => {
+        const list = prev[contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [contentItemId]: list.map(v => (v.id === visualId ? { ...v, ...patch } : v)),
+        };
+      });
+    },
+    [],
+  );
 
   const toggleImageFlipHorizontal = useCallback(
     async (visualId: string, contentItemId: string) => {
@@ -227,7 +267,16 @@ export function CalendarTable({
         ...prev,
         [contentItemId]: list.map(v =>
           v.id === visualId
-            ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null, image_flip_horizontal: false }
+            ? {
+                ...v,
+                image_url: imageUrl,
+                image_status: 'ready' as const,
+                image_error: null,
+                image_flip_horizontal: false,
+                edited_image_url: null,
+                image_edit_json: null,
+                image_edited_at: null,
+              }
             : v
         ),
       };
@@ -540,18 +589,52 @@ export function CalendarTable({
                                             {hasImage ? 'Regenerar' : '🖼️ Generar imagen'}
                                           </button>
                                           {hasImage && (
-                                            <button
-                                              type="button"
-                                              title="Voltear horizontal (espejo) — se guarda en el proyecto"
-                                              onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
-                                              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                                visual.image_flip_horizontal === true
-                                                  ? 'bg-amber-500 text-surface-900'
-                                                  : 'bg-white text-surface-900 hover:bg-surface-100'
-                                              }`}
-                                            >
-                                              Espejo
-                                            </button>
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setImageEditorVisual({ visual, contentItemId: item.id })
+                                                }
+                                                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                                  visualHasSavedEdit(visual)
+                                                    ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                                    : 'bg-white text-surface-900 hover:bg-surface-100'
+                                                }`}
+                                              >
+                                                {visualHasSavedEdit(visual) ? 'Editar ✓' : 'Editar'}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                title="Animar esta imagen con IA de vídeo (Veo)"
+                                                onClick={() =>
+                                                  setVideoModalVisual({ visual, contentItemId: item.id })
+                                                }
+                                                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                                  visualHasVideo(visual)
+                                                    ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
+                                                    : 'bg-white text-surface-900 hover:bg-surface-100'
+                                                }`}
+                                              >
+                                                {visualHasVideo(visual) ? '🎬 ✓' : '🎬 Animar'}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                title={
+                                                  visualHasSavedEdit(visual)
+                                                    ? 'Quita la edición para usar espejo'
+                                                    : 'Voltear horizontal (espejo)'
+                                                }
+                                                disabled={visualHasSavedEdit(visual)}
+                                                onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
+                                                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-40 ${
+                                                  visual.image_flip_horizontal === true
+                                                    ? 'bg-amber-500 text-surface-900'
+                                                    : 'bg-white text-surface-900 hover:bg-surface-100'
+                                                }`}
+                                              >
+                                                Espejo
+                                              </button>
+                                            </>
                                           )}
                                         </div>
                                       </div>
@@ -560,14 +643,14 @@ export function CalendarTable({
                                         <div className="bg-surface-50 border-b-2 border-surface-900 p-3">
                                           <div className="relative group overflow-hidden">
                                             <img
-                                              src={visual.image_url!}
+                                              src={getVisualDisplayUrl(visual)!}
                                               alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                              className={`w-full max-h-[300px] object-cover border-2 border-surface-200 ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
+                                              className={`w-full max-h-[300px] object-cover border-2 border-surface-200 ${visualUsesCssFlip(visual) ? '-scale-x-100' : ''}`}
                                               loading="lazy"
                                             />
                                             <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                               <a
-                                                href={visual.image_url!}
+                                                href={getVisualDisplayUrl(visual)!}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-white text-surface-900 border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
@@ -577,10 +660,9 @@ export function CalendarTable({
                                               <button
                                                 type="button"
                                                 onClick={() =>
-                                                  handleDownloadImage(
-                                                    visual.image_url!,
+                                                  void handleDownloadVisual(
+                                                    visual,
                                                     buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                                    visual.image_flip_horizontal === true,
                                                   )
                                                 }
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
@@ -595,6 +677,28 @@ export function CalendarTable({
                                       {hasError && (
                                         <div className="bg-red-50 border-b-2 border-surface-900 px-3 py-2">
                                           <span className="text-xs text-red-700 font-mono">Error: {visual.image_error || 'Error desconocido'}</span>
+                                        </div>
+                                      )}
+
+                                      {visualHasVideo(visual) && (
+                                        <div className="border-b-2 border-surface-900 bg-black">
+                                          <video
+                                            src={visual.video_url!}
+                                            controls
+                                            loop
+                                            playsInline
+                                            className="w-full max-h-[300px] object-contain bg-black"
+                                          />
+                                          <div className="flex items-center justify-between gap-2 bg-surface-900 px-3 py-1.5">
+                                            <span className="text-[9px] font-bold uppercase tracking-widest text-fuchsia-300">🎬 Vídeo IA</span>
+                                            <a
+                                              href={visual.video_url!}
+                                              download
+                                              className="text-[9px] font-bold uppercase tracking-widest text-white hover:text-fuchsia-300"
+                                            >
+                                              Descargar MP4
+                                            </a>
+                                          </div>
                                         </div>
                                       )}
 
@@ -664,6 +768,37 @@ export function CalendarTable({
           );
         })}
       </div>
+
+      {imageEditorVisual && (
+        <ImageEditorModal
+          visual={imageEditorVisual.visual}
+          onClose={() => setImageEditorVisual(null)}
+          onSaved={patch => {
+            patchVisualInCache(imageEditorVisual.contentItemId, imageEditorVisual.visual.id, patch);
+            setImageEditorVisual(null);
+          }}
+          onCleared={() => {
+            patchVisualInCache(imageEditorVisual.contentItemId, imageEditorVisual.visual.id, {
+              edited_image_url: null,
+              image_edit_json: null,
+              image_edited_at: null,
+            });
+          }}
+        />
+      )}
+
+      {videoModalVisual && (
+        <VideoGenModal
+          visual={videoModalVisual.visual}
+          onClose={() => setVideoModalVisual(null)}
+          onGenerated={patch => {
+            patchVisualInCache(videoModalVisual.contentItemId, videoModalVisual.visual.id, patch);
+            setVideoModalVisual(prev =>
+              prev ? { ...prev, visual: { ...prev.visual, ...patch } } : prev,
+            );
+          }}
+        />
+      )}
 
       {imageGenQueue && (
         <ImageGenProgressModal

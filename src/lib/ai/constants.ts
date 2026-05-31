@@ -234,6 +234,9 @@ export function resolveSupportedModel(provider: AIProvider, model?: string | nul
 
 export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
 export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
+export const VIDEO_GENERATION_MODEL = 'veo-3.1-fast-generate-preview';
+export const VIDEO_GENERATION_DURATION_SECONDS = 8;
+export const VIDEO_GENERATION_ESTIMATED_COST_USD = 1.2;
 
 /**
  * Tamaños que usamos realmente en la app. Lo limitamos a estos 3 porque

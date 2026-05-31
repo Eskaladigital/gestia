@@ -419,6 +419,7 @@ export interface VisualBriefGeneration {
 }
 
 export type ImageGenerationStatus = 'pending' | 'generating' | 'ready' | 'error';
+export type VideoGenerationStatus = 'pending' | 'generating' | 'ready' | 'error';
 
 export interface ContentItemVisual {
   id: string;
@@ -432,6 +433,19 @@ export interface ContentItemVisual {
   image_error: string | null;
   /** Espejo horizontal guardado en BD (vista y descargas). */
   image_flip_horizontal?: boolean;
+  /** Estado del mini editor (textos, filtros) para reabrir la edición. */
+  image_edit_json?: Json | null;
+  /** PNG final editado; prioridad en vista y descarga. */
+  edited_image_url?: string | null;
+  image_edited_at?: string | null;
+  /** Prompt que describe cómo debe moverse / animarse la imagen existente. */
+  video_motion_prompt?: string | null;
+  video_url?: string | null;
+  video_status?: VideoGenerationStatus | null;
+  video_error?: string | null;
+  video_model?: string | null;
+  video_source_image_url?: string | null;
+  video_generated_at?: string | null;
   /**
    * Texto del último error reportado por el usuario sobre la imagen generada.
    * Se inyecta en el prompt al regenerar para que la IA corrija puntos concretos

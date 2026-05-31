@@ -484,6 +484,9 @@ export async function POST(request: NextRequest) {
         image_error: null,
         user_feedback: null,
         user_feedback_at: null,
+        edited_image_url: null,
+        image_edit_json: null,
+        image_edited_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', visual_id)

@@ -4,7 +4,16 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl, imageBlobFlippedHorizontally } from '@/lib/utils';
+import {
+  getVisualDisplayUrl,
+  getVisualDownloadParams,
+  visualHasSavedEdit,
+  visualHasVideo,
+  visualUsesCssFlip,
+} from '@/lib/visual-image';
 import type { ContentItem, ContentItemVisual } from '@/types';
+import { ImageEditorModal } from './ImageEditorModal';
+import { VideoGenModal } from './VideoGenModal';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { FORMAT_CONFIG, TYPE_LABELS } from './CalendarTable';
 import { aspectClassForOrientation } from '@/lib/ai/constants';
@@ -99,6 +108,14 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
   const [reportText, setReportText] = useState('');
   const [savingReport, setSavingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [imageEditorVisual, setImageEditorVisual] = useState<{
+    visual: ContentItemVisual;
+    contentItemId: string;
+  } | null>(null);
+  const [videoModalVisual, setVideoModalVisual] = useState<{
+    visual: ContentItemVisual;
+    contentItemId: string;
+  } | null>(null);
 
   const visualsMapRef = useRef(visualsMap);
   visualsMapRef.current = visualsMap;
@@ -169,6 +186,29 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
+  const handleDownloadVisual = useCallback(
+    async (visual: ContentItemVisual, filename: string) => {
+      const params = getVisualDownloadParams(visual);
+      if (!params) return;
+      await handleDownload(params.url, filename, params.flipHorizontal);
+    },
+    [handleDownload],
+  );
+
+  const patchVisual = useCallback(
+    (contentItemId: string, visualId: string, patch: Partial<ContentItemVisual>) => {
+      setVisualsMap(prev => {
+        const list = prev[contentItemId];
+        if (!list) return prev;
+        return {
+          ...prev,
+          [contentItemId]: list.map(v => (v.id === visualId ? { ...v, ...patch } : v)),
+        };
+      });
+    },
+    [],
+  );
+
   const toggleImageFlipHorizontal = useCallback(
     async (visualId: string, contentItemId: string) => {
       const list = visualsMapRef.current[contentItemId];
@@ -222,6 +262,9 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                 image_flip_horizontal: false,
                 user_feedback: null,
                 user_feedback_at: null,
+                edited_image_url: null,
+                image_edit_json: null,
+                image_edited_at: null,
               }
             : v
         ),
@@ -389,9 +432,11 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
         usedNames.add(filename);
 
         try {
-          const res = await fetch(visual.image_url!);
+          const dl = getVisualDownloadParams(visual);
+          if (!dl) continue;
+          const res = await fetch(dl.url);
           let blob = await res.blob();
-          if (visual.image_flip_horizontal === true) {
+          if (dl.flipHorizontal) {
             const flipped = await imageBlobFlippedHorizontally(blob);
             if (flipped) blob = flipped;
           }
@@ -661,9 +706,42 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                     </button>
                                     <button
                                       type="button"
-                                      title="Voltear horizontal (espejo) — se guarda en el proyecto"
-                                      onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
+                                      title="Texto, filtros y export final para redes"
+                                      onClick={() =>
+                                        setImageEditorVisual({ visual, contentItemId: item.id })
+                                      }
                                       className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                        visualHasSavedEdit(visual)
+                                          ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                          : 'bg-white text-surface-900 hover:bg-surface-100'
+                                      }`}
+                                    >
+                                      {visualHasSavedEdit(visual) ? 'Editar ✓' : 'Editar'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Animar esta imagen con IA de vídeo (Veo)"
+                                      onClick={() =>
+                                        setVideoModalVisual({ visual, contentItemId: item.id })
+                                      }
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                                        visualHasVideo(visual)
+                                          ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
+                                          : 'bg-white text-surface-900 hover:bg-surface-100'
+                                      }`}
+                                    >
+                                      {visualHasVideo(visual) ? '🎬 ✓' : '🎬 Animar'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title={
+                                        visualHasSavedEdit(visual)
+                                          ? 'Quita la edición guardada para usar espejo'
+                                          : 'Voltear horizontal (espejo) — se guarda en el proyecto'
+                                      }
+                                      disabled={visualHasSavedEdit(visual)}
+                                      onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                                         visual.image_flip_horizontal === true
                                           ? 'bg-amber-500 text-surface-900'
                                           : 'bg-white text-surface-900 hover:bg-surface-100'
@@ -674,10 +752,9 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        handleDownload(
-                                          visual.image_url!,
+                                        void handleDownloadVisual(
+                                          visual,
                                           buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                          visual.image_flip_horizontal === true,
                                         )
                                       }
                                       className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
@@ -693,19 +770,26 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                             {hasImage ? (
                               <div
                                 className="relative cursor-pointer group overflow-hidden"
-                                onClick={() =>
+                                onClick={() => {
+                                  const displayUrl = getVisualDisplayUrl(visual);
+                                  if (!displayUrl) return;
                                   setLightbox({
-                                    url: visual.image_url!,
+                                    url: displayUrl,
                                     filename: buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
                                     visualId: visual.id,
                                     contentItemId: item.id,
-                                  })
-                                }
+                                  });
+                                }}
                               >
+                                {visualHasSavedEdit(visual) && (
+                                  <span className="absolute top-2 left-2 z-10 text-[9px] font-bold uppercase tracking-wider bg-teal-600 text-white px-2 py-0.5 border border-surface-900">
+                                    Editada
+                                  </span>
+                                )}
                                 <img
-                                  src={visual.image_url!}
+                                  src={getVisualDisplayUrl(visual)!}
                                   alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                                  className={`w-full ${aspectClass} object-cover ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
+                                  className={`w-full ${aspectClass} object-cover ${visualUsesCssFlip(visual) ? '-scale-x-100' : ''}`}
                                   loading="lazy"
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -723,6 +807,31 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                               <div className={`${aspectClass} bg-surface-100 flex flex-col items-center justify-center gap-2`}>
                                 <span className="text-3xl opacity-30">🖼️</span>
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-surface-400">Pendiente de generar</span>
+                              </div>
+                            )}
+
+                            {/* Vídeo animado */}
+                            {visualHasVideo(visual) && (
+                              <div className="border-t-2 border-surface-900 bg-black">
+                                <video
+                                  src={visual.video_url!}
+                                  controls
+                                  loop
+                                  playsInline
+                                  className={`w-full ${aspectClass} object-cover`}
+                                />
+                                <div className="flex items-center justify-between gap-2 bg-surface-900 px-3 py-1.5">
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-fuchsia-300">
+                                    🎬 Vídeo IA
+                                  </span>
+                                  <a
+                                    href={visual.video_url!}
+                                    download
+                                    className="text-[9px] font-bold uppercase tracking-widest text-white hover:text-fuchsia-300"
+                                  >
+                                    Descargar MP4
+                                  </a>
+                                </div>
                               </div>
                             )}
 
@@ -805,15 +914,20 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
               src={lightbox.url}
               alt="Vista ampliada"
               className={`w-full h-auto max-h-[85vh] object-contain border-4 border-white ${
-                lightboxVisual?.image_flip_horizontal === true ? '-scale-x-100' : ''
+                lightboxVisual && visualUsesCssFlip(lightboxVisual) ? '-scale-x-100' : ''
               }`}
             />
             <div className="absolute top-3 right-3 flex gap-2">
               <button
                 type="button"
-                title="Voltear horizontal (espejo) — se guarda en el proyecto"
+                title={
+                  lightboxVisual && visualHasSavedEdit(lightboxVisual)
+                    ? 'Quita la edición para usar espejo'
+                    : 'Voltear horizontal (espejo) — se guarda en el proyecto'
+                }
+                disabled={!!lightboxVisual && visualHasSavedEdit(lightboxVisual)}
                 onClick={() => void toggleImageFlipHorizontal(lightbox.visualId, lightbox.contentItemId)}
-                className={`text-xs font-bold uppercase tracking-wider border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                className={`text-xs font-bold uppercase tracking-wider border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-40 ${
                   lightboxVisual?.image_flip_horizontal === true
                     ? 'bg-amber-500 text-surface-900'
                     : 'bg-white text-surface-900'
@@ -821,14 +935,26 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
               >
                 Espejo
               </button>
+              {lightboxVisual && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImageEditorVisual({
+                      visual: lightboxVisual,
+                      contentItemId: lightbox.contentItemId,
+                    })
+                  }
+                  className="text-xs font-bold uppercase tracking-wider bg-teal-600 text-white border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                >
+                  Editar
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() =>
-                  void handleDownload(
-                    lightbox.url,
-                    lightbox.filename,
-                    lightboxVisual?.image_flip_horizontal === true,
-                  )
+                  lightboxVisual
+                    ? void handleDownloadVisual(lightboxVisual, lightbox.filename)
+                    : void handleDownload(lightbox.url, lightbox.filename, false)
                 }
                 className="text-xs font-bold uppercase tracking-wider bg-white text-surface-900 border-2 border-surface-900 px-3 py-1.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
               >
@@ -844,6 +970,37 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
             </div>
           </div>
         </div>
+      )}
+
+      {imageEditorVisual && (
+        <ImageEditorModal
+          visual={imageEditorVisual.visual}
+          onClose={() => setImageEditorVisual(null)}
+          onSaved={patch => {
+            patchVisual(imageEditorVisual.contentItemId, imageEditorVisual.visual.id, patch);
+            setImageEditorVisual(null);
+          }}
+          onCleared={() => {
+            patchVisual(imageEditorVisual.contentItemId, imageEditorVisual.visual.id, {
+              edited_image_url: null,
+              image_edit_json: null,
+              image_edited_at: null,
+            });
+          }}
+        />
+      )}
+
+      {videoModalVisual && (
+        <VideoGenModal
+          visual={videoModalVisual.visual}
+          onClose={() => setVideoModalVisual(null)}
+          onGenerated={patch => {
+            patchVisual(videoModalVisual.contentItemId, videoModalVisual.visual.id, patch);
+            setVideoModalVisual(prev =>
+              prev ? { ...prev, visual: { ...prev.visual, ...patch } } : prev,
+            );
+          }}
+        />
       )}
 
       {/* Image generation modal */}

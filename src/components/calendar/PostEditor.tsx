@@ -4,8 +4,17 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ContentItem, ContentItemStatus, ProductionSpecs, ContentItemVisual } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl } from '@/lib/utils';
+import {
+  getVisualDisplayUrl,
+  getVisualDownloadParams,
+  visualHasSavedEdit,
+  visualHasVideo,
+  visualUsesCssFlip,
+} from '@/lib/visual-image';
 import { IMAGE_GENERATION_MODEL } from '@/lib/ai/constants';
 import { Button } from '@/components/ui/Button';
+import { ImageEditorModal } from './ImageEditorModal';
+import { VideoGenModal } from './VideoGenModal';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { buildImageFilename } from './ContentGallery';
 
@@ -64,6 +73,8 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
 
   const [visuals, setVisuals] = useState<ContentItemVisual[]>([]);
   const [imageGenQueue, setImageGenQueue] = useState<ImageGenItem[] | null>(null);
+  const [imageEditorVisual, setImageEditorVisual] = useState<ContentItemVisual | null>(null);
+  const [videoModalVisual, setVideoModalVisual] = useState<ContentItemVisual | null>(null);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptText, setEditingPromptText] = useState('');
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
@@ -113,6 +124,15 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
     await downloadImageFromUrl(url, filename, { flipHorizontal: !!flipHorizontal });
   }, []);
 
+  const handleDownloadVisual = useCallback(
+    async (visual: ContentItemVisual, filename: string) => {
+      const params = getVisualDownloadParams(visual);
+      if (!params) return;
+      await handleDownloadImage(params.url, filename, params.flipHorizontal);
+    },
+    [handleDownloadImage],
+  );
+
   const toggleImageFlipHorizontal = useCallback(
     async (visualId: string) => {
       const v = visualsRef.current.find(x => x.id === visualId);
@@ -138,7 +158,16 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
   const handleImageReady = useCallback((visualId: string, _contentItemId: string, imageUrl: string) => {
     setVisuals(prev => prev.map(v =>
       v.id === visualId
-        ? { ...v, image_url: imageUrl, image_status: 'ready' as const, image_error: null, image_flip_horizontal: false }
+        ? {
+            ...v,
+            image_url: imageUrl,
+            image_status: 'ready' as const,
+            image_error: null,
+            image_flip_horizontal: false,
+            edited_image_url: null,
+            image_edit_json: null,
+            image_edited_at: null,
+          }
         : v
     ));
   }, []);
@@ -446,7 +475,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                   )}
                 </div>
                 <p className="text-xs text-surface-500 -mt-2">
-                  Genera la imagen de cada visual usando {IMAGE_GENERATION_MODEL}. Puedes descargarla o regenerarla.
+                  Genera la imagen de cada visual usando {IMAGE_GENERATION_MODEL}. Edita texto y filtros antes de descargar.
                 </p>
                 {visuals.map(visual => {
                   const hasImage = visual.image_status === 'ready' && visual.image_url;
@@ -471,18 +500,48 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                             {hasImage ? 'Regenerar imagen' : 'Generar imagen'}
                           </button>
                           {hasImage && (
-                            <button
-                              type="button"
-                              title="Voltear horizontal (espejo) — se guarda en el proyecto"
-                              onClick={() => void toggleImageFlipHorizontal(visual.id)}
-                              className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-surface-300 transition-colors ${
-                                visual.image_flip_horizontal === true
-                                  ? 'bg-amber-100 text-amber-900 border-amber-400'
-                                  : 'bg-white text-surface-800 hover:bg-surface-100'
-                              }`}
-                            >
-                              Espejo
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setImageEditorVisual(visual)}
+                                className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-surface-300 transition-colors ${
+                                  visualHasSavedEdit(visual)
+                                    ? 'bg-teal-600 text-white border-teal-700'
+                                    : 'bg-white text-surface-800 hover:bg-surface-100'
+                                }`}
+                              >
+                                {visualHasSavedEdit(visual) ? 'Editar ✓' : 'Editar'}
+                              </button>
+                              <button
+                                type="button"
+                                title="Animar esta imagen con IA de vídeo (Veo)"
+                                onClick={() => setVideoModalVisual(visual)}
+                                className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border transition-colors ${
+                                  visualHasVideo(visual)
+                                    ? 'bg-fuchsia-600 text-white border-fuchsia-700'
+                                    : 'bg-white text-surface-800 border-surface-300 hover:bg-surface-100'
+                                }`}
+                              >
+                                {visualHasVideo(visual) ? '🎬 ✓' : '🎬 Animar'}
+                              </button>
+                              <button
+                                type="button"
+                                title={
+                                  visualHasSavedEdit(visual)
+                                    ? 'Quita la edición para usar espejo'
+                                    : 'Voltear horizontal (espejo)'
+                                }
+                                disabled={visualHasSavedEdit(visual)}
+                                onClick={() => void toggleImageFlipHorizontal(visual.id)}
+                                className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-surface-300 transition-colors disabled:opacity-40 ${
+                                  visual.image_flip_horizontal === true
+                                    ? 'bg-amber-100 text-amber-900 border-amber-400'
+                                    : 'bg-white text-surface-800 hover:bg-surface-100'
+                                }`}
+                              >
+                                Espejo
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -493,18 +552,40 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                         </div>
                       )}
 
+                      {visualHasVideo(visual) && (
+                        <div className="bg-black">
+                          <video
+                            src={visual.video_url!}
+                            controls
+                            loop
+                            playsInline
+                            className="w-full max-h-[280px] object-contain bg-black"
+                          />
+                          <div className="flex items-center justify-between gap-2 bg-surface-900 px-3 py-1.5">
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-fuchsia-300">🎬 Vídeo IA</span>
+                            <a
+                              href={visual.video_url!}
+                              download
+                              className="text-[9px] font-bold uppercase tracking-widest text-white hover:text-fuchsia-300"
+                            >
+                              Descargar MP4
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
                       {hasImage && (
                         <div className="p-3 bg-white">
                           <div className="relative group overflow-hidden rounded-lg">
                             <img
-                              src={visual.image_url!}
+                              src={getVisualDisplayUrl(visual)!}
                               alt={visual.label || `Visual ${visual.visual_index + 1}`}
-                              className={`w-full max-h-[280px] object-cover rounded-lg border border-surface-200 ${visual.image_flip_horizontal === true ? '-scale-x-100' : ''}`}
+                              className={`w-full max-h-[280px] object-cover rounded-lg border border-surface-200 ${visualUsesCssFlip(visual) ? '-scale-x-100' : ''}`}
                               loading="lazy"
                             />
                             <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               <a
-                                href={visual.image_url!}
+                                href={getVisualDisplayUrl(visual)!}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-[10px] font-bold uppercase tracking-wider bg-white/90 backdrop-blur text-surface-900 border border-surface-300 px-2 py-1 rounded-lg hover:bg-white transition-colors"
@@ -514,10 +595,9 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                               <button
                                 type="button"
                                 onClick={() =>
-                                  handleDownloadImage(
-                                    visual.image_url!,
+                                  void handleDownloadVisual(
+                                    visual,
                                     buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                    visual.image_flip_horizontal === true,
                                   )
                                 }
                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"
@@ -589,6 +669,41 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
           </div>
         </div>
       </div>
+
+      {imageEditorVisual && (
+        <ImageEditorModal
+          visual={imageEditorVisual}
+          onClose={() => setImageEditorVisual(null)}
+          onSaved={patch => {
+            setVisuals(prev =>
+              prev.map(v => (v.id === imageEditorVisual.id ? { ...v, ...patch } : v)),
+            );
+            setImageEditorVisual(null);
+          }}
+          onCleared={() => {
+            setVisuals(prev =>
+              prev.map(v =>
+                v.id === imageEditorVisual.id
+                  ? { ...v, edited_image_url: null, image_edit_json: null, image_edited_at: null }
+                  : v,
+              ),
+            );
+          }}
+        />
+      )}
+
+      {videoModalVisual && (
+        <VideoGenModal
+          visual={videoModalVisual}
+          onClose={() => setVideoModalVisual(null)}
+          onGenerated={patch => {
+            setVisuals(prev =>
+              prev.map(v => (v.id === videoModalVisual.id ? { ...v, ...patch } : v)),
+            );
+            setVideoModalVisual(prev => (prev ? { ...prev, ...patch } : prev));
+          }}
+        />
+      )}
 
       {imageGenQueue && (
         <ImageGenProgressModal
