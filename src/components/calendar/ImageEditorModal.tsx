@@ -374,6 +374,36 @@ export function ImageEditorModal({ visual, onClose, onSaved, onCleared }: ImageE
                     />
                   </label>
 
+                  <div className="flex gap-3">
+                    <label className="flex-1 block text-[10px] font-bold uppercase text-surface-600">
+                      Rotación
+                      <input
+                        type="range"
+                        min={-180}
+                        max={180}
+                        value={Math.round(selectedLayer.rotation)}
+                        onChange={e =>
+                          updateLayer(selectedLayer.id, { rotation: Number(e.target.value) })
+                        }
+                        className="w-full mt-1"
+                      />
+                    </label>
+
+                    <label className="flex-1 block text-[10px] font-bold uppercase text-surface-600">
+                      Opacidad
+                      <input
+                        type="range"
+                        min={10}
+                        max={100}
+                        value={Math.round(selectedLayer.opacity * 100)}
+                        onChange={e =>
+                          updateLayer(selectedLayer.id, { opacity: Number(e.target.value) / 100 })
+                        }
+                        className="w-full mt-1"
+                      />
+                    </label>
+                  </div>
+
                   {/* Color del texto */}
                   <div className="space-y-1">
                     <span className="block text-[10px] font-bold uppercase text-surface-500">Color</span>

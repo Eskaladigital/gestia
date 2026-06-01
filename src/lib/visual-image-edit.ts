@@ -29,6 +29,10 @@ export interface ImageTextLayer {
   effect: TextEffect;
   /** Espaciado entre letras relativo al tamaño de fuente (0 = normal). */
   letterSpacing: number;
+  /** Rotación en grados (-180 a 180). */
+  rotation: number;
+  /** Opacidad global de la capa (0 a 1). */
+  opacity: number;
 }
 
 export interface VisualImageFilter {
@@ -79,6 +83,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       background: 'translucent',
       effect: 'none',
       letterSpacing: 0,
+      rotation: 0,
+      opacity: 1,
     },
   },
   {
@@ -92,6 +98,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       background: 'none',
       effect: 'shadow',
       letterSpacing: 0,
+      rotation: 0,
+      opacity: 1,
     },
   },
   {
@@ -106,6 +114,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       effect: 'neon',
       color: '#ffffff',
       letterSpacing: 0.01,
+      rotation: 0,
+      opacity: 1,
     },
   },
   {
@@ -119,6 +129,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       background: 'none',
       effect: 'shadow',
       letterSpacing: 0,
+      rotation: 0,
+      opacity: 1,
     },
   },
   {
@@ -132,6 +144,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       background: 'none',
       effect: 'shadow',
       letterSpacing: 0,
+      rotation: 0,
+      opacity: 1,
     },
   },
   {
@@ -145,6 +159,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       background: 'none',
       effect: 'outline',
       letterSpacing: 0.02,
+      rotation: -5,
+      opacity: 1,
     },
   },
   {
@@ -159,6 +175,8 @@ export const TEXT_STYLE_PRESETS: Array<{
       backgroundColor: '#000000',
       effect: 'none',
       letterSpacing: 0,
+      rotation: 0,
+      opacity: 1,
     },
   },
 ];
@@ -207,6 +225,8 @@ export function parseVisualImageEditJson(raw: unknown): VisualImageEditJson | nu
           ? (layer.effect as TextEffect)
           : 'none',
         letterSpacing: clampLetterSpacing(Number(layer.letterSpacing)),
+        rotation: clampRotation(Number(layer.rotation)),
+        opacity: clampOpacity(Number(layer.opacity ?? 1)),
       });
     }
   }
@@ -237,6 +257,20 @@ function clampLetterSpacing(n: number): number {
   return Math.min(0.3, Math.max(-0.05, n));
 }
 
+function clampRotation(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  // Mantenemos la rotación entre -180 y 180
+  let r = n % 360;
+  if (r > 180) r -= 360;
+  if (r < -180) r += 360;
+  return r;
+}
+
+function clampOpacity(n: number): number {
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1, Math.max(0, n));
+}
+
 function clampFilter(n: number, fallback: number): number {
   if (!Number.isFinite(n)) return fallback;
   return Math.min(200, Math.max(50, Math.round(n)));
@@ -259,5 +293,7 @@ export function createTextLayer(partial?: Partial<ImageTextLayer>): ImageTextLay
     backgroundColor: partial?.backgroundColor ?? '#000000',
     effect: partial?.effect ?? 'none',
     letterSpacing: partial?.letterSpacing ?? 0,
+    rotation: partial?.rotation ?? 0,
+    opacity: partial?.opacity ?? 1,
   };
 }

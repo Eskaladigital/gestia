@@ -76,6 +76,18 @@ function drawTextLayer(
   width: number,
   height: number,
 ) {
+  ctx.save();
+  ctx.globalAlpha = layer.opacity;
+
+  const x = layer.x * width;
+  const y = layer.y * height;
+
+  // Movemos el origen al centro del texto para poder rotar
+  ctx.translate(x, y);
+  if (layer.rotation !== 0) {
+    ctx.rotate((layer.rotation * Math.PI) / 180);
+  }
+
   const fontPx = Math.max(12, Math.round(layer.fontSize * width));
   const weight = layer.fontWeight === 'bold' ? '700' : '400';
   const style = layer.italic ? 'italic ' : '';
@@ -93,11 +105,11 @@ function drawTextLayer(
   const lineHeight = fontPx * 1.28;
   const maxLineWidth = Math.max(...lines.map(l => ctx.measureText(l).width), 1);
   const blockHeight = lines.length * lineHeight;
-  const x = layer.x * width;
-  const y = layer.y * height;
 
   ctx.textAlign = layer.align === 'center' ? 'center' : layer.align === 'right' ? 'right' : 'left';
-  const textX = x;
+  // Como hemos trasladado el contexto a (x,y), ahora las coordenadas son relativas a (0,0)
+  const textX = 0;
+  const textY = 0;
 
   // --- Fondo (caja) ---
   if (layer.background !== 'none') {
@@ -109,7 +121,7 @@ function drawTextLayer(
         : layer.align === 'right'
           ? textX - maxLineWidth - padX
           : textX - padX;
-    const boxTop = y - blockHeight / 2 - padY;
+    const boxTop = textY - blockHeight / 2 - padY;
     const boxW = maxLineWidth + padX * 2;
     const boxH = blockHeight + padY * 2;
     ctx.save();
@@ -123,7 +135,7 @@ function drawTextLayer(
 
   // --- Texto con efecto ---
   lines.forEach((line, i) => {
-    const ly = y - blockHeight / 2 + lineHeight / 2 + i * lineHeight;
+    const ly = textY - blockHeight / 2 + lineHeight / 2 + i * lineHeight;
 
     ctx.save();
 
@@ -162,6 +174,9 @@ function drawTextLayer(
   if (spacingSupported) {
     spacingCtx.letterSpacing = '0px';
   }
+
+  // Restauramos el context (rotación, traslación, opacidad)
+  ctx.restore();
 }
 
 /** Heurística simple para decidir el color del contorno según el relleno. */
