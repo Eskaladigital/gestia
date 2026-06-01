@@ -143,7 +143,7 @@ Cada visual puede generar una imagen IA (`POST /api/generate-image`). Acciones e
 | **Copiar** | Copia el prompt visual al portapapeles. |
 | **Generar / Regenerar** | Cola de generación con modal de progreso. |
 | **Reportar** | Texto libre en `user_feedback`; se inyecta al regenerar y se limpia al éxito. |
-| **Editar** | `ImageEditorModal`: texto superpuesto y filtros; PNG final en `edited_image_url` (026). |
+| **Editar** | `ImageEditorModal`: editor tipo Instagram. Capas de texto con **estilos rápidos** (clásico, moderno, neón, elegante, manuscrito, fuerte, máquina), **tipografías** reales (Google Fonts: Anton, Caveat, Dancing Script, Playfair), **efectos** (sombra/contorno/neón), fondo (sin fondo/translúcido/sólido), color picker, mayúsculas, cursiva, espaciado y filtros de imagen. PNG final en `edited_image_url` (026). |
 | **🎬 Animar** | `VideoGenModal` + `POST /api/generate-video`: Veo anima la imagen **ya generada** (no la repinta); MP4 en `video_url` (027). |
 | **Espejo** | Flip horizontal persistente (`image_flip_horizontal`); deshabilitado si hay edición guardada. |
 | **Descargar** | Individual o ZIP del mes visible. |
@@ -204,7 +204,7 @@ En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001`
 | `023_content_item_visuals_user_feedback.sql` | Campos `user_feedback` y `user_feedback_at` para reportar errores de imagen y corregirlos al regenerar |
 | `024_project_reference_images_caption.sql` | Captions automáticos por imagen de referencia (`caption`, `caption_status`, `caption_at`, `caption_is_manual`). Se generan con visión al subir y permiten que la IA elija refs relevantes por slide |
 | `025_projects_physical_constraints.sql` | Reglas físicas e identitarias inviolables del producto por proyecto (`physical_constraints`, `physical_constraints_at`). Se inyectan como verdad ineludible en calendario, brief visual y generación de imagen |
-| `026_content_item_visuals_image_edit.sql` | Edición post-IA: `image_edit_json`, `edited_image_url`, `image_edited_at` (texto, filtros, PNG final para vista y descarga) |
+| `026_content_item_visuals_image_edit.sql` | Edición post-IA estilo Instagram: `image_edit_json` (capas de texto con tipografía, efecto, fondo, color, mayúsculas, cursiva, espaciado + filtros), `edited_image_url`, `image_edited_at` (PNG final para vista y descarga) |
 | `027_content_item_visuals_video_animation.sql` | Animación con IA de vídeo: `video_motion_prompt`, `video_url`, `video_status`, `video_error`, `video_model`, `video_source_image_url`, `video_generated_at` |
 
 **Storage:** crea en Supabase un bucket público llamado **`screenshots`** (o déjalo que la primera captura lo intente crear vía service role). Las miniaturas del análisis web se suben ahí.
@@ -276,7 +276,7 @@ npm run start
 3. En la ficha del proyecto, **Fase 1 — Base**: analizar web → analizar competidores → generar estrategia (botones independientes; el estado del pipeline se refleja en la UI). Las secciones de **identidad de marca** (`BrandCard`), **ficha del negocio** (`BusinessCard`) y **competidores** (`CompetitorsCard`) son **editables** directamente desde el dashboard; los cambios se persisten en Supabase y se utilizan al regenerar la estrategia. Opcionalmente: sube **fotos de referencia** del producto real y pulsa **«✨ Generar reglas físicas con IA»** para que el sistema redacte y guarde las reglas físicas inviolables antes de generar calendario e imágenes.
 4. **Analizar web** además del texto guarda **miniaturas** (Puppeteer) de hasta 3 URLs en el bucket Supabase **`screenshots`** y enlaza `screenshot_url` en cada fila de `scraped_content`. El proceso puede alargarse varios minutos en la primera ejecución (descarga de Chromium, red lenta, etc.). Requiere Node con Chrome embebido (típico en `npm run dev` / `next start` en tu PC o VPS); en muchos despliegues serverless no hay navegador — usa `DISABLE_PUPPETEER_SCREENSHOTS=1` o un host con Node “completo”.
 5. **Fase 2 — Calendario**: solo disponible cuando existe estrategia guardada. Primera vez genera el mes actual; si ya hay posts, puedes **añadir** publicaciones al mes o **reemplazar** todo el mes (modal). El calendario puede incluir `production_specs` (slides, duración, tipo de medio) y un paso posterior de **briefs visuales** (`generate-visual-briefs`).
-6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). Revisa y trabaja los assets en la pestaña **Contenido** del calendario: navega por mes con las **flechas** o los **atajos** (Ene, Feb…), genera pendientes del mes visible, edita con texto/filtros, anima a vídeo (Veo), descarga individual o ZIP del mes.
+6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). Revisa y trabaja los assets en la pestaña **Contenido** del calendario: navega por mes con las **flechas** o los **atajos** (Ene, Feb…), genera pendientes del mes visible, edita con el **editor tipo Instagram** (texto con tipografías, efectos y fondos + filtros), anima a vídeo (Veo), descarga individual o ZIP del mes.
 7. Revisar y editar posts en **Lista** o **Calendario** (cuadrícula mensual con las mismas flechas de mes); cambiar estado borrador → aprobado desde el detalle del día o el editor; **exportar JSON** desde la barra superior.
 
 Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al completar de nuevo pasos correctamente (p. ej. calendario generado) puede volver a **`ready`** según la lógica actual de las rutas API.
@@ -335,7 +335,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [x] Referencias visuales del producto por proyecto (subida de fotos reales para coherencia con el producto sin perder variedad de planos)
 - [x] Reglas físicas e identitarias inviolables por proyecto (Ajustes, suggest API y botón desde referencias)
 - [x] Captions IA por imagen de referencia + selector de refs relevantes por slide
-- [x] Editor de imagen post-IA (texto, filtros, PNG editado)
+- [x] Editor de imagen post-IA estilo Instagram (tipografías, efectos, fondos, filtros, PNG editado)
 - [x] Animación a vídeo por visual (Veo, desde imagen existente)
 - [x] Navegación por mes en pestañas Calendario y Contenido (flechas + atajos; acciones masivas de Contenido acotadas al mes visible)
 - [ ] Multi-plataforma ampliada (TikTok, LinkedIn, X, etc.)
