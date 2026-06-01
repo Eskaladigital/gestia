@@ -1,4 +1,4 @@
-import type { ImageTextLayer, VisualImageEditJson } from '@/lib/visual-image-edit';
+import type { ImageTextLayer, TextFontFamily, VisualImageEditJson } from '@/lib/visual-image-edit';
 
 function loadImageCrossOrigin(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -10,12 +10,65 @@ function loadImageCrossOrigin(url: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Stack tipográfico real por familia (con fallbacks del sistema). */
+const FONT_STACKS: Record<TextFontFamily, string> = {
+  sans: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  serif: '"Playfair Display", Georgia, "Times New Roman", serif',
+  mono: '"Courier New", ui-monospace, "Cascadia Mono", monospace',
+  display: 'Anton, Impact, "Arial Narrow Bold", "Arial Narrow", sans-serif',
+  handwriting: 'Caveat, "Comic Sans MS", "Segoe Script", cursive',
+  script: '"Dancing Script", "Brush Script MT", "Snell Roundhand", cursive',
+};
+
+const GOOGLE_FONTS_HREF =
+  'https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@700&family=Dancing+Script:wght@700&family=Playfair+Display:ital,wght@0,400;0,700;1,600&display=swap';
+
+let fontsPromise: Promise<void> | null = null;
+
+/**
+ * Carga las tipografías de Google usadas por el editor (Anton, Caveat,
+ * Dancing Script, Playfair Display) y espera a que estén listas para que el
+ * canvas (preview Y export) las pinte igual. Si falla (sin red), cae a los
+ * fallbacks del sistema sin bloquear.
+ */
+export function loadEditorFonts(): Promise<void> {
+  if (fontsPromise) return fontsPromise;
+  fontsPromise = (async () => {
+    if (typeof document === 'undefined') return;
+    if (!document.getElementById('editor-google-fonts')) {
+      const link = document.createElement('link');
+      link.id = 'editor-google-fonts';
+      link.rel = 'stylesheet';
+      link.href = GOOGLE_FONTS_HREF;
+      document.head.appendChild(link);
+    }
+    const anyDoc = document as Document & { fonts?: FontFaceSet };
+    if (!anyDoc.fonts) return;
+    const specs = [
+      '400 32px "Anton"',
+      '700 32px "Caveat"',
+      '700 32px "Dancing Script"',
+      '700 32px "Playfair Display"',
+      'italic 600 32px "Playfair Display"',
+    ];
+    try {
+      await Promise.all(specs.map(spec => anyDoc.fonts!.load(spec).catch(() => undefined)));
+      await anyDoc.fonts.ready;
+    } catch {
+      /* sin red: usamos fallbacks del sistema */
+    }
+  })();
+  return fontsPromise;
+}
+
 function filterCss(filter: VisualImageEditJson['filter']): string {
   const b = filter.brightness / 100;
   const c = filter.contrast / 100;
   const s = filter.saturation / 100;
   return `brightness(${b}) contrast(${c}) saturate(${s})`;
 }
+
+type CtxWithSpacing = CanvasRenderingContext2D & { letterSpacing?: string };
 
 function drawTextLayer(
   ctx: CanvasRenderingContext2D,
@@ -24,56 +77,103 @@ function drawTextLayer(
   height: number,
 ) {
   const fontPx = Math.max(12, Math.round(layer.fontSize * width));
-  const weight = layer.fontWeight === 'bold' ? 'bold' : 'normal';
-  ctx.font = `${weight} ${fontPx}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  ctx.fillStyle = layer.color;
+  const weight = layer.fontWeight === 'bold' ? '700' : '400';
+  const style = layer.italic ? 'italic ' : '';
+  ctx.font = `${style}${weight} ${fontPx}px ${FONT_STACKS[layer.fontFamily] || FONT_STACKS.sans}`;
   ctx.textBaseline = 'middle';
 
-  const lines = layer.text.split('\n');
-  const lineHeight = fontPx * 1.25;
+  const spacingCtx = ctx as CtxWithSpacing;
+  const spacingSupported = 'letterSpacing' in spacingCtx;
+  if (spacingSupported) {
+    spacingCtx.letterSpacing = `${layer.letterSpacing * fontPx}px`;
+  }
+
+  const rawLines = layer.text.split('\n');
+  const lines = layer.uppercase ? rawLines.map(l => l.toUpperCase()) : rawLines;
+  const lineHeight = fontPx * 1.28;
   const maxLineWidth = Math.max(...lines.map(l => ctx.measureText(l).width), 1);
   const blockHeight = lines.length * lineHeight;
   const x = layer.x * width;
   const y = layer.y * height;
 
-  let textX = x;
-  if (layer.align === 'center') {
-    ctx.textAlign = 'center';
-    textX = x;
-  } else if (layer.align === 'right') {
-    ctx.textAlign = 'right';
-    textX = x;
-  } else {
-    ctx.textAlign = 'left';
-    textX = x;
-  }
+  ctx.textAlign = layer.align === 'center' ? 'center' : layer.align === 'right' ? 'right' : 'left';
+  const textX = x;
 
-  const padX = fontPx * 0.35;
-  const padY = fontPx * 0.2;
-  const boxLeft =
-    layer.align === 'center'
-      ? textX - maxLineWidth / 2 - padX
-      : layer.align === 'right'
-        ? textX - maxLineWidth - padX
-        : textX - padX;
-  const boxTop = y - blockHeight / 2 - padY;
-  const boxW = maxLineWidth + padX * 2;
-  const boxH = blockHeight + padY * 2;
-
-  if (layer.withBackground) {
+  // --- Fondo (caja) ---
+  if (layer.background !== 'none') {
+    const padX = fontPx * 0.4;
+    const padY = fontPx * 0.26;
+    const boxLeft =
+      layer.align === 'center'
+        ? textX - maxLineWidth / 2 - padX
+        : layer.align === 'right'
+          ? textX - maxLineWidth - padX
+          : textX - padX;
+    const boxTop = y - blockHeight / 2 - padY;
+    const boxW = maxLineWidth + padX * 2;
+    const boxH = blockHeight + padY * 2;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    const r = Math.min(12, fontPx * 0.25);
+    ctx.fillStyle =
+      layer.background === 'solid' ? layer.backgroundColor : 'rgba(0,0,0,0.42)';
+    const r = Math.min(fontPx * 0.35, boxH / 2);
     roundRect(ctx, boxLeft, boxTop, boxW, boxH, r);
     ctx.fill();
     ctx.restore();
   }
 
+  // --- Texto con efecto ---
   lines.forEach((line, i) => {
     const ly = y - blockHeight / 2 + lineHeight / 2 + i * lineHeight;
-    ctx.fillStyle = layer.color;
-    ctx.fillText(line, textX, ly);
+
+    ctx.save();
+
+    if (layer.effect === 'neon') {
+      // Resplandor: varias pasadas con sombra del propio color.
+      ctx.shadowColor = layer.color;
+      ctx.fillStyle = layer.color;
+      for (let pass = 0; pass < 3; pass++) {
+        ctx.shadowBlur = fontPx * (0.55 + pass * 0.25);
+        ctx.fillText(line, textX, ly);
+      }
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(line, textX, ly);
+    } else if (layer.effect === 'outline') {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, fontPx * 0.09);
+      ctx.strokeStyle = isLightColor(layer.color) ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.92)';
+      ctx.strokeText(line, textX, ly);
+      ctx.fillStyle = layer.color;
+      ctx.fillText(line, textX, ly);
+    } else {
+      if (layer.effect === 'shadow') {
+        ctx.shadowColor = 'rgba(0,0,0,0.55)';
+        ctx.shadowBlur = fontPx * 0.14;
+        ctx.shadowOffsetX = fontPx * 0.02;
+        ctx.shadowOffsetY = fontPx * 0.06;
+      }
+      ctx.fillStyle = layer.color;
+      ctx.fillText(line, textX, ly);
+    }
+
+    ctx.restore();
   });
+
+  if (spacingSupported) {
+    spacingCtx.letterSpacing = '0px';
+  }
+}
+
+/** Heurística simple para decidir el color del contorno según el relleno. */
+function isLightColor(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return true;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6;
 }
 
 function roundRect(
@@ -105,6 +205,7 @@ export async function renderVisualCompositeToBlob(options: {
   flipHorizontal: boolean;
   edit: VisualImageEditJson;
 }): Promise<Blob> {
+  await loadEditorFonts();
   const img = await loadImageCrossOrigin(options.baseImageUrl);
   const w = img.naturalWidth;
   const h = img.naturalHeight;
@@ -145,6 +246,7 @@ export async function paintVisualCompositeOnCanvas(
     edit: VisualImageEditJson;
   },
 ): Promise<{ scale: number; width: number; height: number }> {
+  await loadEditorFonts();
   const img = await loadImageCrossOrigin(options.baseImageUrl);
   const w = img.naturalWidth;
   const h = img.naturalHeight;

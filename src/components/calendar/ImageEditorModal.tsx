@@ -5,7 +5,12 @@ import type { ContentItemVisual } from '@/types';
 import {
   createTextLayer,
   EMPTY_VISUAL_IMAGE_EDIT,
+  FONT_FAMILY_OPTIONS,
+  TEXT_STYLE_PRESETS,
   type ImageTextLayer,
+  type TextBackground,
+  type TextEffect,
+  type TextFontFamily,
   type VisualImageEditJson,
 } from '@/lib/visual-image-edit';
 import { getVisualImageEditState } from '@/lib/visual-image';
@@ -16,6 +21,13 @@ import {
 } from '@/lib/visual-image-canvas';
 
 const PRESET_COLORS = ['#ffffff', '#000000', '#fbbf24', '#ef4444', '#3b82f6', '#10b981'];
+
+/** Un preset está activo si la capa ya coincide con todos sus campos de estilo. */
+function isPresetActive(layer: ImageTextLayer, patch: Partial<ImageTextLayer>): boolean {
+  return (Object.keys(patch) as Array<keyof ImageTextLayer>).every(
+    key => layer[key] === patch[key],
+  );
+}
 
 interface ImageEditorModalProps {
   visual: ContentItemVisual;
@@ -86,6 +98,14 @@ export function ImageEditorModal({ visual, onClose, onSaved, onCleared }: ImageE
     setEdit(prev => ({ ...prev, texts: prev.texts.filter(t => t.id !== selectedId) }));
     setSelectedId(null);
   }, [selectedId]);
+
+  const applyStylePreset = useCallback(
+    (patch: Partial<ImageTextLayer>) => {
+      if (!selectedId) return;
+      updateLayer(selectedId, patch);
+    },
+    [selectedId, updateLayer],
+  );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -256,20 +276,82 @@ export function ImageEditorModal({ visual, onClose, onSaved, onCleared }: ImageE
               </button>
 
               {selectedLayer ? (
-                <div className="space-y-2 border-2 border-surface-200 p-2">
+                <div className="space-y-3 border-2 border-surface-200 p-2">
                   <p className="text-[10px] font-bold uppercase text-surface-500">Texto seleccionado</p>
                   <textarea
                     value={selectedLayer.text}
                     onChange={e => updateLayer(selectedLayer.id, { text: e.target.value })}
-                    rows={3}
+                    rows={2}
                     className="w-full text-sm border-2 border-surface-300 p-2 focus:border-brand-500 focus:outline-none"
                   />
+
+                  {/* Estilos rápidos tipo Instagram */}
+                  <div className="space-y-1">
+                    <span className="block text-[10px] font-bold uppercase text-surface-500">Estilos</span>
+                    <div className="flex flex-wrap gap-1">
+                      {TEXT_STYLE_PRESETS.map(preset => {
+                        const active = isPresetActive(selectedLayer, preset.patch);
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => applyStylePreset(preset.patch)}
+                            className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 border-2 transition-all ${
+                              active
+                                ? 'bg-surface-900 text-white border-surface-900'
+                                : 'bg-white text-surface-800 border-surface-300 hover:bg-surface-100'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tipografía */}
+                  <label className="block text-[10px] font-bold uppercase text-surface-600">
+                    Tipografía
+                    <select
+                      value={selectedLayer.fontFamily}
+                      onChange={e =>
+                        updateLayer(selectedLayer.id, {
+                          fontFamily: e.target.value as TextFontFamily,
+                        })
+                      }
+                      className="w-full text-xs border-2 border-surface-300 p-1.5 mt-1 normal-case font-normal"
+                    >
+                      {FONT_FAMILY_OPTIONS.map(f => (
+                        <option key={f.id} value={f.id}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {/* Efecto */}
+                  <label className="block text-[10px] font-bold uppercase text-surface-600">
+                    Efecto
+                    <select
+                      value={selectedLayer.effect}
+                      onChange={e =>
+                        updateLayer(selectedLayer.id, { effect: e.target.value as TextEffect })
+                      }
+                      className="w-full text-xs border-2 border-surface-300 p-1.5 mt-1 normal-case font-normal"
+                    >
+                      <option value="none">Ninguno</option>
+                      <option value="shadow">Sombra</option>
+                      <option value="outline">Contorno</option>
+                      <option value="neon">Neón</option>
+                    </select>
+                  </label>
+
                   <label className="block text-[10px] font-bold uppercase text-surface-600">
                     Tamaño
                     <input
                       type="range"
                       min={2}
-                      max={14}
+                      max={16}
                       value={Math.round(selectedLayer.fontSize * 100)}
                       onChange={e =>
                         updateLayer(selectedLayer.id, { fontSize: Number(e.target.value) / 100 })
@@ -277,59 +359,151 @@ export function ImageEditorModal({ visual, onClose, onSaved, onCleared }: ImageE
                       className="w-full mt-1"
                     />
                   </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRESET_COLORS.map(c => (
-                      <button
-                        key={c}
-                        type="button"
-                        title={c}
-                        onClick={() => updateLayer(selectedLayer.id, { color: c })}
-                        className={`w-7 h-7 rounded-full border-2 ${
-                          selectedLayer.color === c ? 'border-brand-600 ring-2 ring-brand-300' : 'border-surface-400'
-                        }`}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
-                  <label className="flex items-center gap-2 text-xs">
+
+                  <label className="block text-[10px] font-bold uppercase text-surface-600">
+                    Espaciado
                     <input
-                      type="checkbox"
-                      checked={selectedLayer.fontWeight === 'bold'}
+                      type="range"
+                      min={-2}
+                      max={20}
+                      value={Math.round(selectedLayer.letterSpacing * 100)}
                       onChange={e =>
+                        updateLayer(selectedLayer.id, { letterSpacing: Number(e.target.value) / 100 })
+                      }
+                      className="w-full mt-1"
+                    />
+                  </label>
+
+                  {/* Color del texto */}
+                  <div className="space-y-1">
+                    <span className="block text-[10px] font-bold uppercase text-surface-500">Color</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {PRESET_COLORS.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          title={c}
+                          onClick={() => updateLayer(selectedLayer.id, { color: c })}
+                          className={`w-7 h-7 rounded-full border-2 ${
+                            selectedLayer.color === c ? 'border-brand-600 ring-2 ring-brand-300' : 'border-surface-400'
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        value={selectedLayer.color}
+                        onChange={e => updateLayer(selectedLayer.id, { color: e.target.value })}
+                        className="w-7 h-7 p-0 border-2 border-surface-400 bg-white cursor-pointer"
+                        title="Color personalizado"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Estilo y alineación */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
                         updateLayer(selectedLayer.id, {
-                          fontWeight: e.target.checked ? 'bold' : 'normal',
+                          fontWeight: selectedLayer.fontWeight === 'bold' ? 'normal' : 'bold',
                         })
                       }
-                    />
-                    Negrita
-                  </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={selectedLayer.withBackground}
-                      onChange={e =>
-                        updateLayer(selectedLayer.id, { withBackground: e.target.checked })
+                      className={`text-xs font-bold px-2.5 py-1 border-2 ${
+                        selectedLayer.fontWeight === 'bold'
+                          ? 'bg-surface-900 text-white border-surface-900'
+                          : 'bg-white text-surface-800 border-surface-300'
+                      }`}
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateLayer(selectedLayer.id, { italic: !selectedLayer.italic })}
+                      className={`text-xs italic px-2.5 py-1 border-2 ${
+                        selectedLayer.italic
+                          ? 'bg-surface-900 text-white border-surface-900'
+                          : 'bg-white text-surface-800 border-surface-300'
+                      }`}
+                    >
+                      i
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateLayer(selectedLayer.id, { uppercase: !selectedLayer.uppercase })
                       }
-                    />
-                    Fondo detrás del texto
+                      className={`text-[10px] font-bold px-2.5 py-1 border-2 ${
+                        selectedLayer.uppercase
+                          ? 'bg-surface-900 text-white border-surface-900'
+                          : 'bg-white text-surface-800 border-surface-300'
+                      }`}
+                    >
+                      AA
+                    </button>
+                    {(['left', 'center', 'right'] as const).map(al => (
+                      <button
+                        key={al}
+                        type="button"
+                        onClick={() => updateLayer(selectedLayer.id, { align: al })}
+                        className={`text-[10px] font-bold uppercase px-2 py-1 border-2 ${
+                          selectedLayer.align === al
+                            ? 'bg-surface-900 text-white border-surface-900'
+                            : 'bg-white text-surface-800 border-surface-300'
+                        }`}
+                      >
+                        {al === 'left' ? '⟸' : al === 'center' ? '≡' : '⟹'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Fondo */}
+                  <label className="block text-[10px] font-bold uppercase text-surface-600">
+                    Fondo
+                    <select
+                      value={selectedLayer.background}
+                      onChange={e =>
+                        updateLayer(selectedLayer.id, {
+                          background: e.target.value as TextBackground,
+                        })
+                      }
+                      className="w-full text-xs border-2 border-surface-300 p-1.5 mt-1 normal-case font-normal"
+                    >
+                      <option value="none">Sin fondo</option>
+                      <option value="translucent">Translúcido</option>
+                      <option value="solid">Color sólido</option>
+                    </select>
                   </label>
-                  <select
-                    value={selectedLayer.align}
-                    onChange={e =>
-                      updateLayer(selectedLayer.id, {
-                        align: e.target.value as ImageTextLayer['align'],
-                      })
-                    }
-                    className="w-full text-xs border-2 border-surface-300 p-1.5"
-                  >
-                    <option value="left">Izquierda</option>
-                    <option value="center">Centro</option>
-                    <option value="right">Derecha</option>
-                  </select>
+                  {selectedLayer.background === 'solid' && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {PRESET_COLORS.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          title={c}
+                          onClick={() => updateLayer(selectedLayer.id, { backgroundColor: c })}
+                          className={`w-6 h-6 rounded-full border-2 ${
+                            selectedLayer.backgroundColor === c ? 'border-brand-600 ring-2 ring-brand-300' : 'border-surface-400'
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        value={selectedLayer.backgroundColor}
+                        onChange={e =>
+                          updateLayer(selectedLayer.id, { backgroundColor: e.target.value })
+                        }
+                        className="w-6 h-6 p-0 border-2 border-surface-400 bg-white cursor-pointer"
+                        title="Color de fondo personalizado"
+                      />
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={removeSelected}
-                    className="w-full text-[10px] font-bold uppercase text-red-700 hover:underline"
+                    className="w-full text-[10px] font-bold uppercase text-red-700 hover:underline pt-1"
                   >
                     Eliminar capa
                   </button>
