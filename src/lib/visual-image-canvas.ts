@@ -11,7 +11,7 @@ function loadImageCrossOrigin(url: string): Promise<HTMLImageElement> {
 }
 
 /** Stack tipográfico real por familia (con fallbacks del sistema). */
-const FONT_STACKS: Record<TextFontFamily, string> = {
+export const FONT_STACKS: Record<TextFontFamily, string> = {
   sans: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
   serif: '"Playfair Display", Georgia, "Times New Roman", serif',
   mono: '"Courier New", ui-monospace, "Cascadia Mono", monospace',
