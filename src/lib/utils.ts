@@ -111,7 +111,72 @@ export async function imageBlobFlippedHorizontally(imageBlob: Blob): Promise<Blo
 export type DownloadImageFromUrlOptions = { flipHorizontal?: boolean };
 
 /**
+ * Detecta iOS (iPhone/iPad), incluido el iPad que se identifica como Mac con pantalla táctil.
+ * En iOS el atributo `<a download>` no guarda en el Carrete; hay que usar el menú nativo de compartir.
+ */
+export function isIosDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isIphoneIpad = /iPad|iPhone|iPod/.test(ua);
+  const isIpadOnMacUa = /Macintosh/.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document;
+  return isIphoneIpad || isIpadOnMacUa;
+}
+
+/**
+ * Guarda el blob mediante el menú nativo de compartir (Web Share API con archivos).
+ * En iOS esto muestra la opción «Guardar imagen», que va directamente al Carrete de Fotos.
+ * Devuelve `true` si se pudo abrir el menú de compartir.
+ */
+async function shareBlobAsFile(blob: Blob, filename: string): Promise<boolean> {
+  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+  try {
+    const file = new File([blob], filename, { type: blob.type || 'image/png' });
+    const navAny = navigator as Navigator & {
+      canShare?: (data?: { files?: File[] }) => boolean;
+    };
+    if (typeof navAny.canShare === 'function' && !navAny.canShare({ files: [file] })) {
+      return false;
+    }
+    await navigator.share({ files: [file] });
+    return true;
+  } catch (err) {
+    // Si el usuario cancela el menú de compartir, no caemos al fallback de descarga.
+    if (err instanceof DOMException && err.name === 'AbortError') return true;
+    return false;
+  }
+}
+
+/**
+ * Comparte varias imágenes a la vez mediante el menú nativo (Web Share API con archivos).
+ * En iOS muestra «Guardar N imágenes», que las añade todas al Carrete de Fotos en orden.
+ * Devuelve `true` si se pudo abrir el menú de compartir.
+ */
+export async function shareImageBlobsToPhotos(
+  files: { blob: Blob; filename: string }[],
+): Promise<boolean> {
+  if (files.length === 0) return false;
+  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+  try {
+    const fileObjects = files.map(
+      ({ blob, filename }) => new File([blob], filename, { type: blob.type || 'image/png' }),
+    );
+    const navAny = navigator as Navigator & {
+      canShare?: (data?: { files?: File[] }) => boolean;
+    };
+    if (typeof navAny.canShare === 'function' && !navAny.canShare({ files: fileObjects })) {
+      return false;
+    }
+    await navigator.share({ files: fileObjects });
+    return true;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return true;
+    return false;
+  }
+}
+
+/**
  * Descarga una imagen desde URL. Con `flipHorizontal`, el archivo coincide con la vista en espejo (exporta PNG).
+ * En iPhone/iPad usa el menú nativo de compartir para poder guardar en el Carrete de Fotos.
  */
 export async function downloadImageFromUrl(
   url: string,
@@ -133,6 +198,12 @@ export async function downloadImageFromUrl(
         }
       }
     }
+
+    if (isIosDevice()) {
+      const shared = await shareBlobAsFile(outBlob, outFilename);
+      if (shared) return;
+    }
+
     const blobUrl = URL.createObjectURL(outBlob);
     const a = document.createElement('a');
     a.href = blobUrl;

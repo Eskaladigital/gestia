@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
-import { downloadImageFromUrl, imageBlobFlippedHorizontally } from '@/lib/utils';
+import { downloadImageFromUrl, imageBlobFlippedHorizontally, isIosDevice, shareImageBlobsToPhotos } from '@/lib/utils';
 import {
   getVisualDisplayUrl,
   getVisualDownloadParams,
@@ -461,8 +461,8 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
 
     setDownloadingZip(true);
     try {
-      const zip = new JSZip();
       const usedNames = new Set<string>();
+      const collected: { blob: Blob; filename: string }[] = [];
 
       for (const visual of allReady) {
         const parentItem = itemsById[visual.content_item_id];
@@ -484,12 +484,25 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
             const flipped = await imageBlobFlippedHorizontally(blob);
             if (flipped) blob = flipped;
           }
-          zip.file(filename, blob);
+          collected.push({ blob, filename });
         } catch {
           // skip failed downloads
         }
       }
 
+      if (collected.length === 0) return;
+
+      // En iPhone/iPad: compartir todas las imágenes a la vez para guardarlas en el Carrete (Fotos).
+      if (isIosDevice()) {
+        const shared = await shareImageBlobsToPhotos(collected);
+        if (shared) return;
+      }
+
+      // En escritorio (y como fallback): un único ZIP con todas las imágenes.
+      const zip = new JSZip();
+      for (const { blob, filename } of collected) {
+        zip.file(filename, blob);
+      }
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
