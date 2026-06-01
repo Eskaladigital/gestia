@@ -122,50 +122,54 @@ export function isIosDevice(): boolean {
   return isIphoneIpad || isIpadOnMacUa;
 }
 
+/** iPhone, iPad o Android — en móvil nunca usamos ZIP para imágenes. */
+export function isMobileDevice(): boolean {
+  if (isIosDevice()) return true;
+  if (typeof navigator === 'undefined') return false;
+  return /Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+}
+
+function blobToShareFile(blob: Blob, filename: string): File {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  let type = blob.type;
+  if (!type || type === 'application/octet-stream') {
+    if (ext === 'jpg' || ext === 'jpeg') type = 'image/jpeg';
+    else if (ext === 'webp') type = 'image/webp';
+    else type = 'image/png';
+  }
+  return new File([blob], filename, { type });
+}
+
 /**
- * Guarda el blob mediante el menú nativo de compartir (Web Share API con archivos).
- * En iOS esto muestra la opción «Guardar imagen», que va directamente al Carrete de Fotos.
- * Devuelve `true` si se pudo abrir el menú de compartir.
+ * Guarda una imagen mediante el menú nativo de compartir (Web Share API).
+ * En iOS muestra «Guardar imagen» → Carrete de Fotos.
  */
-async function shareBlobAsFile(blob: Blob, filename: string): Promise<boolean> {
+export async function shareImageBlobToPhotos(blob: Blob, filename: string): Promise<boolean> {
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
   try {
-    const file = new File([blob], filename, { type: blob.type || 'image/png' });
-    const navAny = navigator as Navigator & {
-      canShare?: (data?: { files?: File[] }) => boolean;
-    };
-    if (typeof navAny.canShare === 'function' && !navAny.canShare({ files: [file] })) {
-      return false;
-    }
+    const file = blobToShareFile(blob, filename);
     await navigator.share({ files: [file] });
     return true;
   } catch (err) {
-    // Si el usuario cancela el menú de compartir, no caemos al fallback de descarga.
     if (err instanceof DOMException && err.name === 'AbortError') return true;
     return false;
   }
 }
 
 /**
- * Comparte varias imágenes a la vez mediante el menú nativo (Web Share API con archivos).
- * En iOS muestra «Guardar N imágenes», que las añade todas al Carrete de Fotos en orden.
- * Devuelve `true` si se pudo abrir el menú de compartir.
+ * Comparte varias imágenes a la vez (Web Share API con archivos).
+ * En iOS muestra «Guardar N imágenes» en un solo paso.
  */
 export async function shareImageBlobsToPhotos(
   files: { blob: Blob; filename: string }[],
 ): Promise<boolean> {
   if (files.length === 0) return false;
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+  if (files.length === 1) {
+    return shareImageBlobToPhotos(files[0].blob, files[0].filename);
+  }
   try {
-    const fileObjects = files.map(
-      ({ blob, filename }) => new File([blob], filename, { type: blob.type || 'image/png' }),
-    );
-    const navAny = navigator as Navigator & {
-      canShare?: (data?: { files?: File[] }) => boolean;
-    };
-    if (typeof navAny.canShare === 'function' && !navAny.canShare({ files: fileObjects })) {
-      return false;
-    }
+    const fileObjects = files.map(({ blob, filename }) => blobToShareFile(blob, filename));
     await navigator.share({ files: fileObjects });
     return true;
   } catch (err) {
@@ -199,8 +203,8 @@ export async function downloadImageFromUrl(
       }
     }
 
-    if (isIosDevice()) {
-      const shared = await shareBlobAsFile(outBlob, outFilename);
+    if (isMobileDevice()) {
+      const shared = await shareImageBlobToPhotos(outBlob, outFilename);
       if (shared) return;
     }
 

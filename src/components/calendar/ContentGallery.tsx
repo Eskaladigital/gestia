@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
-import { downloadImageFromUrl, imageBlobFlippedHorizontally, isIosDevice, shareImageBlobsToPhotos } from '@/lib/utils';
+import { downloadImageFromUrl, imageBlobFlippedHorizontally, isMobileDevice, shareImageBlobToPhotos } from '@/lib/utils';
 import {
   getVisualDisplayUrl,
   getVisualDownloadParams,
@@ -104,6 +104,9 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     contentItemId: string;
   } | null>(null);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [mobileSaveQueue, setMobileSaveQueue] = useState<{ blob: Blob; filename: string }[] | null>(null);
+  const [mobileSaveIndex, setMobileSaveIndex] = useState(0);
+  const [mobileSavePreviewUrl, setMobileSavePreviewUrl] = useState<string | null>(null);
   const [reportModal, setReportModal] = useState<{
     visualId: string;
     contentItemId: string;
@@ -492,13 +495,14 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
 
       if (collected.length === 0) return;
 
-      // En iPhone/iPad: compartir todas las imágenes a la vez para guardarlas en el Carrete (Fotos).
-      if (isIosDevice()) {
-        const shared = await shareImageBlobsToPhotos(collected);
-        if (shared) return;
+      // En móvil: guardar una a una en el Carrete (Fotos), nunca ZIP.
+      if (isMobileDevice()) {
+        setMobileSaveIndex(0);
+        setMobileSaveQueue(collected);
+        return;
       }
 
-      // En escritorio (y como fallback): un único ZIP con todas las imágenes.
+      // En escritorio: un único ZIP con todas las imágenes.
       const zip = new JSZip();
       for (const { blob, filename } of collected) {
         zip.file(filename, blob);
@@ -516,6 +520,36 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
       setDownloadingZip(false);
     }
   }, [monthVisuals, itemsById, projectId]);
+
+  useEffect(() => {
+    if (!mobileSaveQueue?.length) {
+      setMobileSavePreviewUrl(null);
+      return;
+    }
+    const item = mobileSaveQueue[mobileSaveIndex];
+    if (!item) return;
+    const url = URL.createObjectURL(item.blob);
+    setMobileSavePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [mobileSaveQueue, mobileSaveIndex]);
+
+  const closeMobileSaveQueue = useCallback(() => {
+    setMobileSaveQueue(null);
+    setMobileSaveIndex(0);
+  }, []);
+
+  const handleMobileSaveCurrent = useCallback(async () => {
+    if (!mobileSaveQueue?.length) return;
+    const item = mobileSaveQueue[mobileSaveIndex];
+    if (!item) return;
+    const ok = await shareImageBlobToPhotos(item.blob, item.filename);
+    if (!ok) return;
+    if (mobileSaveIndex + 1 >= mobileSaveQueue.length) {
+      closeMobileSaveQueue();
+      return;
+    }
+    setMobileSaveIndex(prev => prev + 1);
+  }, [mobileSaveQueue, mobileSaveIndex, closeMobileSaveQueue]);
 
   const lightboxVisual = useMemo(() => {
     if (!lightbox) return null;
@@ -637,7 +671,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
               disabled={downloadingZip}
               className="text-[10px] font-bold uppercase tracking-wider text-white bg-surface-900 border-2 border-surface-900 px-3 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 disabled:cursor-wait"
             >
-              {downloadingZip ? 'Descargando…' : `Descargar todas (${readyCount})`}
+              {downloadingZip ? 'Preparando…' : isMobileDevice() ? `Guardar en Fotos (${readyCount})` : `Descargar todas (${readyCount})`}
             </button>
           )}
         </div>
@@ -736,7 +770,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                         return (
                           <div key={visual.id} className="border-2 border-surface-900 bg-white overflow-hidden">
                             {/* Visual label + actions */}
-                            <div className="flex items-center justify-between bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-surface-700">
                                   {visual.label || `Visual ${visual.visual_index + 1}`}
@@ -751,7 +785,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                   <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
                                 )}
                               </div>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => handleCopy(visual.visual_prompt, visual.id)}
@@ -1196,6 +1230,62 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                   {savingReport ? 'Guardando…' : 'Guardar reporte'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mobileSaveQueue && mobileSaveQueue.length > 0 && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm border-2 border-surface-900 bg-white shadow-brutal p-4 space-y-4">
+            <div className="space-y-1">
+              <p className="text-xs font-bold uppercase tracking-widest text-surface-900">
+                Guardar en Fotos
+              </p>
+              <p className="text-sm text-surface-600">
+                Imagen {mobileSaveIndex + 1} de {mobileSaveQueue.length}
+              </p>
+              <p className="text-[11px] text-surface-500">
+                Pulsa el botón, elige «Guardar imagen» y repite hasta terminar. En iPhone no se puede guardar un ZIP en el Carrete.
+              </p>
+            </div>
+            {mobileSavePreviewUrl && (
+              <div className="border-2 border-surface-200 bg-surface-50 overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={mobileSavePreviewUrl}
+                  alt={mobileSaveQueue[mobileSaveIndex]?.filename ?? 'Vista previa'}
+                  className="w-full max-h-48 object-contain"
+                />
+              </div>
+            )}
+            <p className="text-[10px] font-mono text-surface-500 truncate">
+              {mobileSaveQueue[mobileSaveIndex]?.filename}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleMobileSaveCurrent()}
+                className="flex-1 text-[11px] font-bold uppercase tracking-wider border-2 border-surface-900 bg-surface-900 text-white px-3 py-2 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+              >
+                Guardar esta imagen
+              </button>
+              {mobileSaveIndex + 1 < mobileSaveQueue.length && (
+                <button
+                  type="button"
+                  onClick={() => setMobileSaveIndex(prev => prev + 1)}
+                  className="text-[11px] font-bold uppercase tracking-wider border-2 border-surface-900 bg-white text-surface-900 px-3 py-2"
+                >
+                  Saltar
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={closeMobileSaveQueue}
+                className="text-[11px] font-bold uppercase tracking-wider border-2 border-surface-900 bg-white text-surface-900 px-3 py-2"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
