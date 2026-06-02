@@ -65,13 +65,13 @@ const GRID_DENSITY_CONFIG: Record<
     label: 'Mediana',
     cols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
     gap: 'gap-3',
-    singleMaxW: 'max-w-3xl',
+    singleMaxW: 'max-w-xs',
   },
   small: {
     label: 'Pequeña',
     cols: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
     gap: 'gap-2',
-    singleMaxW: 'max-w-full',
+    singleMaxW: 'max-w-[180px]',
   },
 };
 
