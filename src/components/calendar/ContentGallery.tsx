@@ -88,14 +88,14 @@ function gridStorageKey(projectId: string) {
 }
 
 function readStoredGridDensity(projectId: string): GridDensity {
-  if (typeof window === 'undefined') return 'large';
+  if (typeof window === 'undefined') return 'small';
   try {
     const v = localStorage.getItem(gridStorageKey(projectId));
     if (v === 'medium' || v === 'small' || v === 'large') return v;
   } catch {
     /* quota / modo privado */
   }
-  return 'large';
+  return 'small';
 }
 
 /**
