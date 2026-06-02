@@ -535,9 +535,14 @@ export async function POST(request: NextRequest) {
 
     // === QA visual de fidelidad ===
     // Solo cuando hay un producto anclado. Comparamos la imagen generada con la
-    // foto real del producto (solo identidad, no escena). Si falla claramente,
-    // hacemos UN reintento centrado en la fidelidad (solo refs de producto +
-    // las violaciones como correcciones), y nos quedamos con la mejor versión.
+    // foto real del producto (solo identidad, no escena). Es informativo: la
+    // puntuación se devuelve al cliente pero NO regeneramos por defecto.
+    //
+    // El reintento automático (otra generación HIGH completa, ~2 min) duplicaba
+    // la latencia y empujaba la petición cerca del límite de 300 s de Vercel,
+    // provocando timeouts. Queda detrás de IMAGE_FIDELITY_AUTO_RETRY=true para
+    // quien priorice fidelidad sobre velocidad.
+    const AUTO_RETRY_FIDELITY = process.env.IMAGE_FIDELITY_AUTO_RETRY === 'true';
     let fidelity: ProductFidelityResult | null = null;
     if (productAnchor) {
       fidelity = await assessProductFidelity({
@@ -550,10 +555,11 @@ export async function POST(request: NextRequest) {
         },
       });
       console.log(
-        `[generate-image] ${visual_id}: fidelidad inicial = ${fidelity ? `${fidelity.score} (${fidelity.verdict})` : 'n/d'}`
+        `[generate-image] ${visual_id}: fidelidad inicial = ${fidelity ? `${fidelity.score} (${fidelity.verdict})` : 'n/d'}` +
+        (AUTO_RETRY_FIDELITY ? '' : ' (auto-retry desactivado)')
       );
 
-      if (fidelity && fidelity.verdict === 'fail') {
+      if (AUTO_RETRY_FIDELITY && fidelity && fidelity.verdict === 'fail') {
         const violationsText = fidelity.violations.length
           ? fidelity.violations.map(v => `- ${v}`).join('\n')
           : '- El producto generado no coincide con el producto real de las referencias.';
