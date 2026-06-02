@@ -850,6 +850,18 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                 const typeCfg = item.content_type ? TYPE_LABELS[item.content_type] : null;
                 const postPending = visuals.filter(v => v.image_status !== 'ready' || !v.image_url);
 
+                const captionBody = [item.copy?.trim(), item.cta?.trim()]
+                  .filter(Boolean)
+                  .join('\n\n');
+                const hashtagsText =
+                  item.hashtags && item.hashtags.length > 0
+                    ? item.hashtags.map(h => (h.startsWith('#') ? h : `#${h}`)).join(' ')
+                    : '';
+                const fullCaption = [captionBody, hashtagsText].filter(Boolean).join('\n\n');
+                const hasCaption = fullCaption.length > 0;
+                const captionKey = `caption-${item.id}`;
+                const captionExpanded = expandedPrompts.has(captionKey);
+
                 return (
                   <div key={item.id} className="p-4">
                     {/* Post header */}
@@ -885,6 +897,49 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                         </button>
                       )}
                     </div>
+
+                    {/* Texto para redes (copy del post, una vez por publicación) */}
+                    {hasCaption && (
+                      <div className="mb-4 border-2 border-surface-900 bg-white">
+                        <div className="flex items-center justify-between gap-2 bg-amber-50 border-b-2 border-surface-900 px-3 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() => togglePrompt(captionKey)}
+                            className="text-[10px] font-bold uppercase tracking-widest text-surface-700 flex items-center gap-1"
+                          >
+                            📝 Texto para redes {captionExpanded ? '▲' : '▼'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(fullCaption, captionKey)}
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
+                              copiedId === captionKey
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-white text-surface-900 hover:bg-surface-100'
+                            }`}
+                          >
+                            {copiedId === captionKey ? 'Copiado' : 'Copiar texto'}
+                          </button>
+                        </div>
+                        <div className="px-3 py-2 space-y-2">
+                          {captionBody && (
+                            <p
+                              className={`text-xs text-surface-800 leading-relaxed whitespace-pre-wrap cursor-pointer ${
+                                captionExpanded ? '' : 'line-clamp-3'
+                              }`}
+                              onClick={() => togglePrompt(captionKey)}
+                            >
+                              {captionBody}
+                            </p>
+                          )}
+                          {hashtagsText && (
+                            <p className="text-[11px] font-semibold text-brand-600 leading-relaxed break-words">
+                              {hashtagsText}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Visuals grid */}
                     <div className={visualsGridClass(gridDensity)}>
