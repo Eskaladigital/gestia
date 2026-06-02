@@ -65,6 +65,14 @@ export function countReferenceImagesNeedingReanalysis(images: ProjectReferenceIm
   return images.filter(referenceImageNeedsReanalysis).length;
 }
 
+export function countProductReferenceImages(images: ProjectReferenceImage[]): number {
+  return images.filter(image => image.reference_role === 'product').length;
+}
+
+export function projectHasProductReferences(images: ProjectReferenceImage[]): boolean {
+  return countProductReferenceImages(images) > 0;
+}
+
 export const NORMALIZED_REFERENCE_MIME = 'image/png';
 export const NORMALIZED_REFERENCE_EXTENSION = 'png';
 export const MAX_REFERENCE_IMAGE_DIMENSION = 2048;

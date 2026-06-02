@@ -288,7 +288,8 @@ export function buildPhysicalConstraintsBlock(project: Project): string {
     '## REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES (verdad ineludible — no contradigas)',
     text,
     '',
-    'Estas reglas describen la realidad física e identitaria del producto del cliente. Acabados, luz, color, hora, ángulo y tipo de plano son libres; la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos NO. PROHIBIDO inventar adyacencias, distribuciones, logos, colores corporativos o sujetos que contradigan lo anterior.',
+    'Estas reglas las genera la app desde las fotos de producto; tienen prioridad sobre cualquier «Reglas IA» del cliente (piscina, atardecer, estilo viral, etc.). Esas ideas creativas solo pueden añadir escena o ambiente, NUNCA cambiar la forma del producto.',
+    'Acabados, luz, color, hora, ángulo y tipo de plano son libres; la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos NO. PROHIBIDO inventar adyacencias, distribuciones, logos, colores corporativos o sujetos que contradigan lo anterior.',
   ].join('\n');
 }
 

@@ -6,6 +6,8 @@
  *   npx tsx scripts/reanalyze-reference-images.ts
  *   npx tsx scripts/reanalyze-reference-images.ts --project-name=Nine Waves
  *   npx tsx scripts/reanalyze-reference-images.ts --project-id=<uuid>
+ *   npm run references:reanalyze -- --sync-only
+ *   npm run references:reanalyze -- --sync-only --project-name=Furgocasa
  *
  * Requiere en .env.local:
  *   NEXT_PUBLIC_SUPABASE_URL
@@ -20,9 +22,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
+import { countProductReferenceImages } from '../src/lib/projects/reference-images-shared';
 import {
   countReferenceImagesNeedingReanalysis,
+  listProjectReferenceImages,
   reanalyzeProjectReferenceImages,
+  resolveOpenAIKeyForUser,
+  syncProjectPhysicalConstraintsFromReferences,
 } from '../src/lib/projects/reference-images';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -119,6 +125,7 @@ async function main() {
 
   await testSupabaseConnection(url, serviceKey);
 
+  const syncOnly = process.argv.includes('--sync-only');
   const projectIdArg = getArg('project-id');
   const projectNameArg = getArg('project-name');
 
@@ -126,17 +133,21 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  let projectQuery = service.from('projects').select('id, name, user_id, physical_constraints');
+  let projectQuery = service.from('projects').select('id, name, user_id, sector, description, physical_constraints');
   if (projectIdArg) {
     projectQuery = projectQuery.eq('id', projectIdArg);
   } else if (projectNameArg) {
     projectQuery = projectQuery.ilike('name', projectNameArg);
+  } else if (syncOnly) {
+    projectQuery = projectQuery.or('name.ilike.%Furgocasa%,name.ilike.%Nine Waves%');
   }
 
   let projects: Array<{
     id: string;
     name: string;
     user_id: string;
+    sector: string | null;
+    description: string | null;
     physical_constraints: string | null;
   }> | null = null;
   try {
@@ -152,6 +163,61 @@ async function main() {
   }
   if (!projects?.length) {
     console.log('No se encontraron proyectos.');
+    return;
+  }
+
+  if (syncOnly) {
+    let synced = 0;
+    for (const project of projects) {
+      const refs = await listProjectReferenceImages(service, project.id);
+      const productCount = countProductReferenceImages(refs);
+      console.log(`[${project.name}] ${refs.length} referencias, ${productCount} producto.`);
+      if (productCount === 0) {
+        console.log(`[${project.name}] Sin fotos de producto — omitido.`);
+        continue;
+      }
+      const apiKey = await resolveOpenAIKeyForUser(service, project.user_id);
+      if (!apiKey) {
+        console.error(`[${project.name}] ✗ Sin OPENAI_API_KEY ni provider_api_keys.`);
+        continue;
+      }
+      const beforeLen = (project.physical_constraints || '').length;
+      try {
+        const ok = await syncProjectPhysicalConstraintsFromReferences({
+          service,
+          project: {
+            id: project.id,
+            name: project.name,
+            sector: project.sector,
+            description: project.description,
+            physical_constraints: project.physical_constraints,
+          },
+          referenceImages: refs,
+          apiKey,
+        });
+        if (!ok) {
+          console.warn(`[${project.name}] sync no actualizó (¿INSUFICIENTE o migración 025?).`);
+          continue;
+        }
+        const { data: row } = await service
+          .from('projects')
+          .select('physical_constraints, physical_constraints_at')
+          .eq('id', project.id)
+          .single();
+        const afterLen = (row?.physical_constraints || '').length;
+        synced += 1;
+        console.log(
+          `[${project.name}] ✓ Reglas regeneradas (${beforeLen} → ${afterLen} chars, ${row?.physical_constraints_at || 'sin fecha'}).`
+        );
+        if (row?.physical_constraints) {
+          console.log('--- Vista previa (400 chars) ---');
+          console.log(String(row.physical_constraints).slice(0, 400) + (afterLen > 400 ? '…' : ''));
+        }
+      } catch (err) {
+        console.error(`[${project.name}] ✗`, (err as Error).message);
+      }
+    }
+    console.log(`\nProyectos con reglas regeneradas: ${synced}/${projects.length}`);
     return;
   }
 
@@ -181,6 +247,9 @@ async function main() {
         userId: project.user_id as string,
         project: {
           id: project.id,
+          name: project.name as string,
+          sector: (project.sector as string | null) ?? null,
+          description: (project.description as string | null) ?? null,
           physical_constraints: project.physical_constraints as string | null,
         },
       });

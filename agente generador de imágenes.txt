@@ -1,6 +1,15 @@
 AGENTE GENERADOR DE IMAGENES
 Version exportable del flujo de Retiru
 
+NOTA GESTIA RRSS (junio 2026)
+En este repositorio, el pipeline de imagenes del calendario esta integrado en Next.js
+(POST /api/generate-image). Ademas del dossier y prompts visuales, GestIA aplica:
+- Referencias clasificadas por rol (migracion 028): product / style / place / ...
+- Reglas fisicas automaticas (physical_constraints) desde fotos de producto
+- Reglas IA blandas (ai_rules) subordinadas a la fidelidad del producto
+- QA de fidelidad post-generacion con un reintento
+Documentacion viva: README.md en la raiz del repo.
+
 OBJETIVO
 
 Este documento describe exactamente el flujo que ha dado el salto de calidad en Retiru para generar portadas realmente fotograficas y no "dibujitos" o renders con look IA.

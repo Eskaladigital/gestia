@@ -15,8 +15,6 @@ import {
 interface ProjectReferenceImagesCardProps {
   projectId: string;
   initialImages: ProjectReferenceImage[];
-  /** Si el proyecto ya tiene reglas físicas guardadas, para avisar antes de reemplazarlas. */
-  hasPhysicalConstraints?: boolean;
 }
 
 async function readApiError(res: Response): Promise<string> {
@@ -33,7 +31,6 @@ async function readApiError(res: Response): Promise<string> {
 export function ProjectReferenceImagesCard({
   projectId,
   initialImages,
-  hasPhysicalConstraints = false,
 }: ProjectReferenceImagesCardProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -44,7 +41,6 @@ export function ProjectReferenceImagesCard({
   const [editingCaptionId, setEditingCaptionId] = useState<string | null>(null);
   const [captionBusyId, setCaptionBusyId] = useState<string | null>(null);
   const [bulkCaptioning, setBulkCaptioning] = useState(false);
-  const [generatingRules, setGeneratingRules] = useState(false);
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [autoAnalyzing, setAutoAnalyzing] = useState(false);
   const autoReanalyzeStarted = useRef(false);
@@ -138,80 +134,6 @@ export function ProjectReferenceImagesCard({
       setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error generando descripciones' });
     } finally {
       setBulkCaptioning(false);
-    }
-  }
-
-  // Herramienta de un clic: mira las fotos de referencia y redacta + guarda las
-  // "Reglas físicas e identitarias inviolables" del proyecto. Encadena tres pasos
-  // que antes eran manuales: (1) generar las descripciones IA pendientes de las
-  // fotos, (2) pedir al modelo que redacte las reglas mirando esas fotos, (3)
-  // guardarlas en el proyecto. El usuario las verá y podrá editarlas en Ajustes.
-  async function generatePhysicalConstraints() {
-    if (initialImages.length === 0) return;
-    const overwriteNote = hasPhysicalConstraints
-      ? 'El proyecto YA tiene reglas físicas guardadas y se REEMPLAZARÁN por unas nuevas. '
-      : '';
-    const ok = window.confirm(
-      `${overwriteNote}La IA mirará las fotos de referencia, redactará las "Reglas físicas e identitarias inviolables del producto" y las guardará en los Ajustes del proyecto. ¿Continuar?`
-    );
-    if (!ok) return;
-
-    setGeneratingRules(true);
-    setMessage(null);
-    try {
-      // 1) Asegurar que todas las fotos tienen descripción IA (alimenta la redacción).
-      if (pendingCaptionCount > 0) {
-        const capRes = await fetch(`/api/projects/${projectId}/reference-images`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ regenerateAllPending: true }),
-        });
-        if (!capRes.ok) throw new Error(await readApiError(capRes));
-      }
-
-      // 2) Redactar las reglas mirando el dossier + las fotos.
-      const sugRes = await fetch(`/api/projects/${projectId}/suggest-physical-constraints`, {
-        method: 'POST',
-      });
-      const sugData = (await sugRes.json().catch(() => ({}))) as {
-        error?: string;
-        suggestion?: string;
-        insufficient?: boolean;
-        message?: string;
-      };
-      if (!sugRes.ok) throw new Error(sugData.error || 'Error generando las reglas físicas');
-      if (sugData.insufficient) {
-        throw new Error(
-          sugData.message ||
-            'No hay suficiente información en las fotos para escribir reglas. Sube más imágenes reales del producto (interior, exterior, detalle) y vuelve a intentarlo.'
-        );
-      }
-      const suggestion = (sugData.suggestion || '').trim();
-      if (!suggestion) throw new Error('La IA no devolvió ninguna regla.');
-
-      // 3) Guardar las reglas en el proyecto (guardado parcial: solo este campo).
-      const saveRes = await fetch(`/api/projects/${projectId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ physical_constraints: suggestion }),
-      });
-      const saveData = (await saveRes.json().catch(() => ({}))) as { error?: string; warning?: string };
-      if (!saveRes.ok) throw new Error(saveData.error || 'Error guardando las reglas');
-
-      setMessage({
-        type: 'ok',
-        text: saveData.warning
-          ? `Reglas generadas, pero: ${saveData.warning}`
-          : 'Reglas físicas generadas desde las fotos y guardadas. Revísalas y ajústalas en "Ajustes del proyecto".',
-      });
-      router.refresh();
-    } catch (error: unknown) {
-      setMessage({
-        type: 'err',
-        text: error instanceof Error ? error.message : 'Error generando las reglas físicas',
-      });
-    } finally {
-      setGeneratingRules(false);
     }
   }
 
@@ -365,17 +287,6 @@ export function ProjectReferenceImagesCard({
               Reclasificar {pendingCaptionCount} imagen{pendingCaptionCount === 1 ? '' : 'es'}
             </Button>
           )}
-          {initialImages.length > 0 && (
-            <Button
-              variant="success"
-              size="md"
-              onClick={() => void generatePhysicalConstraints()}
-              loading={generatingRules}
-              disabled={uploading || bulkCaptioning}
-            >
-              ✨ Generar reglas físicas con IA
-            </Button>
-          )}
           <Button
             onClick={() => inputRef.current?.click()}
             loading={uploading}
@@ -402,8 +313,9 @@ export function ProjectReferenceImagesCard({
             Al subir cada imagen, la IA la clasifica automáticamente por <strong>tipo</strong>: las marcadas como
             <strong> Producto</strong> se reproducen con fidelidad total y las de <strong>Estilo</strong> o
             <strong> Lugar</strong> solo inspiran ambiente. Si la IA se equivoca, corrige el tipo en el desplegable de
-            cada foto. En cuanto detecta producto, redacta y guarda solas las <strong>reglas físicas e identitarias
-            inviolables</strong>; con <strong>«✨ Generar reglas físicas con IA»</strong> puedes regenerarlas a mano.
+            cada foto. Con fotos de <strong>Producto</strong>, la app redacta y actualiza sola las{' '}
+            <strong>reglas físicas inviolables</strong> (visibles en Ajustes, solo lectura). Los deseos creativos del
+            cliente van en <strong>Reglas IA</strong> y no cambian la forma del producto.
           </p>
           <div className="flex flex-wrap gap-2 mt-3 text-[10px] font-bold uppercase tracking-wider">
             <span className="border-2 border-surface-900 px-2 py-1 bg-white">

@@ -20,6 +20,7 @@ import {
   type StrategyForPipeline,
 } from '@/lib/projects/pipeline';
 import { listProjectReferenceImages } from '@/lib/projects/reference-images';
+import { projectHasProductReferences } from '@/lib/projects/reference-images-shared';
 
 /** Datos del paso «Analizar web»: JSON guardado y/o columnas de estrategia (analyze-site escribe ambos). */
 function mergeWebSiteAnalysis(
@@ -283,12 +284,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </div>
       )}
 
-      <ProjectSettingsPanel projectId={id} initial={settingsInitial} />
+      <ProjectSettingsPanel
+        projectId={id}
+        initial={settingsInitial}
+        productFidelityManaged={projectHasProductReferences(referenceImages as ProjectReferenceImage[])}
+      />
 
       <ProjectReferenceImagesCard
         projectId={id}
         initialImages={referenceImages as ProjectReferenceImage[]}
-        hasPhysicalConstraints={Boolean(project.physical_constraints)}
       />
 
       {/* Action buttons — incluye identidad visual como paso 1 */}

@@ -186,9 +186,7 @@ export async function POST(
         );
         imagesAfterUpsert = await listProjectReferenceImages(service, id);
 
-        // Auto-reglas físicas: si ahora hay fotos de producto y el proyecto aún
-        // no tiene reglas escritas, las redactamos y guardamos solas (sin pisar
-        // nada manual). Así el cliente no tiene que pulsar ningún botón.
+        // Reglas físicas: la app las regenera siempre a partir de fotos de producto.
         try {
           await syncProjectPhysicalConstraintsFromReferences({
             service,
@@ -386,8 +384,7 @@ export async function PATCH(
 
     const images = await listProjectReferenceImages(service, id);
 
-    // Si cambió el rol o se regeneró un caption, recalculamos las reglas físicas
-    // automáticas (solo afecta si hay producto y no se ha tocado a mano).
+    // Si cambió el rol o el caption, recalculamos las reglas físicas del sistema.
     if (roleProvided || regenerateCaption) {
       try {
         const apiKey = await resolveOpenAIKeyForUser(service, user.id);
@@ -470,6 +467,19 @@ export async function DELETE(
     }
 
     const images = await listProjectReferenceImages(service, id);
+    try {
+      const apiKey = await resolveOpenAIKeyForUser(service, user.id);
+      if (apiKey) {
+        await syncProjectPhysicalConstraintsFromReferences({
+          service,
+          project,
+          referenceImages: images,
+          apiKey,
+        });
+      }
+    } catch (syncErr) {
+      console.warn('[reference-images] auto physical_constraints tras borrar falló:', (syncErr as Error)?.message);
+    }
     return NextResponse.json({ success: true, images });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error eliminando la referencia';

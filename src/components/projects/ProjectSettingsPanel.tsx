@@ -86,9 +86,15 @@ function feeToInput(v: number | null | undefined): string {
 interface ProjectSettingsPanelProps {
   projectId: string;
   initial: ProjectSettingsInitial;
+  /** Hay fotos clasificadas como producto: las reglas físicas las gestiona la app (solo lectura). */
+  productFidelityManaged?: boolean;
 }
 
-export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPanelProps) {
+export function ProjectSettingsPanel({
+  projectId,
+  initial,
+  productFidelityManaged = false,
+}: ProjectSettingsPanelProps) {
   const router = useRouter();
   const [clientType, setClientType] = useState<string>(initial.client_type || '');
   const [primaryGoal, setPrimaryGoal] = useState<string>(initial.primary_goal || '');
@@ -113,7 +119,6 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
     initial.image_orientation || DEFAULT_IMAGE_ORIENTATION
   );
   const [saving, setSaving] = useState(false);
-  const [suggestingConstraints, setSuggestingConstraints] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
@@ -182,7 +187,9 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
           description: description.trim() || null,
           monthly_fee: parsedFee === null ? null : Math.round(parsedFee * 100) / 100,
           ai_rules: aiRules.trim() || null,
-          physical_constraints: physicalConstraints.trim() || null,
+          ...(productFidelityManaged
+            ? {}
+            : { physical_constraints: physicalConstraints.trim() || null }),
           image_orientation: imageOrientation,
         }),
       });
@@ -211,52 +218,12 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
     monthlyFeeInput,
     aiRules,
     physicalConstraints,
+    productFidelityManaged,
     imageOrientation,
     distOk,
     projectId,
     router,
   ]);
-
-  const suggestConstraints = useCallback(async () => {
-    setSuggestingConstraints(true);
-    setMessage(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/suggest-physical-constraints`, {
-        method: 'POST',
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        suggestion?: string;
-        insufficient?: boolean;
-        message?: string;
-      };
-      if (!res.ok) throw new Error(data.error || 'Error sugiriendo reglas');
-      if (data.insufficient) {
-        setMessage({
-          type: 'err',
-          text:
-            data.message ||
-            'No hay suficiente información todavía para sugerir reglas. Sube imágenes de referencia con descripción IA o rellena la descripción del proyecto.',
-        });
-        return;
-      }
-      const suggestion = (data.suggestion || '').trim();
-      if (!suggestion) {
-        setMessage({ type: 'err', text: 'La IA no devolvió ninguna sugerencia.' });
-        return;
-      }
-      setPhysicalConstraints(suggestion);
-      setMessage({
-        type: 'ok',
-        text:
-          'Sugerencia generada. Revísala y pulsa "Guardar cambios" para aplicarla.',
-      });
-    } catch (e: unknown) {
-      setMessage({ type: 'err', text: e instanceof Error ? e.message : 'Error sugiriendo reglas' });
-    } finally {
-      setSuggestingConstraints(false);
-    }
-  }, [projectId]);
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal mb-6 overflow-hidden">
@@ -403,36 +370,37 @@ export function ProjectSettingsPanel({ projectId, initial }: ProjectSettingsPane
                     placeholder="Ej: NO usar la palabra «rutas». Siempre incluir CTA de WhatsApp…"
                   />
                   <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-1.5">
-                    Reglas BLANDAS de tono, copy y comunicación. Se inyectan en Estrategia y Calendario.
+                    Reglas BLANDAS de tono, copy y deseos creativos (p. ej. &quot;que salga una piscina&quot;,
+                    &quot;siempre atardecer&quot;). No sustituyen la forma del producto: eso lo fija la app con las
+                    fotos de producto.
                   </p>
                 </div>
                 <div>
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider">
-                      Reglas físicas e identitarias inviolables del producto
-                    </label>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void suggestConstraints()}
-                      loading={suggestingConstraints}
-                    >
-                      Sugerir con IA
-                    </Button>
-                  </div>
+                  <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider mb-2">
+                    Reglas físicas e identitarias inviolables del producto
+                  </label>
+                  {productFidelityManaged ? (
+                    <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider mb-2 border-2 border-emerald-600 bg-emerald-50 px-2 py-1.5">
+                      Gestionadas automáticamente por GestIA desde tus fotos de producto — no hace falta escribirlas ni
+                      corregirlas aquí.
+                    </p>
+                  ) : null}
                   <textarea
                     value={physicalConstraints}
                     onChange={e => setPhysicalConstraints(e.target.value)}
+                    readOnly={productFidelityManaged}
                     rows={6}
-                    className={inputClass}
+                    className={`${inputClass}${productFidelityManaged ? ' bg-surface-50 text-surface-700 cursor-default' : ''}`}
                     placeholder={
-                      'Ej. (camper): Camper sobre Fiat Ducato L3H2. De delante a atrás: cabina con asientos giratorios → salón con mesa a la izquierda y banco/cocina a la derecha → baño a la derecha → cama transversal al fondo. PROHIBIDO mostrar la cama pegada a la cabina sin baño/armario en medio.\n\n' +
-                      'Ej. (marca): Logo solo tipográfico (sin icono). Furgo corporativa blanca con franja granate. Empleados con polo azul marino.\n\n' +
-                      'Ej. (servicio): Perros con collar plano o arnés en H. PROHIBIDO collares de pinchos, ahorque o eléctricos. PROHIBIDO jaulas.'
+                      productFidelityManaged
+                        ? 'Se generarán al subir y clasificar fotos como «Producto».'
+                        : 'Ej. (servicio sin producto físico): Perros con collar plano o arnés en H. PROHIBIDO collares de pinchos.'
                     }
                   />
                   <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-1.5">
-                    Reglas DURAS de geometría, identidad de marca y sujetos. Se inyectan en Calendario, Briefs visuales y Generación de imagen como verdad ineludible. Pulsa &quot;Sugerir con IA&quot; para que la IA proponga un texto a partir del dossier y las imágenes de referencia subidas.
+                    {productFidelityManaged
+                      ? 'La app las regenera al subir, reclasificar o borrar fotos de producto. El cliente solo añade ideas en «Reglas IA».'
+                      : 'Reglas DURAS opcionales si no vendes un producto físico con fotos de referencia. Con fotos de producto, la app las redacta sola.'}
                   </p>
                 </div>
               </div>

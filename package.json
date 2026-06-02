@@ -13,7 +13,8 @@
     "screenshot:portfolio": "node scripts/screenshot-portfolio.js",
     "images:regenerate-project": "node scripts/regenerate-project-images.js",
     "images:import-project-references": "node scripts/import-project-reference-images.js",
-    "references:reanalyze": "node scripts/run-reanalyze.mjs"
+    "references:reanalyze": "node scripts/run-reanalyze.mjs",
+    "references:sync-rules": "node scripts/run-reanalyze.mjs -- --sync-only"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",

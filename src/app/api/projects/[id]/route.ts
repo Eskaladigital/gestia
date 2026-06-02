@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
+import { listProjectReferenceImages } from '@/lib/projects/reference-images';
+import { projectHasProductReferences } from '@/lib/projects/reference-images-shared';
 import {
   isDeletedAtColumnError,
   isMonthlyFeeColumnError,
@@ -89,6 +91,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const body = (await request.json()) as PatchBody;
     const update: Record<string, unknown> = {};
+    const warnings: string[] = [];
 
     if (body.client_type !== undefined) {
       if (body.client_type === null) update.client_type = null;
@@ -192,7 +195,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     if (body.physical_constraints !== undefined) {
-      if (body.physical_constraints === null || body.physical_constraints === '') {
+      const service = createServiceSupabase();
+      const referenceImages = await listProjectReferenceImages(service, id);
+      if (projectHasProductReferences(referenceImages)) {
+        warnings.push(
+          'Las reglas físicas del producto las genera y actualiza la app desde las fotos de producto; no se pueden editar manualmente. Usa «Reglas IA» para deseos creativos (p. ej. piscina, atardecer).'
+        );
+      } else if (body.physical_constraints === null || body.physical_constraints === '') {
         update.physical_constraints = null;
         update.physical_constraints_at = null;
       } else {
@@ -202,11 +211,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     if (Object.keys(update).length === 0) {
-      return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });
+      if (warnings.length === 0) {
+        return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });
+      }
+      const { data: current } = await supabase
+        .from('projects')
+        .select()
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!current) {
+        return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
+      }
+      return NextResponse.json({
+        success: true,
+        project: current,
+        warning: warnings.join(' '),
+      });
     }
 
     let payload = update;
-    const warnings: string[] = [];
 
     let { data: project, error: upErr } = await supabase
       .from('projects')

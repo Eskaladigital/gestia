@@ -143,7 +143,9 @@ function applyUserFeedbackToPrompt(prompt: string, userFeedback: string | null |
 CORRECCIONES OBLIGATORIAS DEL USUARIO SOBRE LA VERSIÓN ANTERIOR DE ESTA MISMA IMAGEN (prioridad absoluta; si la nueva imagen repite cualquiera de estos errores se considerará fallida):
 ${feedback}
 
-Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el encuadre principal descritos en el prompt: solo arréglalas de forma natural.`;
+Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el encuadre principal descritos en el prompt: solo arréglalas de forma natural.
+
+Las correcciones del usuario NO pueden contradecir las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO ni sustituir el producto real por uno genérico de otra tipología.`;
 }
 
 /**
@@ -162,14 +164,16 @@ function physicalConstraintsSuffix(physicalConstraints: string | null | undefine
 REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO (prioridad máxima — si la imagen las contradice, se considerará fallida):
 ${text}
 
-PROHIBIDO contradecir lo anterior: la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos son fijos. Acabados, luz, hora, color y ángulo siguen siendo libres.`;
+PROHIBIDO contradecir lo anterior: la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos son fijos. Acabados, luz, hora, color y ángulo siguen siendo libres.
+
+Las «Reglas IA» del cliente (piscina, personas extra, estilo viral, etc.) son secundarias: solo pueden enriquecer la escena si no rompen la identidad del producto anterior.`;
 }
 
 const MAX_PHYSICAL_IN_IMAGE_PROMPT = 1800;
 
 function shrinkPhysicalSuffixForApi(suffix: string): string {
   if (suffix.length <= MAX_PHYSICAL_IN_IMAGE_PROMPT) return suffix;
-  return `${suffix.slice(0, MAX_PHYSICAL_IN_IMAGE_PROMPT - 40)}… [reglas recortadas; acorta el texto en Ajustes del proyecto]`;
+  return `${suffix.slice(0, MAX_PHYSICAL_IN_IMAGE_PROMPT - 40)}… [reglas recortadas; se regeneran desde fotos de producto]`;
 }
 
 async function buildFinalPrompt(

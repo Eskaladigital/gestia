@@ -1,14 +1,9 @@
 /**
- * Sugiere automáticamente las "REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES" del
- * proyecto a partir del dossier (descripción, brand summary, AI rules) y de
- * las imágenes de referencia que el usuario ya haya subido.
+ * Auxiliar de depuración: sugiere texto para "REGLAS FÍSICAS E IDENTITARIAS
+ * INVIOLABLES" a partir del dossier y fotos de referencia (gpt-4o + visión).
  *
- * El usuario revisa el texto y lo guarda él mismo con el PATCH normal del
- * proyecto. Este endpoint NO escribe en BD, solo devuelve el texto sugerido.
- *
- * Genérico: vale para una camper (planta), una marca (logo, colores, sujetos
- * prohibidos), un servicio (sujetos permitidos/prohibidos en imágenes), un
- * restaurante (platos/cubertería), etc. El prompt del LLM no asume sector.
+ * NO escribe en BD. El flujo de producción usa syncProjectPhysicalConstraintsFromReferences
+ * (automático al subir/reclasificar referencias con rol product). Ver README § Fidelidad de producto.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';

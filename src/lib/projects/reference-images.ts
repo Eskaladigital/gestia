@@ -16,18 +16,22 @@ import sharp from 'sharp';
 import type { ProjectReferenceImage, ProjectReferenceRole, ProjectReferenceView } from '@/types';
 
 import {
+  countProductReferenceImages,
   countReferenceImagesNeedingReanalysis,
   MAX_REFERENCE_IMAGE_DIMENSION,
   NORMALIZED_REFERENCE_EXTENSION,
   NORMALIZED_REFERENCE_MIME,
   PROJECT_REFERENCE_IMAGES_BUCKET,
+  projectHasProductReferences,
   referenceImageNeedsReanalysis,
   isProjectReferenceImagesTableError,
   isProjectReferenceRole,
 } from './reference-images-shared';
 
 export {
+  countProductReferenceImages,
   countReferenceImagesNeedingReanalysis,
+  projectHasProductReferences,
   referenceImageNeedsReanalysis,
 } from './reference-images-shared';
 
@@ -417,7 +421,13 @@ export async function reanalyzeProjectReferenceImages(params: {
   service: SupabaseClient;
   projectId: string;
   userId: string;
-  project: { id: string; physical_constraints?: string | null };
+  project: {
+    id: string;
+    name: string;
+    sector?: string | null;
+    description?: string | null;
+    physical_constraints?: string | null;
+  };
 }): Promise<{ processed: number; images: ProjectReferenceImage[] }> {
   const { service, projectId, userId, project } = params;
   const all = await listProjectReferenceImages(service, projectId);
@@ -562,36 +572,87 @@ Devuelve hasta ${maxResults} ids ordenados de más a menos relevantes para ese s
 // INVIOLABLES DEL PRODUCTO" y lo guardamos en projects.physical_constraints.
 // Eso es lo que /api/generate-image inyecta como verdad ineludible.
 //
-// Es automático e invisible para el usuario: si el proyecto ya tiene reglas
-// escritas (a mano o generadas antes), NO las pisamos.
+// La app regenera y guarda siempre que haya fotos de producto clasificadas.
 
-export const PRODUCT_IDENTITY_CONSOLIDATION_MODEL = 'gpt-4o-mini';
+export const PRODUCT_IDENTITY_CONSOLIDATION_MODEL = 'gpt-4o';
 const PRODUCT_IDENTITY_MAX_CHARS = 4000;
 
-const PRODUCT_IDENTITY_SYSTEM = `Eres un director de arte que redacta las "REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO" de un proyecto, a partir de fichas de las fotos reales del producto (identidad, rasgos y vista). Sirven para que un modelo de imagen NUNCA invente un producto distinto al real.
+const PRODUCT_IDENTITY_SYSTEM = `Eres el motor de fidelidad de producto de una app de marketing. Redactas las "REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO" que la app guardará y aplicará SIEMPRE al generar imágenes, sin que el cliente tenga que escribirlas. El cliente solo pondrá deseos creativos sueltos en otro campo (p. ej. "que salga una piscina"); esas ideas NUNCA pueden cambiar la forma del producto.
 
-REGLAS:
-- Agrupa las fotos por producto (si hay varios productos claramente distintos, haz un bloque por producto; si son el mismo producto desde varias vistas, un solo bloque).
-- Por cada producto distingue:
-  · RASGOS FIJOS (inviolables): forma, geometría, proporciones, materiales y elementos estructurales que SIEMPRE deben aparecer.
-  · RASGOS VARIABLES (de catálogo, NO imponer): acabados o colores que el producto ofrece en distintas versiones y por tanto pueden variar.
-- Solo hechos que se deduzcan de las fichas. No inventes marcas, medidas ni materiales que no aparezcan.
-- Sin adjetivos vacíos ("bonito", "elegante"). Sin reglas de tono o copy.
-- Español, texto plano, sin markdown ni viñetas con asteriscos. Puedes usar guiones simples. 60–220 palabras.
-- Devuelve SOLO el texto del bloque, sin saludos ni comillas. Si las fichas son insuficientes, devuelve exactamente "INSUFICIENTE".`;
+Tu bloque es la VERDAD del producto físico. Debe ser tan concreto como un manual de fabricante (como en campers: chasis, planta interior de delante a atrás, adyacencias prohibidas).
+
+INCLUYE cuando aplique:
+- QUÉ ES el producto en una frase (tipología única dominante).
+- Geometría y forma INVIOLABLES (proporciones, silueta, materiales estructurales).
+- Si es un ESPACIO (vehículo, sauna, local): distribución de delante a atrás o de izquierda a derecha, zonas y adyacencias; qué está PROHIBIDO mezclar (p. ej. nunca cabaña rectangular si el producto es barril).
+- Si hay identidad gráfica visible: colores y logo sin variantes inventadas.
+- Entornos permitidos y PROHIBIDOS en imagen (p. ej. naturaleza sí, urbano no).
+- Personas/objetos permitidos o prohibidos si se deducen de las fotos.
+
+REGLAS DE CONSOLIDACIÓN:
+- Si las fichas o fotos muestran tipologías INCOMPATIBLES (barril vs tienda de campaña vs cabaña rectangular), elige UNA sola tipología dominante (la que más repiten las fotos de producto o la más específica) y declara PROHIBIDO inventar las otras.
+- No mezcles rasgos de tipologías distintas en un mismo producto.
+- Solo hechos verificables en fichas/fotos. Sin adjetivos vacíos.
+- NO incluyas reglas de tono, copy, hashtags ni deseos creativos del cliente (eso es otro campo).
+- Español, texto plano, 120–280 palabras, sin markdown.
+- Devuelve SOLO el bloque. Si no hay base suficiente, devuelve exactamente "INSUFICIENTE".`;
 
 interface ProductReferenceForConsolidation {
   identity: string | null;
   traits: string | null;
   view: ProjectReferenceView | null;
   caption: string | null;
+  imageUrl?: string | null;
+}
+
+function buildConsolidationUserText(params: {
+  dossier: string;
+  fichas: string;
+  productCount: number;
+  withVision: boolean;
+}): string {
+  const visionNote = params.withVision
+    ? 'También tienes las fotos adjuntas.'
+    : 'Usa SOLO el dossier y las fichas (sin fotos adjuntas).';
+  return `## DOSSIER\n${params.dossier}\n\n## FICHAS DE FOTOS DE PRODUCTO (${params.productCount})\n${params.fichas}\n\n${visionNote}\n\nRedacta el bloque de reglas físicas e identitarias inviolables. Una sola tipología de producto coherente. Las reglas las aplicará la app automáticamente; el usuario no las escribirá.`;
+}
+
+async function requestConsolidatedRules(params: {
+  openai: OpenAI;
+  userText: string;
+  visionUrls: string[];
+}): Promise<string | null> {
+  const userContent: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' } }
+  > = [{ type: 'text', text: params.userText }];
+  for (const url of params.visionUrls) {
+    userContent.push({
+      type: 'image_url',
+      image_url: { url, detail: 'low' },
+    });
+  }
+
+  const response = await params.openai.chat.completions.create({
+    model: PRODUCT_IDENTITY_CONSOLIDATION_MODEL,
+    temperature: 0.15,
+    max_completion_tokens: 900,
+    messages: [
+      { role: 'system', content: PRODUCT_IDENTITY_SYSTEM },
+      { role: 'user', content: userContent },
+    ],
+  });
+  const raw = (response.choices[0]?.message?.content || '').trim();
+  if (!raw || raw.toUpperCase() === 'INSUFICIENTE') return null;
+  return raw.slice(0, PRODUCT_IDENTITY_MAX_CHARS);
 }
 
 async function consolidateProductIdentityRules(params: {
   apiKey: string;
+  project: { name: string; sector?: string | null; description?: string | null };
   products: ProductReferenceForConsolidation[];
 }): Promise<string | null> {
-  const { apiKey, products } = params;
+  const { apiKey, project, products } = params;
   if (products.length === 0) return null;
 
   const fichas = products
@@ -605,23 +666,59 @@ async function consolidateProductIdentityRules(params: {
     })
     .join('\n');
 
+  const dossier = [
+    `Proyecto: ${project.name}`,
+    project.sector ? `Sector: ${project.sector}` : '',
+    project.description ? `Descripción: ${project.description}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   const openai = new OpenAI({ apiKey });
+  const visionUrls = products
+    .map(p => p.imageUrl)
+    .filter((url): url is string => Boolean(url))
+    .slice(0, 3);
+
+  const userTextVision = buildConsolidationUserText({
+    dossier,
+    fichas,
+    productCount: products.length,
+    withVision: true,
+  });
+  const userTextFichasOnly = buildConsolidationUserText({
+    dossier,
+    fichas,
+    productCount: products.length,
+    withVision: false,
+  });
+
   try {
-    const response = await openai.chat.completions.create({
-      model: PRODUCT_IDENTITY_CONSOLIDATION_MODEL,
-      temperature: 0.2,
-      max_completion_tokens: 700,
-      messages: [
-        { role: 'system', content: PRODUCT_IDENTITY_SYSTEM },
-        {
-          role: 'user',
-          content: `## FICHAS DE LAS FOTOS DE PRODUCTO (${products.length})\n${fichas}\n\nRedacta el bloque de reglas físicas e identitarias inviolables siguiendo el sistema.`,
-        },
-      ],
+    if (visionUrls.length > 0) {
+      const withVision = await requestConsolidatedRules({
+        openai,
+        userText: userTextVision,
+        visionUrls,
+      });
+      if (withVision) return withVision;
+    }
+  } catch (err) {
+    console.warn(
+      '[reference-images] consolidate con visión falló, reintento solo fichas:',
+      (err as Error)?.message
+    );
+  }
+
+  try {
+    const textOnly = await requestConsolidatedRules({
+      openai,
+      userText: userTextFichasOnly,
+      visionUrls: [],
     });
-    const raw = (response.choices[0]?.message?.content || '').trim();
-    if (!raw || raw.toUpperCase() === 'INSUFICIENTE') return null;
-    return raw.slice(0, PRODUCT_IDENTITY_MAX_CHARS);
+    if (!textOnly) {
+      console.warn('[reference-images] consolidate devolvió INSUFICIENTE (solo fichas).');
+    }
+    return textOnly;
   } catch (err) {
     console.warn('[reference-images] consolidateProductIdentityRules falló:', (err as Error)?.message);
     return null;
@@ -731,36 +828,55 @@ export async function assessProductFidelity(params: {
 }
 
 /**
- * Si el proyecto tiene fotos de producto y AÚN no tiene reglas físicas escritas,
- * las redacta a partir de esas fotos y las guarda. Automático e idempotente:
- * - No hace nada si no hay fotos `product` con caption listo.
- * - No pisa reglas ya existentes (manuales o generadas antes).
+ * Regenera y guarda las reglas físicas del proyecto a partir de las fotos de
+ * producto. Es responsabilidad de la APP, no del usuario.
  *
- * Devuelve true si ha escrito reglas nuevas.
+ * - Si hay fotos `product`: siempre recalcula y guarda (pisa texto anterior).
+ * - Si NO hay fotos `product` (servicios, solo estilo): borra reglas físicas.
+ *
+ * Devuelve true si actualizó la BD.
  */
 export async function syncProjectPhysicalConstraintsFromReferences(params: {
   service: SupabaseClient;
-  project: { id: string; physical_constraints?: string | null };
+  project: {
+    id: string;
+    name: string;
+    sector?: string | null;
+    description?: string | null;
+    physical_constraints?: string | null;
+  };
   referenceImages: ProjectReferenceImage[];
   apiKey: string;
 }): Promise<boolean> {
   const { service, project, referenceImages, apiKey } = params;
 
-  // Respeta lo que ya hay: si hay reglas, no tocamos nada.
-  if ((project.physical_constraints || '').trim().length > 0) return false;
-
   const productRefs = referenceImages.filter(
     image => image.reference_role === 'product' && image.caption_status === 'ready'
   );
-  if (productRefs.length === 0) return false;
+
+  if (productRefs.length === 0) {
+    if (!(project.physical_constraints || '').trim()) return false;
+    const { error } = await service
+      .from('projects')
+      .update({ physical_constraints: null, physical_constraints_at: null })
+      .eq('id', project.id);
+    if (error && !isPhysicalConstraintsColumnError(error)) throw new Error(error.message);
+    return !error;
+  }
 
   const rules = await consolidateProductIdentityRules({
     apiKey,
+    project: {
+      name: project.name,
+      sector: project.sector ?? null,
+      description: project.description ?? null,
+    },
     products: productRefs.map(image => ({
       identity: image.product_identity ?? null,
       traits: image.product_traits ?? null,
       view: image.reference_view ?? null,
       caption: image.caption ?? null,
+      imageUrl: image.image_url,
     })),
   });
   if (!rules) return false;
