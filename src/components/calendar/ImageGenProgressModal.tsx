@@ -126,7 +126,10 @@ export function ImageGenProgressModal({
           return;
         }
         if (!res.ok) throw new Error(json.error || 'Error generando imagen');
-        onImageReady(visualId, contentItemId, json.image_url);
+        if (!json.image_url?.trim()) {
+          throw new Error('El servidor no devolvió la URL de la imagen generada');
+        }
+        onImageReady(visualId, contentItemId, json.image_url.trim());
       } catch (err: any) {
         if (cancelledRef.current || err?.name === 'AbortError') {
           setPhase('cancelled');
