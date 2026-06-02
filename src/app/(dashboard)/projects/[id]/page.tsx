@@ -20,7 +20,7 @@ import {
   type StrategyForPipeline,
 } from '@/lib/projects/pipeline';
 import { listProjectReferenceImages } from '@/lib/projects/reference-images';
-import { projectHasProductReferences } from '@/lib/projects/reference-images-shared';
+import { projectHasManagedProductFidelity } from '@/lib/projects/product-fidelity';
 
 /** Datos del paso «Analizar web»: JSON guardado y/o columnas de estrategia (analyze-site escribe ambos). */
 function mergeWebSiteAnalysis(
@@ -187,6 +187,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         : null,
     ai_rules: project.ai_rules ?? null,
     physical_constraints: project.physical_constraints ?? null,
+    sells_physical_product: project.sells_physical_product ?? null,
     image_orientation: project.image_orientation ?? null,
     updated_at: project.updated_at,
   };
@@ -287,7 +288,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <ProjectSettingsPanel
         projectId={id}
         initial={settingsInitial}
-        productFidelityManaged={projectHasProductReferences(referenceImages as ProjectReferenceImage[])}
+        productFidelityManaged={projectHasManagedProductFidelity(
+          { sells_physical_product: project.sells_physical_product ?? null },
+          referenceImages as ProjectReferenceImage[]
+        )}
       />
 
       <ProjectReferenceImagesCard

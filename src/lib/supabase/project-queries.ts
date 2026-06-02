@@ -42,11 +42,67 @@ export function isImageOrientationColumnError(error: { message?: string; code?: 
   return c === '42703' || (m.includes('image_orientation') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column')));
 }
 
+/** PostgREST cuando la migración 029 (sells_physical_product) no está aplicada. */
+export function isSellsPhysicalProductColumnError(error: { message?: string } | null | undefined): boolean {
+  const m = (error?.message || '').toLowerCase();
+  return m.includes('sells_physical_product') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
+}
+
 /** PostgREST cuando la migración 025 (physical_constraints) no está aplicada. */
 export function isPhysicalConstraintsColumnError(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) return false;
   const m = (error.message || '').toLowerCase();
   return m.includes('physical_constraints') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
+}
+
+/** Metadatos de generación de imagen; tolera BD sin migración 029 (sells_physical_product). */
+export async function fetchProjectImageGenerationMeta(
+  service: SupabaseClient,
+  projectId: string
+): Promise<{
+  sellsPhysicalProduct: boolean | null;
+  physicalConstraints: string | null;
+}> {
+  let sellsPhysicalProduct: boolean | null = null;
+  let physicalConstraints: string | null = null;
+
+  const { data, error } = await service
+    .from('projects')
+    .select('sells_physical_product, physical_constraints')
+    .eq('id', projectId)
+    .maybeSingle();
+
+  if (error && isSellsPhysicalProductColumnError(error)) {
+    const retry = await service
+      .from('projects')
+      .select('physical_constraints')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (
+      retry.data &&
+      typeof retry.data.physical_constraints === 'string' &&
+      retry.data.physical_constraints.trim()
+    ) {
+      physicalConstraints = retry.data.physical_constraints.trim();
+    }
+    return { sellsPhysicalProduct: null, physicalConstraints };
+  }
+
+  if (error) {
+    console.warn('[fetchProjectImageGenerationMeta]', error.message);
+    return { sellsPhysicalProduct: null, physicalConstraints: null };
+  }
+
+  if (data) {
+    if (typeof data.sells_physical_product === 'boolean') {
+      sellsPhysicalProduct = data.sells_physical_product;
+    }
+    if (typeof data.physical_constraints === 'string' && data.physical_constraints.trim()) {
+      physicalConstraints = data.physical_constraints.trim();
+    }
+  }
+
+  return { sellsPhysicalProduct, physicalConstraints };
 }
 
 export async function fetchUserProjectsList(client: SupabaseClient, userId: string) {

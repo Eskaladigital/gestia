@@ -6,7 +6,10 @@
 
 import type { Project, Competitor, ContentStyleWeights, WeeklyFormatDistribution } from '@/types';
 import { getMonthName } from '@/lib/utils';
-import { buildProductReferenceGuidance } from '@/lib/projects/reference-images-shared';
+import {
+  buildReferenceGuidanceBlock,
+  type ReferenceGuidanceInput,
+} from '@/lib/projects/reference-images-shared';
 
 // ---- Helpers para construir contexto ----
 
@@ -462,10 +465,10 @@ export function buildStrategyPrompt(
   project: Project,
   businessAnalysis: string,
   competitorAnalysis: string,
-  options?: { referenceImageCount?: number }
+  options?: ReferenceGuidanceInput
 ): { system: string; user: string } {
   const brandDna = buildBrandDnaForStrategy(project);
-  const productReferenceBlock = buildProductReferenceGuidance(options?.referenceImageCount ?? 0);
+  const referenceGuidanceBlock = buildReferenceGuidanceBlock(options ?? {});
 
   return {
     system: `Eres un director de estrategia de contenido para redes sociales de alto nivel. Combinas visión de marca, enfoque editorial, criterio comercial y sensibilidad estética.
@@ -516,13 +519,20 @@ FORMATO DE RESPUESTA JSON:
       "example_topics": ["tema1", "tema2"]
     }
   ],
-  "recommendations": "Recomendaciones con acciones concretas vinculadas a debilidades de la competencia y fortalezas del negocio"
+  "recommendations": "Recomendaciones con acciones concretas vinculadas a debilidades de la competencia y fortalezas del negocio",
+  "sells_physical_product": true,
+  "product_fidelity_reason": "Una frase breve: por qué sí o no hay producto físico que replicar en imagen (ej. agencia de marketing = false; alquiler de campers = true)"
 }`,
     user: `Crea una estrategia de contenido para redes sociales:
 
 ${buildProjectContext(project, { includeAiRules: true })}
 ${brandDna ? `\n## ADN VISUAL / IDENTIDAD DE MARCA\n${brandDna}\n` : ''}
-${productReferenceBlock ? `\n${productReferenceBlock}\n` : ''}
+${referenceGuidanceBlock ? `\n${referenceGuidanceBlock}\n` : ''}
+
+CLASIFICACIÓN OBLIGATORIA — "sells_physical_product":
+- true si el cliente vende un BIEN FÍSICO o ESPACIO con geometría fija que debe verse igual en foto (camper, sauna, vehículo, embarcación, mueble, plato signature, local con planta fija, tornillos con forma de catálogo…).
+- false si es servicio, agencia, consultoría, clínica sin producto visual único, masajes, abogados, SaaS sin objeto físico, branding puro o moodboard creativo (las referencias son solo ESTILO, no un producto a clonar).
+- En "product_fidelity_reason" explica en una frase tu decisión.
 ## ANÁLISIS DEL NEGOCIO
 ${businessAnalysis}
 
@@ -837,9 +847,9 @@ function buildBrandContext(project: Project): string {
 export function buildVisualBriefsPrompt(
   project: Project,
   posts: VisualBriefInput[],
-  options?: { referenceImageCount?: number }
+  options?: ReferenceGuidanceInput
 ): { system: string; user: string } {
-  const productReferenceBlock = buildProductReferenceGuidance(options?.referenceImageCount ?? 0);
+  const referenceGuidanceBlock = buildReferenceGuidanceBlock(options ?? {});
   const postsBlock = posts
     .map((p, i) => {
       const specs = p.production_specs;
@@ -961,7 +971,7 @@ FORMATO DE RESPUESTA:
 ${buildBrandContext(project)}
 
 ## CONTEXTO DEL NEGOCIO
-${buildProjectContext(project, { includeAiRules: true })}${productReferenceBlock ? `\n\n${productReferenceBlock}` : ''}
+${buildProjectContext(project, { includeAiRules: true })}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}
 
 ## PUBLICACIONES (${posts.length} en total)
 ${postsBlock}
@@ -1233,7 +1243,7 @@ const SYSTEM_BUILDERS: Record<VisualAgentKey, (ar: string) => string> = {
 export function buildSingleVisualPrompt(
   project: Project,
   input: SingleVisualInput,
-  options?: { referenceImageCount?: number }
+  options?: ReferenceGuidanceInput
 ): { system: string; user: string; agentKey: VisualAgentKey } {
   const {
     post,
@@ -1251,7 +1261,7 @@ export function buildSingleVisualPrompt(
   const isVideo = agentKey === 'visual_briefs_video';
   const isCarousel = agentKey === 'visual_briefs_carousel';
   const isStory = agentKey === 'visual_briefs_story';
-  const productReferenceBlock = buildProductReferenceGuidance(options?.referenceImageCount ?? 0);
+  const referenceGuidanceBlock = buildReferenceGuidanceBlock(options ?? {});
 
   const system = SYSTEM_BUILDERS[agentKey](ar);
 
@@ -1366,7 +1376,7 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${productReferenceBlock ? `\n\n${productReferenceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
     agentKey,
   };
 }

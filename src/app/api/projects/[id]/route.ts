@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { listProjectReferenceImages } from '@/lib/projects/reference-images';
-import { projectHasProductReferences } from '@/lib/projects/reference-images-shared';
+import { projectHasManagedProductFidelity } from '@/lib/projects/product-fidelity';
 import {
   isDeletedAtColumnError,
   isMonthlyFeeColumnError,
   isAiRulesColumnError,
   isImageOrientationColumnError,
   isPhysicalConstraintsColumnError,
+  isSellsPhysicalProductColumnError,
 } from '@/lib/supabase/project-queries';
 import type {
   ClientType,
@@ -42,6 +43,8 @@ type PatchBody = {
   ai_rules?: string | null;
   image_orientation?: ImageOrientation;
   physical_constraints?: string | null;
+  /** true = producto físico; false = servicio/agencia; null = auto (IA en estrategia) */
+  sells_physical_product?: boolean | null;
 };
 
 function clampIntTone(n: unknown): number | undefined {
@@ -194,10 +197,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       update.image_orientation = body.image_orientation;
     }
 
+    if (body.sells_physical_product !== undefined) {
+      if (body.sells_physical_product === null) {
+        update.sells_physical_product = null;
+      } else if (typeof body.sells_physical_product === 'boolean') {
+        update.sells_physical_product = body.sells_physical_product;
+      } else {
+        return NextResponse.json({ error: 'sells_physical_product debe ser boolean o null' }, { status: 400 });
+      }
+    }
+
     if (body.physical_constraints !== undefined) {
       const service = createServiceSupabase();
       const referenceImages = await listProjectReferenceImages(service, id);
-      if (projectHasProductReferences(referenceImages)) {
+      let sellsPhysical: boolean | null = null;
+      if (body.sells_physical_product !== undefined) {
+        sellsPhysical = body.sells_physical_product;
+      } else {
+        const { data: row, error: sellsErr } = await supabase
+          .from('projects')
+          .select('sells_physical_product')
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!sellsErr && row && typeof row.sells_physical_product === 'boolean') {
+          sellsPhysical = row.sells_physical_product;
+        }
+      }
+      if (projectHasManagedProductFidelity({ sells_physical_product: sellsPhysical }, referenceImages)) {
         warnings.push(
           'Las reglas físicas del producto las genera y actualiza la app desde las fotos de producto; no se pueden editar manualmente. Usa «Reglas IA» para deseos creativos (p. ej. piscina, atardecer).'
         );
@@ -313,6 +340,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       warnings.push(
         'La orientación de imagen no se guardó (falta columna image_orientation — migración 022).'
+      );
+      payload = rest;
+      const retry = await supabase
+        .from('projects')
+        .update(payload)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      project = retry.data;
+      upErr = retry.error;
+    }
+
+    if (upErr && 'sells_physical_product' in payload && isSellsPhysicalProductColumnError(upErr)) {
+      const { sells_physical_product: _drop, ...rest } = payload;
+      if (Object.keys(rest).length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Falta la columna sells_physical_product. Ejecuta supabase/migrations/029_projects_sells_physical_product.sql.',
+          },
+          { status: 503 }
+        );
+      }
+      warnings.push(
+        'El tipo de negocio (producto vs servicio) no se guardó (falta columna sells_physical_product — migración 029).'
       );
       payload = rest;
       const retry = await supabase

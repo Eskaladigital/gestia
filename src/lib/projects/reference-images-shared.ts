@@ -73,6 +73,60 @@ export function projectHasProductReferences(images: ProjectReferenceImage[]): bo
   return countProductReferenceImages(images) > 0;
 }
 
+export function countStyleReferenceImages(images: ProjectReferenceImage[]): number {
+  return images.filter(
+    image => image.reference_role && image.reference_role !== 'pending' && image.reference_role !== 'product'
+  ).length;
+}
+
+export type ReferenceGuidanceInput = {
+  sellsPhysicalProduct?: boolean | null;
+  productReferenceCount?: number;
+  styleReferenceCount?: number;
+};
+
+export function buildExpectProductPhotosGuidance(): string {
+  return [
+    '## PRODUCTO FÍSICO DEL CLIENTE (sin fotos de producto aún)',
+    'Este negocio SÍ vende un producto físico reproducible en imagen (vehículo, sauna, objeto, local…).',
+    'Las imágenes de referencia de estilo/lugar NO sustituyen al producto: cuando el cliente suba fotos marcadas como Producto, la generación de imagen deberá replicar su forma con fidelidad.',
+    'En calendario y briefs: varía escenas y planos; no inventes un producto genérico distinto al real cuando existan referencias de producto.',
+  ].join('\n');
+}
+
+export function buildStyleReferenceGuidance(styleCount: number): string {
+  if (styleCount <= 0) return '';
+  return [
+    '## REFERENCIAS VISUALES = MOODBOARD DE ESTILO (NO hay producto físico que clonar)',
+    `Dispones de ${styleCount} imagen(es) de inspiración (estética disruptiva, paleta, luz, energía).`,
+    '',
+    'REGLAS:',
+    '- Extrae el PATRÓN COMÚN: tono, contraste, tipo de metáfora visual, nivel de surrealismo o cinematográfico — NO un objeto concreto repetido en cada pieza.',
+    '- PROHIBIDO tratar una referencia como "el producto" del cliente ni reproducir la misma tipología (p. ej. la misma máquina expendedora) en todos los slides.',
+    '- Cada pieza del calendario debe VARIAR sujeto, metáfora y encuadre; las referencias solo inspiran ambiente y actitud visual.',
+    '- Si el prompt del slide pide una escena distinta, créala libremente; no copies literalmente objetos de las referencias salvo que el slide lo pida explícitamente.',
+  ].join('\n');
+}
+
+export function buildReferenceGuidanceBlock(input: ReferenceGuidanceInput): string {
+  const productCount = input.productReferenceCount ?? 0;
+  const styleCount = input.styleReferenceCount ?? 0;
+  const sells = input.sellsPhysicalProduct;
+
+  if (sells === false) {
+    const moodboardCount = productCount + styleCount;
+    return buildStyleReferenceGuidance(moodboardCount);
+  }
+  if (sells === true) {
+    if (productCount > 0) return buildProductReferenceGuidance(productCount);
+    return buildExpectProductPhotosGuidance();
+  }
+  // null / sin clasificar: inferir por roles subidos
+  if (productCount > 0) return buildProductReferenceGuidance(productCount);
+  if (styleCount > 0) return buildStyleReferenceGuidance(styleCount);
+  return '';
+}
+
 export const NORMALIZED_REFERENCE_MIME = 'image/png';
 export const NORMALIZED_REFERENCE_EXTENSION = 'png';
 export const MAX_REFERENCE_IMAGE_DIMENSION = 2048;

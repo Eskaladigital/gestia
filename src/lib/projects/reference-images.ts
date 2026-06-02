@@ -260,15 +260,44 @@ function cleanText(value: unknown, maxLength: number): string | null {
  * Si la IA no devuelve JSON parseable, cae a un análisis mínimo con el texto
  * crudo como caption y rol "other" para no bloquear la subida.
  */
+function referenceAnalysisSystemExtra(projectContext?: {
+  sector?: string | null;
+  description?: string | null;
+  sellsPhysicalProduct?: boolean | null;
+}): string {
+  if (!projectContext) return '';
+  const lines: string[] = [];
+  if (projectContext.sector) lines.push(`Sector del proyecto: ${projectContext.sector}.`);
+  if (projectContext.description) {
+    lines.push(`Descripción: ${projectContext.description.slice(0, 400)}.`);
+  }
+  if (projectContext.sellsPhysicalProduct === false) {
+    lines.push(
+      'CONTEXTO CRÍTICO: este cliente NO vende un producto físico reproducible (agencia, consultoría, servicio, moodboard). Usa rol "style" para imágenes de inspiración o metáfora. NO uses "product" para objetos creativos (máquinas, esculturas, animales, escenas surrealistas) salvo que sea el packaging o bien real que el negocio vende.'
+    );
+  } else if (projectContext.sellsPhysicalProduct === true) {
+    lines.push(
+      'CONTEXTO: este cliente SÍ vende un producto físico o espacio con geometría fija. Marca "product" solo cuando el protagonista del encuadre sea ese bien real del cliente.'
+    );
+  }
+  return lines.length ? `\n\n${lines.join(' ')}` : '';
+}
+
 export async function analyzeReferenceImage(params: {
   apiKey: string;
   imageUrl: string;
+  projectContext?: {
+    sector?: string | null;
+    description?: string | null;
+    sellsPhysicalProduct?: boolean | null;
+  };
 }): Promise<ReferenceAnalysis> {
-  const { apiKey, imageUrl } = params;
+  const { apiKey, imageUrl, projectContext } = params;
   if (!apiKey) throw new Error('Falta API key de OpenAI para analizar la referencia.');
   if (!imageUrl) throw new Error('Falta URL de la imagen para analizar la referencia.');
 
   const openai = new OpenAI({ apiKey });
+  const systemContent = REFERENCE_ANALYSIS_SYSTEM + referenceAnalysisSystemExtra(projectContext);
 
   const response = await openai.chat.completions.create({
     model: REFERENCE_CAPTION_MODEL,
@@ -276,7 +305,7 @@ export async function analyzeReferenceImage(params: {
     max_completion_tokens: 400,
     response_format: { type: 'json_object' as const },
     messages: [
-      { role: 'system', content: REFERENCE_ANALYSIS_SYSTEM },
+      { role: 'system', content: systemContent },
       {
         role: 'user',
         content: [
@@ -352,7 +381,12 @@ export async function persistReferenceImageAnalysis(
   image: Pick<
     ProjectReferenceImage,
     'id' | 'image_url' | 'caption_is_manual' | 'role_is_manual'
-  >
+  >,
+  projectContext?: {
+    sector?: string | null;
+    description?: string | null;
+    sellsPhysicalProduct?: boolean | null;
+  }
 ): Promise<void> {
   try {
     await service
@@ -360,7 +394,11 @@ export async function persistReferenceImageAnalysis(
       .update({ caption_status: 'generating' })
       .eq('id', image.id);
 
-    const analysis = await analyzeReferenceImage({ apiKey, imageUrl: image.image_url });
+    const analysis = await analyzeReferenceImage({
+      apiKey,
+      imageUrl: image.image_url,
+      projectContext,
+    });
     if (!analysis.caption && analysis.role === 'other') {
       await service
         .from('project_reference_images')
@@ -427,6 +465,7 @@ export async function reanalyzeProjectReferenceImages(params: {
     sector?: string | null;
     description?: string | null;
     physical_constraints?: string | null;
+    sells_physical_product?: boolean | null;
   };
 }): Promise<{ processed: number; images: ProjectReferenceImage[] }> {
   const { service, projectId, userId, project } = params;
@@ -441,7 +480,14 @@ export async function reanalyzeProjectReferenceImages(params: {
     throw new Error('No hay API key de OpenAI configurada para analizar las referencias.');
   }
 
-  await Promise.all(targets.map(image => persistReferenceImageAnalysis(service, apiKey, image)));
+  const projectContext = {
+    sector: project.sector ?? null,
+    description: project.description ?? null,
+    sellsPhysicalProduct: project.sells_physical_product ?? null,
+  };
+  await Promise.all(
+    targets.map(image => persistReferenceImageAnalysis(service, apiKey, image, projectContext))
+  );
 
   const refreshed = await listProjectReferenceImages(service, projectId);
   try {
@@ -503,17 +549,34 @@ export interface ReferenceSelectionResult {
   reasoning: string;
 }
 
+const REFERENCE_SELECTOR_MOODBOARD_SYSTEM = `Eres un asistente de dirección de arte. El cliente NO vende un producto físico: las referencias son MOODBOARD de estilo (estética, luz, energía disruptiva). Elige las que mejor inspiren el MOOD del slide, NO un objeto concreto a clonar.
+
+ROLES:
+- "style", "place", "scene", "person": inspiración de ambiente, metáfora o actitud visual.
+- "product" en el catálogo es un error de clasificación: trátalo como "style" y NO copies su forma literal en todas las piezas.
+- "logo": solo si el slide es de marca.
+
+CRITERIOS:
+- Prioriza variedad: elige referencias que aporten paleta/atmósfera, no la misma metáfora repetida.
+- PROHIBIDO forzar la misma tipología de objeto (p. ej. la misma máquina) en slides que piden escenas distintas.
+- Devuelve hasta 4 ids o lista vacía si ninguna aporta.
+
+FORMATO: JSON { "selected_ids": [...], "reasoning": "..." }`;
+
 export async function selectRelevantReferenceImages(params: {
   apiKey: string;
   visualPrompt: string;
   catalog: ReferenceCatalogEntry[];
   maxResults?: number;
+  sellsPhysicalProduct?: boolean | null;
 }): Promise<ReferenceSelectionResult | null> {
   const { apiKey, visualPrompt, catalog } = params;
   const maxResults = params.maxResults ?? 4;
   if (!apiKey || !visualPrompt.trim() || catalog.length === 0) return null;
 
   const openai = new OpenAI({ apiKey });
+  const selectorSystem =
+    params.sellsPhysicalProduct === false ? REFERENCE_SELECTOR_MOODBOARD_SYSTEM : REFERENCE_SELECTOR_SYSTEM;
 
   const catalogText = catalog
     .map((entry, idx) => {
@@ -538,7 +601,7 @@ Devuelve hasta ${maxResults} ids ordenados de más a menos relevantes para ese s
       max_completion_tokens: 400,
       response_format: { type: 'json_object' as const },
       messages: [
-        { role: 'system', content: REFERENCE_SELECTOR_SYSTEM },
+        { role: 'system', content: selectorSystem },
         { role: 'user', content: userPrompt },
       ],
     });
@@ -844,11 +907,22 @@ export async function syncProjectPhysicalConstraintsFromReferences(params: {
     sector?: string | null;
     description?: string | null;
     physical_constraints?: string | null;
+    sells_physical_product?: boolean | null;
   };
   referenceImages: ProjectReferenceImage[];
   apiKey: string;
 }): Promise<boolean> {
   const { service, project, referenceImages, apiKey } = params;
+
+  if (project.sells_physical_product === false) {
+    if (!(project.physical_constraints || '').trim()) return false;
+    const { error } = await service
+      .from('projects')
+      .update({ physical_constraints: null, physical_constraints_at: null })
+      .eq('id', project.id);
+    if (error && !isPhysicalConstraintsColumnError(error)) throw new Error(error.message);
+    return !error;
+  }
 
   const productRefs = referenceImages.filter(
     image => image.reference_role === 'product' && image.caption_status === 'ready'

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
+import { fetchProjectImageGenerationMeta } from '@/lib/supabase/project-queries';
 import {
   DEFAULT_IMAGE_ORIENTATION,
   IMAGE_GENERATION_MODEL,
@@ -8,7 +9,6 @@ import {
   IMAGE_PROMPT_REFINER_MODEL,
   resolveImageSize,
 } from '@/lib/ai/constants';
-import type { ImageOrientation } from '@/types';
 import {
   assessProductFidelity,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
@@ -18,7 +18,11 @@ import {
   selectRelevantReferenceImages,
 } from '@/lib/projects/reference-images';
 import type { ProductFidelityResult } from '@/lib/projects/reference-images';
-import type { ProjectReferenceImage } from '@/types';
+import type { ImageOrientation, Project, ProjectReferenceImage } from '@/types';
+import {
+  effectiveReferenceRoleForPipeline,
+  projectUsesProductImageFidelity,
+} from '@/lib/projects/product-fidelity';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
 // enviarlas a OpenAI y tarda ~2-3 min con gpt-image-2 + referencias.
@@ -78,13 +82,25 @@ const TOXIC_WORDS = [
  * El prompt visible sigue siendo el que manda: la pasada de refinamiento
  * solo retoca vocabulario y detalles técnicos fotográficos.
  */
-function appendReferenceHandlingInstructions(prompt: string, referenceCount: number): string {
+function appendReferenceHandlingInstructions(
+  prompt: string,
+  referenceCount: number,
+  productFidelityMode: boolean
+): string {
   if (referenceCount <= 0) return prompt;
-  return `${prompt}
+  if (productFidelityMode) {
+    return `${prompt}
 
 USO DE LAS IMÁGENES DE REFERENCIA (dos ejes que NO debes mezclar):
 - IDENTIDAD DEL PRODUCTO (inviolable): reproduce con total fidelidad la forma, geometría, proporciones, materiales, colores estructurales y rasgos distintivos del producto que aparece en las referencias. No cambies su tipología ni inventes un producto genérico: debe ser EL MISMO producto real.
 - DIRECCIÓN DE ESCENA (libre): el ángulo, la altura de cámara, la distancia, el encuadre, la luz, la hora y el contexto los decide ESTE prompt, no las referencias. Varía el plano entre piezas manteniendo siempre intacta la identidad del producto.`;
+  }
+  return `${prompt}
+
+USO DE LAS IMÁGENES DE REFERENCIA (MOODBOARD DE ESTILO — el cliente NO vende un producto físico que clonar):
+- Inspiran paleta, luz, contraste y energía visual; NO copies literalmente el mismo objeto de una referencia en cada imagen.
+- Cada generación debe VARIAR sujetos y metáforas según ESTE prompt; prohibido repetir la misma tipología (p. ej. la misma máquina expendedora) en todas las piezas.
+- El encuadre, la escena y los personajes los decide ESTE prompt, no las referencias.`;
 }
 
 /**
@@ -105,14 +121,19 @@ USO DE LAS IMÁGENES DE REFERENCIA (dos ejes que NO debes mezclar):
 function applyReferenceCaptionsToPrompt(
   prompt: string,
   selected: ProjectReferenceImage[],
-  selectorReasoning?: string,
+  selectorReasoning: string | undefined,
+  productFidelityMode: boolean,
+  sellsPhysicalProduct?: boolean | null
 ): string {
   if (selected.length === 0) return prompt;
   const lines: string[] = [];
   lines.push('REFERENCIAS VISUALES PARA ESTE SLIDE EN CONCRETO (las imágenes adjuntas, EN ESTE ORDEN):');
   selected.forEach((image, idx) => {
     const cap = (image.caption || '').trim() || 'imagen sin descripción';
-    const role = image.reference_role && image.reference_role !== 'pending' ? image.reference_role : null;
+    const roleRaw = image.reference_role && image.reference_role !== 'pending' ? image.reference_role : null;
+    const role = roleRaw
+      ? effectiveReferenceRoleForPipeline(roleRaw, sellsPhysicalProduct)
+      : null;
     const view = image.reference_view ? `, vista ${image.reference_view}` : '';
     if (role === 'product') {
       const identity = (image.product_identity || '').trim();
@@ -126,26 +147,37 @@ function applyReferenceCaptionsToPrompt(
   });
   lines.push('');
   lines.push('Cómo usar cada referencia según su etiqueta:');
-  lines.push('- [PRODUCTO]: es EL producto real del cliente. Reproduce con total fidelidad su forma, proporciones, materiales, colores estructurales y rasgos distintivos (y, en interiores, la distribución espacial exacta). Es inviolable: nunca lo sustituyas por un producto genérico de otra tipología.');
-  lines.push('- [ESTILO/INSPIRACIÓN] y [LUGAR/CONTEXTO]: úsalas solo para el ambiente, la paleta o el entorno. NO copies de ellas la forma del producto.');
-  lines.push('Decides libremente ángulo, plano, luz y encuadre según ESTE prompt; lo único que no cambia es la identidad del producto.');
+  if (productFidelityMode) {
+    lines.push('- [PRODUCTO]: es EL producto real del cliente. Reproduce con total fidelidad su forma, proporciones, materiales, colores estructurales y rasgos distintivos (y, en interiores, la distribución espacial exacta). Es inviolable: nunca lo sustituyas por un producto genérico de otra tipología.');
+    lines.push('- [ESTILO/INSPIRACIÓN] y [LUGAR/CONTEXTO]: úsalas solo para el ambiente, la paleta o el entorno. NO copies de ellas la forma del producto.');
+    lines.push('Decides libremente ángulo, plano, luz y encuadre según ESTE prompt; lo único que no cambia es la identidad del producto.');
+  } else {
+    lines.push('- Todas las referencias son INSPIRACIÓN DE ESTILO: extrae mood, paleta y actitud; NO clones el mismo objeto concreto en cada pieza.');
+    lines.push('- Varía metáforas y sujetos según ESTE prompt. Si una referencia muestra una máquina u objeto surreal, NO lo repitas salvo que el prompt lo exija explícitamente.');
+    lines.push('Decides libremente escena, encuadre y luz según ESTE prompt.');
+  }
   if (selectorReasoning) {
     lines.push(`(Selector: ${selectorReasoning})`);
   }
   return `${prompt}\n\n${lines.join('\n')}`;
 }
 
-function applyUserFeedbackToPrompt(prompt: string, userFeedback: string | null | undefined): string {
+function applyUserFeedbackToPrompt(
+  prompt: string,
+  userFeedback: string | null | undefined,
+  productFidelityMode = true
+): string {
   const feedback = (userFeedback || '').trim();
   if (!feedback) return prompt;
+  const productGuard = productFidelityMode
+    ? '\n\nLas correcciones del usuario NO pueden contradecir las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO ni sustituir el producto real por uno genérico de otra tipología.'
+    : '\n\nLas correcciones del usuario no deben forzar la repetición literal del mismo objeto de las referencias de estilo en todas las piezas.';
   return `${prompt}
 
 CORRECCIONES OBLIGATORIAS DEL USUARIO SOBRE LA VERSIÓN ANTERIOR DE ESTA MISMA IMAGEN (prioridad absoluta; si la nueva imagen repite cualquiera de estos errores se considerará fallida):
 ${feedback}
 
-Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el encuadre principal descritos en el prompt: solo arréglalas de forma natural.
-
-Las correcciones del usuario NO pueden contradecir las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO ni sustituir el producto real por uno genérico de otra tipología.`;
+Aplica esas correcciones SIN cambiar la escena, los sujetos, la acción ni el encuadre principal descritos en el prompt: solo arréglalas de forma natural.${productGuard}`;
 }
 
 /**
@@ -182,6 +214,7 @@ async function buildFinalPrompt(
   referenceCount = 0,
   userFeedback: string | null = null,
   physicalConstraints: string | null = null,
+  productFidelityMode = true,
 ): Promise<string> {
   const cleaned = cleanPrompt(rawPrompt);
 
@@ -191,7 +224,10 @@ async function buildFinalPrompt(
       model: REFINER_MODEL,
       messages: [
         { role: 'system', content: REALISM_REFINER_SYSTEM },
-        { role: 'user', content: appendReferenceHandlingInstructions(cleaned, referenceCount) },
+        {
+          role: 'user',
+          content: appendReferenceHandlingInstructions(cleaned, referenceCount, productFidelityMode),
+        },
       ],
       temperature: REFINER_TEMPERATURE,
       max_completion_tokens: REFINER_MAX_TOKENS,
@@ -205,10 +241,11 @@ async function buildFinalPrompt(
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
   }
 
-  prompt = appendReferenceHandlingInstructions(prompt, referenceCount);
-  prompt = applyUserFeedbackToPrompt(prompt, userFeedback);
+  prompt = appendReferenceHandlingInstructions(prompt, referenceCount, productFidelityMode);
+  prompt = applyUserFeedbackToPrompt(prompt, userFeedback, productFidelityMode);
 
-  let phys = shrinkPhysicalSuffixForApi(physicalConstraintsSuffix(physicalConstraints));
+  const physSource = productFidelityMode ? physicalConstraints : null;
+  let phys = shrinkPhysicalSuffixForApi(physicalConstraintsSuffix(physSource));
   const tail = `\n\n${IMAGE_REALISM_TAIL}`;
   let roomForCore = MAX_PROMPT_LENGTH - phys.length - tail.length;
   if (roomForCore < MIN_PROMPT_LENGTH) {
@@ -322,6 +359,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado para este proyecto' }, { status: 403 });
   }
 
+  const { sellsPhysicalProduct, physicalConstraints: projectPhysicalConstraintsFromDb } =
+    await fetchProjectImageGenerationMeta(service, project.id);
+
   const projectOrientation: ImageOrientation =
     (project.image_orientation as ImageOrientation | undefined) || DEFAULT_IMAGE_ORIENTATION;
   const imageSize = resolveImageSize(projectOrientation);
@@ -351,20 +391,18 @@ export async function POST(request: NextRequest) {
     // Traemos TODAS las referencias (no solo las 4 principales): así las fotos
     // de producto nunca quedan fuera del catálogo del selector ni del anclaje.
     const allReferenceImages = await listProjectReferenceImages(service, project.id);
-    const productReferenceImages = allReferenceImages.filter(
-      image => image.reference_role === 'product'
-    );
+    const projectForFidelity: Pick<Project, 'sells_physical_product'> = {
+      sells_physical_product: sellsPhysicalProduct,
+    };
+    const useProductFidelity = projectUsesProductImageFidelity(projectForFidelity, allReferenceImages);
+    const productReferenceImages = useProductFidelity
+      ? allReferenceImages.filter(image => image.reference_role === 'product')
+      : [];
     const userFeedback: string | null =
       typeof (visual as any).user_feedback === 'string' && (visual as any).user_feedback.trim()
         ? (visual as any).user_feedback.trim()
         : null;
 
-    // === Selector de referencias por slide ===
-    // Un mini-LLM decide qué referencias son útiles para este slide concreto,
-    // conociendo el ROL (producto / estilo / lugar / logo…) y la vista de cada
-    // una. Sobre su decisión aplicamos una regla dura: si el proyecto tiene
-    // fotos de PRODUCTO, SIEMPRE va al menos una como ancla de fidelidad, pase
-    // lo que pase con el selector (nunca generamos el producto "de memoria").
     const refsWithCaption = allReferenceImages.filter(
       image => image.caption && image.caption_status === 'ready'
     );
@@ -377,10 +415,11 @@ export async function POST(request: NextRequest) {
         catalog: refsWithCaption.map(image => ({
           id: image.id,
           caption: image.caption || '',
-          role: image.reference_role,
+          role: effectiveReferenceRoleForPipeline(image.reference_role, sellsPhysicalProduct),
           view: image.reference_view ?? null,
         })),
         maxResults: DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
+        sellsPhysicalProduct,
       });
       if (selection) {
         selectorReasoning = selection.reasoning;
@@ -396,9 +435,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Ancla de producto garantizada: si hay fotos de producto pero ninguna ha
-    // quedado seleccionada, anteponemos la mejor (la primaria, o la primera).
-    if (productReferenceImages.length > 0) {
+    if (useProductFidelity && productReferenceImages.length > 0) {
       const alreadyHasProduct = selectedReferenceImages.some(
         image => image.reference_role === 'product'
       );
@@ -415,31 +452,34 @@ export async function POST(request: NextRequest) {
     // Nunca pasamos más referencias de las que admite la edición.
     selectedReferenceImages = selectedReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
 
-    const projectPhysicalConstraints: string | null =
-      typeof (project as { physical_constraints?: unknown }).physical_constraints === 'string' &&
-      ((project as { physical_constraints?: string }).physical_constraints || '').trim()
-        ? ((project as { physical_constraints?: string }).physical_constraints as string).trim()
-        : null;
+    const projectPhysicalConstraints = useProductFidelity ? projectPhysicalConstraintsFromDb : null;
 
     let prompt = await buildFinalPrompt(
       openai,
       visual.visual_prompt,
       selectedReferenceImages.length,
       userFeedback,
-      projectPhysicalConstraints
+      projectPhysicalConstraints,
+      useProductFidelity
     );
     if (selectedReferenceImages.length > 0) {
-      prompt = applyReferenceCaptionsToPrompt(prompt, selectedReferenceImages, selectorReasoning);
+      prompt = applyReferenceCaptionsToPrompt(
+        prompt,
+        selectedReferenceImages,
+        selectorReasoning,
+        useProductFidelity,
+        sellsPhysicalProduct
+      );
     }
 
-    const productAnchor = selectedReferenceImages.find(
-      image => image.reference_role === 'product'
-    );
+    const productAnchor = useProductFidelity
+      ? selectedReferenceImages.find(image => image.reference_role === 'product')
+      : undefined;
 
     console.log(
       `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs ` +
       `seleccionadas/totales: ${selectedReferenceImages.length}/${allReferenceImages.length}, ` +
-      `producto: ${productReferenceImages.length}, ` +
+      `fidelidad_producto: ${useProductFidelity}, refs_producto: ${productReferenceImages.length}, ` +
       `orientation: ${projectOrientation} (${imageSize})` +
       (selectorReasoning ? `, selector: "${selectorReasoning}"` : '') +
       (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '') +
@@ -517,7 +557,7 @@ export async function POST(request: NextRequest) {
         const violationsText = fidelity.violations.length
           ? fidelity.violations.map(v => `- ${v}`).join('\n')
           : '- El producto generado no coincide con el producto real de las referencias.';
-        const retryPrompt = applyUserFeedbackToPrompt(prompt, violationsText);
+        const retryPrompt = applyUserFeedbackToPrompt(prompt, violationsText, true);
         const retryRefs = productReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
         try {
           const b64Retry = await generateImageB64(

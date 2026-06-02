@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
 import { buildSingleVisualPrompt, decomposePostIntoVisuals, callAI, type VisualBriefInput } from '@/lib/ai';
+import {
+  countProductReferenceImages,
+  countStyleReferenceImages,
+  type ReferenceGuidanceInput,
+} from '@/lib/projects/reference-images-shared';
 import { DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI, listProjectReferenceImages } from '@/lib/projects/reference-images';
 import type { SingleVisualAIResponse, ContentItem } from '@/types';
 
@@ -87,6 +92,7 @@ async function processOneVisual(
   job: VisualJob,
   project: any,
   userId: string,
+  referenceGuidance: ReferenceGuidanceInput,
   referenceImageUrls: string[],
   supabase: any,
 ): Promise<VisualResult | null> {
@@ -100,9 +106,7 @@ async function processOneVisual(
     previousSlideContext: job.previousSlideContext,
     nextSlideContext: job.nextSlideContext,
     siblingShotCards: job.siblingShotCards,
-  }, {
-    referenceImageCount: referenceImageUrls.length,
-  });
+  }, referenceGuidance);
 
   const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
     agentKey,
@@ -231,6 +235,11 @@ export async function POST(request: NextRequest) {
       DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
     );
     const referenceImageUrls = referenceImages.map(image => image.image_url);
+    const referenceGuidance: ReferenceGuidanceInput = {
+      sellsPhysicalProduct: project.sells_physical_product ?? null,
+      productReferenceCount: countProductReferenceImages(referenceImages),
+      styleReferenceCount: countStyleReferenceImages(referenceImages),
+    };
 
     let query = supabase
       .from('content_items')
@@ -342,7 +351,14 @@ export async function POST(request: NextRequest) {
 
             let result: VisualResult | null = null;
             try {
-              result = await processOneVisual(job, project, user.id, referenceImageUrls, supabase);
+              result = await processOneVisual(
+                job,
+                project,
+                user.id,
+                referenceGuidance,
+                referenceImageUrls,
+                supabase
+              );
             } catch (err) {
               console.error(`[generate-visual-briefs] Failed visual ${job.contentItemId}[${job.visualIndex}]:`, err);
             }

@@ -36,6 +36,18 @@ function isReferenceRoleColumnError(error: { message?: string } | null | undefin
   );
 }
 
+function referenceAnalysisContext(project: {
+  sector?: string | null;
+  description?: string | null;
+  sells_physical_product?: boolean | null;
+}) {
+  return {
+    sector: project.sector ?? null,
+    description: project.description ?? null,
+    sellsPhysicalProduct: project.sells_physical_product ?? null,
+  };
+}
+
 async function getOwnedProject(projectId: string, userId: string) {
   const supabase = await createServerSupabase();
   const { data: project } = await fetchActiveProjectForUser(supabase, userId, projectId);
@@ -181,8 +193,11 @@ export async function POST(
     if (needsCaption.length > 0) {
       const apiKey = await resolveOpenAIKeyForUser(service, user.id);
       if (apiKey) {
+        const analysisCtx = referenceAnalysisContext(project);
         await Promise.all(
-          needsCaption.map(image => persistReferenceImageAnalysis(service, apiKey, image))
+          needsCaption.map(image =>
+            persistReferenceImageAnalysis(service, apiKey, image, analysisCtx)
+          )
         );
         imagesAfterUpsert = await listProjectReferenceImages(service, id);
 
@@ -376,10 +391,15 @@ export async function PATCH(
           { status: 422 }
         );
       }
-      await persistReferenceImageAnalysis(service, apiKey, {
-        ...target,
-        role_is_manual: roleProvided ? true : target.role_is_manual,
-      });
+      await persistReferenceImageAnalysis(
+        service,
+        apiKey,
+        {
+          ...target,
+          role_is_manual: roleProvided ? true : target.role_is_manual,
+        },
+        referenceAnalysisContext(project)
+      );
     }
 
     const images = await listProjectReferenceImages(service, id);

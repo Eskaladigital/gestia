@@ -80,15 +80,33 @@ async function main() {
     console.log(`✓ ${ref.original_filename}: ${ref.reference_role} → style`);
   }
 
+  const projectUpdate = {
+    physical_constraints: null,
+    physical_constraints_at: null,
+    sells_physical_product: false,
+  };
   const { error: clearErr } = await service
     .from('projects')
-    .update({ physical_constraints: null, physical_constraints_at: null })
+    .update(projectUpdate)
     .eq('id', PROJECT_ID);
   if (clearErr) {
-    console.error('Error limpiando reglas físicas:', clearErr.message);
-    process.exit(1);
+    if (/sells_physical_product/i.test(clearErr.message || '')) {
+      const { error: legacyErr } = await service
+        .from('projects')
+        .update({ physical_constraints: null, physical_constraints_at: null })
+        .eq('id', PROJECT_ID);
+      if (legacyErr) {
+        console.error('Error limpiando proyecto:', legacyErr.message);
+        process.exit(1);
+      }
+      console.warn('⚠ sells_physical_product no existe (migración 029). Ejecuta la migración y vuelve a lanzar el script.');
+    } else {
+      console.error('Error limpiando reglas físicas:', clearErr.message);
+      process.exit(1);
+    }
+  } else {
+    console.log('✓ Reglas físicas borradas y sells_physical_product = false (agencia / moodboard).');
   }
-  console.log('✓ Reglas físicas borradas (sin fotos de producto).');
 
   console.log('\nListo. Regenera las imágenes del calendario desde la app.');
 }

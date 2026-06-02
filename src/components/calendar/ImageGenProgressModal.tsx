@@ -105,7 +105,22 @@ export function ImageGenProgressModal({
           setPhase('cancelled');
           return;
         }
-        const json = await res.json();
+        const raw = await res.text();
+        let json: { error?: string; image_url?: string } = {};
+        try {
+          json = raw ? (JSON.parse(raw) as typeof json) : {};
+        } catch {
+          if (res.status === 504 || /timeout|timed out/i.test(raw)) {
+            throw new Error(
+              'La generación tardó demasiado (timeout). Prueba de nuevo con una sola imagen o espera un momento.'
+            );
+          }
+          throw new Error(
+            res.ok
+              ? 'Respuesta inválida del servidor al generar la imagen'
+              : `Error ${res.status}: ${raw.slice(0, 160)}`
+          );
+        }
         if (cancelledRef.current) {
           setPhase('cancelled');
           return;

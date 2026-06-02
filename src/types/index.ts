@@ -188,6 +188,12 @@ export interface Project {
   physical_constraints?: string | null;
   /** Última edición (manual o IA) de las reglas inviolables. Migración 025. */
   physical_constraints_at?: string | null;
+  /**
+   * true = negocio con producto físico a replicar (camper, sauna, tornillos…).
+   * false = servicio/agencia/moodboard sin clonar un objeto. Migración 029.
+   * null = aún no clasificado (p. ej. antes de generar estrategia).
+   */
+  sells_physical_product?: boolean | null;
   status: ProjectStatus;
   onboarding_step: number;
   brand_colors: BrandColorEntry[];
@@ -426,6 +432,13 @@ export interface StrategyGeneration {
     example_topics: string[];
   }>;
   recommendations: string;
+  /**
+   * La IA decide si el cliente vende un producto físico reproducible en imagen.
+   * true: camper, alquiler de barco, tornillos… false: agencia, masajes, consultoría…
+   */
+  sells_physical_product?: boolean;
+  /** Una frase que justifica sells_physical_product (opcional, para logs/UI). */
+  product_fidelity_reason?: string;
 }
 
 export interface CalendarPost {

@@ -36,8 +36,23 @@ export type ProjectSettingsInitial = {
   ai_rules: string | null | undefined;
   image_orientation: ImageOrientation | null | undefined;
   physical_constraints: string | null | undefined;
+  sells_physical_product?: boolean | null;
   updated_at: string;
 };
+
+type ProductNatureChoice = 'auto' | 'physical' | 'service';
+
+function productNatureFromSells(v: boolean | null | undefined): ProductNatureChoice {
+  if (v === true) return 'physical';
+  if (v === false) return 'service';
+  return 'auto';
+}
+
+function sellsFromProductNature(c: ProductNatureChoice): boolean | null {
+  if (c === 'physical') return true;
+  if (c === 'service') return false;
+  return null;
+}
 
 const IMAGE_ORIENTATION_OPTIONS: ImageOrientation[] = ['vertical', 'cuadrado', 'horizontal'];
 
@@ -115,6 +130,9 @@ export function ProjectSettingsPanel({
   const [monthlyFeeInput, setMonthlyFeeInput] = useState(feeToInput(initial.monthly_fee));
   const [aiRules, setAiRules] = useState(initial.ai_rules || '');
   const [physicalConstraints, setPhysicalConstraints] = useState(initial.physical_constraints || '');
+  const [productNature, setProductNature] = useState<ProductNatureChoice>(
+    productNatureFromSells(initial.sells_physical_product)
+  );
   const [imageOrientation, setImageOrientation] = useState<ImageOrientation>(
     initial.image_orientation || DEFAULT_IMAGE_ORIENTATION
   );
@@ -139,6 +157,7 @@ export function ProjectSettingsPanel({
     setMonthlyFeeInput(feeToInput(initial.monthly_fee));
     setAiRules(initial.ai_rules || '');
     setPhysicalConstraints(initial.physical_constraints || '');
+    setProductNature(productNatureFromSells(initial.sells_physical_product));
     setImageOrientation(initial.image_orientation || DEFAULT_IMAGE_ORIENTATION);
   }, [initial.updated_at]);
 
@@ -191,6 +210,7 @@ export function ProjectSettingsPanel({
             ? {}
             : { physical_constraints: physicalConstraints.trim() || null }),
           image_orientation: imageOrientation,
+          sells_physical_product: sellsFromProductNature(productNature),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -219,6 +239,7 @@ export function ProjectSettingsPanel({
     aiRules,
     physicalConstraints,
     productFidelityManaged,
+    productNature,
     imageOrientation,
     distOk,
     projectId,
@@ -360,6 +381,27 @@ export function ProjectSettingsPanel({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider mb-2">
+                    ¿Vende producto físico reproducible en imagen?
+                  </label>
+                  <select
+                    value={productNature}
+                    onChange={e => setProductNature(e.target.value as ProductNatureChoice)}
+                    className={inputClass}
+                  >
+                    <option value="auto">Automático (la IA lo fija al generar estrategia)</option>
+                    <option value="physical">Sí — camper, barco, tornillos, local físico…</option>
+                    <option value="service">No — agencia, consultoría, masajes, abogacía…</option>
+                  </select>
+                  <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-1.5">
+                    {productNature === 'auto'
+                      ? 'Tras «Generar estrategia», GestIA clasifica el negocio (alquiler de coches = sí; marketing digital = no).'
+                      : productNature === 'physical'
+                        ? 'Las fotos marcadas como Producto anclan la forma real; sin ellas, la IA pedirá subirlas.'
+                        : 'Las referencias son moodboard de estilo: no se clona un objeto concreto en todas las piezas.'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-surface-900 uppercase tracking-wider mb-2">
                     Reglas IA del proyecto
                   </label>
                   <textarea
@@ -371,8 +413,10 @@ export function ProjectSettingsPanel({
                   />
                   <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-1.5">
                     Reglas BLANDAS de tono, copy y deseos creativos (p. ej. &quot;que salga una piscina&quot;,
-                    &quot;siempre atardecer&quot;). No sustituyen la forma del producto: eso lo fija la app con las
-                    fotos de producto.
+                    &quot;siempre atardecer&quot;).
+                    {productNature !== 'service'
+                      ? ' No sustituyen la forma del producto: eso lo fija la app con las fotos de producto.'
+                      : ' En proyectos de servicio, guían el moodboard sin fijar un objeto único.'}
                   </p>
                 </div>
                 <div>

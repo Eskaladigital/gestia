@@ -3,7 +3,12 @@ import { createServerSupabase, markProjectPipelineError } from '@/lib/supabase/s
 import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
 import { callAI, buildStrategyPrompt } from '@/lib/ai';
 import { canRunGenerateStrategyStep, type StrategyForPipeline } from '@/lib/projects/pipeline';
+import {
+  countProductReferenceImages,
+  countStyleReferenceImages,
+} from '@/lib/projects/reference-images-shared';
 import { DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI, listProjectReferenceImages } from '@/lib/projects/reference-images';
+import { isSellsPhysicalProductColumnError } from '@/lib/supabase/project-queries';
 import type { StrategyGeneration } from '@/types';
 
 export const maxDuration = 300;
@@ -80,11 +85,16 @@ function normalizeStrategyGeneration(raw: StrategyGeneration): StrategyGeneratio
         .slice(0, 8)
     : [];
 
+  const sells_physical_product =
+    typeof raw?.sells_physical_product === 'boolean' ? raw.sells_physical_product : undefined;
+
   return {
     content_pillars,
     tone_guidelines: clipText(raw?.tone_guidelines, 5000),
     thematic_lines,
     recommendations: clipText(raw?.recommendations, 5000),
+    sells_physical_product,
+    product_fidelity_reason: clipText(raw?.product_fidelity_reason, 500),
   };
 }
 
@@ -174,12 +184,11 @@ export async function POST(request: NextRequest) {
       DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
     );
 
-    const { system, user: userPrompt } = buildStrategyPrompt(
-      project,
-      businessAnalysis,
-      competitorAnalysis,
-      { referenceImageCount: referenceImages.length }
-    );
+    const { system, user: userPrompt } = buildStrategyPrompt(project, businessAnalysis, competitorAnalysis, {
+      sellsPhysicalProduct: project.sells_physical_product ?? null,
+      productReferenceCount: countProductReferenceImages(referenceImages),
+      styleReferenceCount: countStyleReferenceImages(referenceImages),
+    });
     const aiResponse = await callAI<StrategyGeneration>(system, userPrompt, {
       agentKey: 'generate_strategy',
       userId: user.id,
@@ -217,8 +226,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Actualizar estado del proyecto
-    await supabase.from('projects').update({ status: 'ready' }).eq('id', project_id);
+    const projectUpdate: Record<string, unknown> = { status: 'ready' };
+    if (typeof normalized.sells_physical_product === 'boolean') {
+      projectUpdate.sells_physical_product = normalized.sells_physical_product;
+    }
+    let { error: projectUpErr } = await supabase
+      .from('projects')
+      .update(projectUpdate)
+      .eq('id', project_id);
+    if (projectUpErr && 'sells_physical_product' in projectUpdate && isSellsPhysicalProductColumnError(projectUpErr)) {
+      const { sells_physical_product: _drop, ...rest } = projectUpdate;
+      await supabase.from('projects').update(rest).eq('id', project_id);
+    }
 
     return NextResponse.json({
       success: true,
