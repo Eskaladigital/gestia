@@ -1,6 +1,17 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Download,
+  FlipHorizontal,
+  Film,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react';
 import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
 import { downloadImageFromUrl, imageBlobFlippedHorizontally, isMobileDevice, shareImageBlobToPhotos } from '@/lib/utils';
@@ -53,25 +64,22 @@ type GridDensity = 'large' | 'medium' | 'small';
 
 const GRID_DENSITY_CONFIG: Record<
   GridDensity,
-  { label: string; cols: string; gap: string; singleMaxW: string }
+  { label: string; cols: string; gap: string }
 > = {
   large: {
     label: 'Grande',
     cols: 'grid-cols-1 md:grid-cols-2',
     gap: 'gap-4',
-    singleMaxW: 'max-w-2xl',
   },
   medium: {
     label: 'Mediana',
     cols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
     gap: 'gap-3',
-    singleMaxW: 'max-w-xs',
   },
   small: {
     label: 'Pequeña',
     cols: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
     gap: 'gap-2',
-    singleMaxW: 'max-w-[180px]',
   },
 };
 
@@ -90,12 +98,41 @@ function readStoredGridDensity(projectId: string): GridDensity {
   return 'large';
 }
 
-function visualsGridClass(density: GridDensity, visualCount: number): string {
+/**
+ * Misma rejilla independientemente de cuántos visuals tenga el post, de modo
+ * que una imagen suelta ocupe exactamente una celda (mismo ancho que las cards
+ * de los carruseles). Así todas las imágenes tienen la misma anchura.
+ */
+function visualsGridClass(density: GridDensity): string {
   const cfg = GRID_DENSITY_CONFIG[density];
-  if (visualCount === 1) {
-    return `grid ${cfg.gap} grid-cols-1 ${cfg.singleMaxW}`;
-  }
   return `grid ${cfg.gap} ${cfg.cols}`;
+}
+
+/** Botón de acción compacto (icono) para la barra de cada visual. */
+function ActionIcon({
+  title,
+  onClick,
+  disabled,
+  className,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-7 h-7 flex items-center justify-center border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0 ${className}`}
+    >
+      {children}
+    </button>
+  );
 }
 
 function getMondayOfWeek(d: Date): Date {
@@ -850,7 +887,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                     </div>
 
                     {/* Visuals grid */}
-                    <div className={visualsGridClass(gridDensity, visuals.length)}>
+                    <div className={visualsGridClass(gridDensity)}>
                       {visuals.map(visual => {
                         const hasImage = visual.image_status === 'ready' && visual.image_url;
                         const hasError = visual.image_status === 'error';
@@ -858,128 +895,104 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
 
                         return (
                           <div key={visual.id} className="border-2 border-surface-900 bg-white overflow-hidden">
-                            {/* Visual label + actions */}
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-surface-100 border-b-2 border-surface-900 px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-surface-700">
-                                  {visual.label || `Visual ${visual.visual_index + 1}`}
-                                </span>
-                                {hasImage && (
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                                )}
-                                {hasError && (
-                                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                                )}
-                                {!hasImage && !hasError && (
-                                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopy(visual.visual_prompt, visual.id)}
-                                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                    copiedId === visual.id
-                                      ? 'bg-emerald-500 text-white'
-                                      : 'bg-white text-surface-900 hover:bg-surface-100'
-                                  }`}
-                                >
-                                  {copiedId === visual.id ? 'Copiado' : 'Copiar'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setImageGenQueue([{
-                                    visualId: visual.id,
-                                    contentItemId: item.id,
-                                    label: visual.label || `Visual ${visual.visual_index + 1}`,
-                                  }])}
-                                  disabled={!!imageGenQueue}
-                                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-50 ${
-                                    hasImage
-                                      ? 'bg-violet-600 text-white hover:bg-violet-700'
-                                      : 'bg-brand-600 text-white hover:bg-brand-700'
-                                  }`}
-                                >
-                                  {hasImage ? 'Regenerar' : 'Generar'}
-                                </button>
-                                {hasImage && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      title={
-                                        visual.user_feedback
-                                          ? `Error reportado: "${visual.user_feedback.slice(0, 120)}${visual.user_feedback.length > 120 ? '…' : ''}" — al regenerar se aplicará esta corrección.`
-                                          : 'Reportar un error de la imagen (se usará al regenerar para corregirlo)'
-                                      }
-                                      onClick={() => openReportModal(visual, item.id)}
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                        visual.user_feedback
-                                          ? 'bg-red-600 text-white hover:bg-red-700'
-                                          : 'bg-white text-surface-900 hover:bg-surface-100'
-                                      }`}
-                                    >
-                                      {visual.user_feedback ? 'Error ✓' : 'Reportar'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      title="Texto, filtros y export final para redes"
-                                      onClick={() =>
-                                        setImageEditorVisual({ visual, contentItemId: item.id })
-                                      }
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                        visualHasSavedEdit(visual)
-                                          ? 'bg-teal-600 text-white hover:bg-teal-700'
-                                          : 'bg-white text-surface-900 hover:bg-surface-100'
-                                      }`}
-                                    >
-                                      {visualHasSavedEdit(visual) ? 'Editar ✓' : 'Editar'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      title="Animar esta imagen con IA de vídeo (Veo)"
-                                      onClick={() =>
-                                        setVideoModalVisual({ visual, contentItemId: item.id })
-                                      }
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
-                                        visualHasVideo(visual)
-                                          ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
-                                          : 'bg-white text-surface-900 hover:bg-surface-100'
-                                      }`}
-                                    >
-                                      {visualHasVideo(visual) ? '🎬 ✓' : '🎬 Animar'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      title={
-                                        visualHasSavedEdit(visual)
-                                          ? 'Quita la edición guardada para usar espejo'
-                                          : 'Voltear horizontal (espejo) — se guarda en el proyecto'
-                                      }
-                                      disabled={visualHasSavedEdit(visual)}
-                                      onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                                        visual.image_flip_horizontal === true
-                                          ? 'bg-amber-500 text-surface-900'
-                                          : 'bg-white text-surface-900 hover:bg-surface-100'
-                                      }`}
-                                    >
-                                      Espejo
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void handleDownloadVisual(
-                                          visual,
-                                          buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
-                                        )
-                                      }
-                                      className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 bg-surface-900 text-white shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
-                                    >
-                                      Descargar
-                                    </button>
-                                  </>
-                                )}
-                              </div>
+                            {/* Barra de acciones (iconos compactos) */}
+                            <div className="flex flex-wrap items-center gap-1 bg-surface-100 border-b-2 border-surface-900 px-2 py-1.5">
+                              <ActionIcon
+                                title="Copiar prompt visual"
+                                onClick={() => handleCopy(visual.visual_prompt, visual.id)}
+                                className={
+                                  copiedId === visual.id
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-white text-surface-900 hover:bg-surface-100'
+                                }
+                              >
+                                {copiedId === visual.id ? <Check size={14} /> : <Copy size={14} />}
+                              </ActionIcon>
+                              <ActionIcon
+                                title={hasImage ? 'Regenerar imagen' : 'Generar imagen'}
+                                onClick={() => setImageGenQueue([{
+                                  visualId: visual.id,
+                                  contentItemId: item.id,
+                                  label: visual.label || `Visual ${visual.visual_index + 1}`,
+                                }])}
+                                disabled={!!imageGenQueue}
+                                className={
+                                  hasImage
+                                    ? 'bg-violet-600 text-white hover:bg-violet-700'
+                                    : 'bg-brand-600 text-white hover:bg-brand-700'
+                                }
+                              >
+                                {hasImage ? <RefreshCw size={14} /> : <Sparkles size={14} />}
+                              </ActionIcon>
+                              {hasImage && (
+                                <>
+                                  <ActionIcon
+                                    title={
+                                      visual.user_feedback
+                                        ? `Error reportado: "${visual.user_feedback.slice(0, 120)}${visual.user_feedback.length > 120 ? '…' : ''}" — al regenerar se aplicará esta corrección.`
+                                        : 'Reportar un error de la imagen (se usará al regenerar para corregirlo)'
+                                    }
+                                    onClick={() => openReportModal(visual, item.id)}
+                                    className={
+                                      visual.user_feedback
+                                        ? 'bg-red-600 text-white hover:bg-red-700'
+                                        : 'bg-white text-surface-900 hover:bg-surface-100'
+                                    }
+                                  >
+                                    <AlertTriangle size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    title={visualHasSavedEdit(visual) ? 'Editar (tiene edición guardada)' : 'Editar: texto, filtros y export final'}
+                                    onClick={() => setImageEditorVisual({ visual, contentItemId: item.id })}
+                                    className={
+                                      visualHasSavedEdit(visual)
+                                        ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                        : 'bg-white text-surface-900 hover:bg-surface-100'
+                                    }
+                                  >
+                                    <Pencil size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    title="Animar esta imagen con IA de vídeo (Veo)"
+                                    onClick={() => setVideoModalVisual({ visual, contentItemId: item.id })}
+                                    className={
+                                      visualHasVideo(visual)
+                                        ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
+                                        : 'bg-white text-surface-900 hover:bg-surface-100'
+                                    }
+                                  >
+                                    <Film size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    title={
+                                      visualHasSavedEdit(visual)
+                                        ? 'Quita la edición guardada para usar espejo'
+                                        : 'Voltear horizontal (espejo) — se guarda en el proyecto'
+                                    }
+                                    disabled={visualHasSavedEdit(visual)}
+                                    onClick={() => void toggleImageFlipHorizontal(visual.id, item.id)}
+                                    className={
+                                      visual.image_flip_horizontal === true
+                                        ? 'bg-amber-500 text-surface-900'
+                                        : 'bg-white text-surface-900 hover:bg-surface-100'
+                                    }
+                                  >
+                                    <FlipHorizontal size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    title="Descargar imagen"
+                                    onClick={() =>
+                                      void handleDownloadVisual(
+                                        visual,
+                                        buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                      )
+                                    }
+                                    className="bg-surface-900 text-white"
+                                  >
+                                    <Download size={14} />
+                                  </ActionIcon>
+                                </>
+                              )}
                             </div>
 
                             {/* Image area */}
@@ -997,8 +1010,12 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                   });
                                 }}
                               >
+                                <span className="absolute top-2 left-2 z-10 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider bg-surface-900/80 text-white px-2 py-0.5 backdrop-blur-sm">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                  {visual.label || `Visual ${visual.visual_index + 1}`}
+                                </span>
                                 {visualHasSavedEdit(visual) && (
-                                  <span className="absolute top-2 left-2 z-10 text-[9px] font-bold uppercase tracking-wider bg-teal-600 text-white px-2 py-0.5 border border-surface-900">
+                                  <span className="absolute top-2 right-2 z-10 text-[9px] font-bold uppercase tracking-wider bg-teal-600 text-white px-2 py-0.5 border border-surface-900">
                                     Editada
                                   </span>
                                 )}
@@ -1015,12 +1032,20 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                 </div>
                               </div>
                             ) : hasError ? (
-                              <div className={`${aspectClass} bg-red-50 flex flex-col items-center justify-center gap-2 px-4`}>
+                              <div className={`relative ${aspectClass} bg-red-50 flex flex-col items-center justify-center gap-2 px-4`}>
+                                <span className="absolute top-2 left-2 z-10 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider bg-surface-900/80 text-white px-2 py-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                  {visual.label || `Visual ${visual.visual_index + 1}`}
+                                </span>
                                 <span className="text-2xl">⚠️</span>
                                 <span className="text-xs text-red-700 font-mono text-center">{visual.image_error || 'Error desconocido'}</span>
                               </div>
                             ) : (
-                              <div className={`${aspectClass} bg-surface-100 flex flex-col items-center justify-center gap-2`}>
+                              <div className={`relative ${aspectClass} bg-surface-100 flex flex-col items-center justify-center gap-2`}>
+                                <span className="absolute top-2 left-2 z-10 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider bg-surface-900/80 text-white px-2 py-0.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                  {visual.label || `Visual ${visual.visual_index + 1}`}
+                                </span>
                                 <span className="text-3xl opacity-30">🖼️</span>
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-surface-400">Pendiente de generar</span>
                               </div>
