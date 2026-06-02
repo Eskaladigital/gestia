@@ -5,14 +5,17 @@ import {
   buildProjectReferenceImageStoragePath,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   ensureProjectReferenceImagesBucket,
-  generateReferenceImageCaption,
   isProjectReferenceImagesTableError,
+  isProjectReferenceRole,
   listProjectReferenceImages,
   MAX_PROJECT_REFERENCE_IMAGES,
   NORMALIZED_REFERENCE_EXTENSION,
   NORMALIZED_REFERENCE_MIME,
   normalizeReferenceImageBuffer,
+  persistReferenceImageAnalysis,
+  reanalyzeProjectReferenceImages,
   resolveOpenAIKeyForUser,
+  syncProjectPhysicalConstraintsFromReferences,
 } from '@/lib/projects/reference-images';
 
 // El captioning con visión puede tardar 1-3 s por imagen; con varias subidas
@@ -20,51 +23,17 @@ import {
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
-/**
- * Genera y persiste el caption de una referencia.
- * No lanza: si falla, marca caption_status = 'error' y lo registra.
- */
-async function captionReferenceImage(
-  service: ReturnType<typeof createServiceSupabase>,
-  apiKey: string,
-  imageId: string,
-  imageUrl: string
-): Promise<void> {
-  try {
-    await service
-      .from('project_reference_images')
-      .update({ caption_status: 'generating' })
-      .eq('id', imageId);
-
-    const caption = await generateReferenceImageCaption({ apiKey, imageUrl });
-    if (!caption) {
-      await service
-        .from('project_reference_images')
-        .update({ caption_status: 'error', caption_at: new Date().toISOString() })
-        .eq('id', imageId);
-      return;
-    }
-
-    await service
-      .from('project_reference_images')
-      .update({
-        caption,
-        caption_status: 'ready',
-        caption_at: new Date().toISOString(),
-        caption_is_manual: false,
-      })
-      .eq('id', imageId);
-  } catch (err) {
-    console.warn('[reference-images] caption failed:', (err as Error)?.message);
-    try {
-      await service
-        .from('project_reference_images')
-        .update({ caption_status: 'error', caption_at: new Date().toISOString() })
-        .eq('id', imageId);
-    } catch {
-      /* ignore */
-    }
-  }
+/** Columnas de rol/identidad (migración 028); puede no existir en BD antiguas. */
+function isReferenceRoleColumnError(error: { message?: string } | null | undefined): boolean {
+  const m = (error?.message || '').toLowerCase();
+  return (
+    m.includes('reference_role') ||
+    m.includes('role_confidence') ||
+    m.includes('role_is_manual') ||
+    m.includes('product_identity') ||
+    m.includes('product_traits') ||
+    m.includes('reference_view')
+  );
 }
 
 async function getOwnedProject(projectId: string, userId: string) {
@@ -213,9 +182,23 @@ export async function POST(
       const apiKey = await resolveOpenAIKeyForUser(service, user.id);
       if (apiKey) {
         await Promise.all(
-          needsCaption.map(image => captionReferenceImage(service, apiKey, image.id, image.image_url))
+          needsCaption.map(image => persistReferenceImageAnalysis(service, apiKey, image))
         );
         imagesAfterUpsert = await listProjectReferenceImages(service, id);
+
+        // Auto-reglas físicas: si ahora hay fotos de producto y el proyecto aún
+        // no tiene reglas escritas, las redactamos y guardamos solas (sin pisar
+        // nada manual). Así el cliente no tiene que pulsar ningún botón.
+        try {
+          await syncProjectPhysicalConstraintsFromReferences({
+            service,
+            project,
+            referenceImages: imagesAfterUpsert,
+            apiKey,
+          });
+        } catch (syncErr) {
+          console.warn('[reference-images] auto physical_constraints falló:', (syncErr as Error)?.message);
+        }
       } else {
         console.warn('[reference-images] sin API key OpenAI: se sube sin caption automático');
       }
@@ -253,6 +236,7 @@ export async function PATCH(
       imageId?: string;
       isPrimary?: boolean;
       caption?: string;
+      role?: string;
       regenerateCaption?: boolean;
       regenerateAllPending?: boolean;
     };
@@ -262,29 +246,19 @@ export async function PATCH(
     // referencias antiguas que se subieron antes de existir el campo caption.
     if (body.regenerateAllPending === true) {
       const service = createServiceSupabase();
-      const all = await listProjectReferenceImages(service, id);
-      const targets = all.filter(image => {
-        if (image.caption_is_manual) return false;
-        const status = image.caption_status ?? 'pending';
-        return status !== 'ready' || !image.caption;
-      });
-      if (targets.length === 0) {
-        return NextResponse.json({ success: true, images: all, processed: 0 });
+      try {
+        const { processed, images } = await reanalyzeProjectReferenceImages({
+          service,
+          projectId: id,
+          userId: user.id,
+          project,
+        });
+        return NextResponse.json({ success: true, images, processed });
+      } catch (reanalyzeErr) {
+        const message = reanalyzeErr instanceof Error ? reanalyzeErr.message : 'Error analizando referencias';
+        const status = message.includes('API key') ? 422 : 500;
+        return NextResponse.json({ error: message }, { status });
       }
-      const apiKey = await resolveOpenAIKeyForUser(service, user.id);
-      if (!apiKey) {
-        return NextResponse.json(
-          { error: 'No hay API key de OpenAI configurada para generar descripciones.' },
-          { status: 422 }
-        );
-      }
-      // Captionar en paralelo. captionReferenceImage no lanza, así que un fallo
-      // suelto no aborta el lote: queda como caption_status='error' en su fila.
-      await Promise.all(
-        targets.map(image => captionReferenceImage(service, apiKey, image.id, image.image_url))
-      );
-      const refreshed = await listProjectReferenceImages(service, id);
-      return NextResponse.json({ success: true, images: refreshed, processed: targets.length });
     }
 
     const imageId = typeof body.imageId === 'string' ? body.imageId : '';
@@ -294,11 +268,19 @@ export async function PATCH(
 
     const isPrimaryProvided = typeof body.isPrimary === 'boolean';
     const captionProvided = typeof body.caption === 'string';
+    const roleProvided = typeof body.role === 'string';
     const regenerateCaption = body.regenerateCaption === true;
 
-    if (!isPrimaryProvided && !captionProvided && !regenerateCaption) {
+    if (roleProvided && (!isProjectReferenceRole(body.role) || body.role === 'pending')) {
       return NextResponse.json(
-        { error: 'Indica al menos isPrimary, caption o regenerateCaption' },
+        { error: 'Rol no válido. Usa product, style, place, logo, person, scene u other.' },
+        { status: 400 }
+      );
+    }
+
+    if (!isPrimaryProvided && !captionProvided && !roleProvided && !regenerateCaption) {
+      return NextResponse.json(
+        { error: 'Indica al menos isPrimary, caption, role o regenerateCaption' },
         { status: 400 }
       );
     }
@@ -341,6 +323,18 @@ export async function PATCH(
       }
     }
 
+    if (roleProvided) {
+      update.reference_role = body.role;
+      update.role_is_manual = true;
+      // Si el usuario marca algo que NO es producto, limpiamos los campos de
+      // producto para que no arrastren identidad/vista de una clasificación previa.
+      if (body.role !== 'product') {
+        update.product_identity = null;
+        update.product_traits = null;
+        update.reference_view = null;
+      }
+    }
+
     if (Object.keys(update).length > 0) {
       const { error } = await service
         .from('project_reference_images')
@@ -354,7 +348,25 @@ export async function PATCH(
             { status: 503 }
           );
         }
-        throw new Error(error.message);
+        // Migración 028 (rol) no aplicada: reintentamos sin los campos de rol.
+        if (isReferenceRoleColumnError(error)) {
+          const legacyUpdate = { ...update };
+          delete legacyUpdate.reference_role;
+          delete legacyUpdate.role_is_manual;
+          delete legacyUpdate.product_identity;
+          delete legacyUpdate.product_traits;
+          delete legacyUpdate.reference_view;
+          if (Object.keys(legacyUpdate).length > 0) {
+            const { error: legacyErr } = await service
+              .from('project_reference_images')
+              .update(legacyUpdate)
+              .eq('id', imageId)
+              .eq('project_id', id);
+            if (legacyErr) throw new Error(legacyErr.message);
+          }
+        } else {
+          throw new Error(error.message);
+        }
       }
     }
 
@@ -366,10 +378,32 @@ export async function PATCH(
           { status: 422 }
         );
       }
-      await captionReferenceImage(service, apiKey, target.id, target.image_url);
+      await persistReferenceImageAnalysis(service, apiKey, {
+        ...target,
+        role_is_manual: roleProvided ? true : target.role_is_manual,
+      });
     }
 
     const images = await listProjectReferenceImages(service, id);
+
+    // Si cambió el rol o se regeneró un caption, recalculamos las reglas físicas
+    // automáticas (solo afecta si hay producto y no se ha tocado a mano).
+    if (roleProvided || regenerateCaption) {
+      try {
+        const apiKey = await resolveOpenAIKeyForUser(service, user.id);
+        if (apiKey) {
+          await syncProjectPhysicalConstraintsFromReferences({
+            service,
+            project,
+            referenceImages: images,
+            apiKey,
+          });
+        }
+      } catch (syncErr) {
+        console.warn('[reference-images] auto physical_constraints falló:', (syncErr as Error)?.message);
+      }
+    }
+
     return NextResponse.json({ success: true, images });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error actualizando la referencia';

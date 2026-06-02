@@ -10,12 +10,14 @@ import {
 } from '@/lib/ai/constants';
 import type { ImageOrientation } from '@/types';
 import {
+  assessProductFidelity,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   downloadReferenceImagesAsFiles,
   isOpenAIReferenceImageRejection,
   listProjectReferenceImages,
   selectRelevantReferenceImages,
 } from '@/lib/projects/reference-images';
+import type { ProductFidelityResult } from '@/lib/projects/reference-images';
 import type { ProjectReferenceImage } from '@/types';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
@@ -80,7 +82,9 @@ function appendReferenceHandlingInstructions(prompt: string, referenceCount: num
   if (referenceCount <= 0) return prompt;
   return `${prompt}
 
-Si hay imágenes de referencia del producto, úsalas para respetar forma, proporciones, acabados, colores y rasgos distintivos del producto real, pero NO copies necesariamente el mismo ángulo, la misma altura de cámara, la misma distancia ni el mismo encuadre de esas referencias. La composición final debe obedecer a la escena descrita en este prompt y mantener variedad de planos entre piezas del proyecto.`;
+USO DE LAS IMÁGENES DE REFERENCIA (dos ejes que NO debes mezclar):
+- IDENTIDAD DEL PRODUCTO (inviolable): reproduce con total fidelidad la forma, geometría, proporciones, materiales, colores estructurales y rasgos distintivos del producto que aparece en las referencias. No cambies su tipología ni inventes un producto genérico: debe ser EL MISMO producto real.
+- DIRECCIÓN DE ESCENA (libre): el ángulo, la altura de cámara, la distancia, el encuadre, la luz, la hora y el contexto los decide ESTE prompt, no las referencias. Varía el plano entre piezas manteniendo siempre intacta la identidad del producto.`;
 }
 
 /**
@@ -108,10 +112,23 @@ function applyReferenceCaptionsToPrompt(
   lines.push('REFERENCIAS VISUALES PARA ESTE SLIDE EN CONCRETO (las imágenes adjuntas, EN ESTE ORDEN):');
   selected.forEach((image, idx) => {
     const cap = (image.caption || '').trim() || 'imagen sin descripción';
-    lines.push(`${idx + 1}. ${cap}`);
+    const role = image.reference_role && image.reference_role !== 'pending' ? image.reference_role : null;
+    const view = image.reference_view ? `, vista ${image.reference_view}` : '';
+    if (role === 'product') {
+      const identity = (image.product_identity || '').trim();
+      lines.push(`${idx + 1}. [PRODUCTO${view}] ${identity ? `${identity}. ` : ''}${cap}`);
+    } else if (role) {
+      const roleLabel = role === 'style' ? 'ESTILO/INSPIRACIÓN' : role === 'place' ? 'LUGAR/CONTEXTO' : role.toUpperCase();
+      lines.push(`${idx + 1}. [${roleLabel}] ${cap}`);
+    } else {
+      lines.push(`${idx + 1}. ${cap}`);
+    }
   });
   lines.push('');
-  lines.push('Estas referencias son la VERDAD del proyecto: respeta forma, proporciones, materiales, colores y, cuando proceda, la DISTRIBUCIÓN ESPACIAL exacta que se ve en ellas (posición de muebles, ventanas, puertas, ángulos del techo, planta interior). NO mezcles partes de unas referencias con otras si no encajan en una misma escena. NO inventes elementos que contradigan lo que se ve en las referencias.');
+  lines.push('Cómo usar cada referencia según su etiqueta:');
+  lines.push('- [PRODUCTO]: es EL producto real del cliente. Reproduce con total fidelidad su forma, proporciones, materiales, colores estructurales y rasgos distintivos (y, en interiores, la distribución espacial exacta). Es inviolable: nunca lo sustituyas por un producto genérico de otra tipología.');
+  lines.push('- [ESTILO/INSPIRACIÓN] y [LUGAR/CONTEXTO]: úsalas solo para el ambiente, la paleta o el entorno. NO copies de ellas la forma del producto.');
+  lines.push('Decides libremente ángulo, plano, luz y encuadre según ESTE prompt; lo único que no cambia es la identidad del producto.');
   if (selectorReasoning) {
     lines.push(`(Selector: ${selectorReasoning})`);
   }
@@ -327,10 +344,11 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey });
-    const allPrimaryReferenceImages = await listProjectReferenceImages(
-      service,
-      project.id,
-      DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
+    // Traemos TODAS las referencias (no solo las 4 principales): así las fotos
+    // de producto nunca quedan fuera del catálogo del selector ni del anclaje.
+    const allReferenceImages = await listProjectReferenceImages(service, project.id);
+    const productReferenceImages = allReferenceImages.filter(
+      image => image.reference_role === 'product'
     );
     const userFeedback: string | null =
       typeof (visual as any).user_feedback === 'string' && (visual as any).user_feedback.trim()
@@ -338,26 +356,25 @@ export async function POST(request: NextRequest) {
         : null;
 
     // === Selector de referencias por slide ===
-    // Si TODAS las referencias del proyecto tienen caption listo, usamos un
-    // mini-LLM que decide qué refs son verdaderamente útiles para este slide
-    // concreto (intenta no mezclar interior/exterior, descarta fotos cuando
-    // el slide es un logo, etc.). Si alguna no tiene caption todavía, caemos
-    // al comportamiento legacy y mandamos todas.
-    const refsWithCaption = allPrimaryReferenceImages.filter(
+    // Un mini-LLM decide qué referencias son útiles para este slide concreto,
+    // conociendo el ROL (producto / estilo / lugar / logo…) y la vista de cada
+    // una. Sobre su decisión aplicamos una regla dura: si el proyecto tiene
+    // fotos de PRODUCTO, SIEMPRE va al menos una como ancla de fidelidad, pase
+    // lo que pase con el selector (nunca generamos el producto "de memoria").
+    const refsWithCaption = allReferenceImages.filter(
       image => image.caption && image.caption_status === 'ready'
     );
-    let selectedReferenceImages = allPrimaryReferenceImages;
+    let selectedReferenceImages = allReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
     let selectorReasoning = '';
-    if (
-      allPrimaryReferenceImages.length > 0 &&
-      refsWithCaption.length === allPrimaryReferenceImages.length
-    ) {
+    if (refsWithCaption.length > 0) {
       const selection = await selectRelevantReferenceImages({
         apiKey,
         visualPrompt: visual.visual_prompt,
         catalog: refsWithCaption.map(image => ({
           id: image.id,
           caption: image.caption || '',
+          role: image.reference_role,
+          view: image.reference_view ?? null,
         })),
         maxResults: DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
       });
@@ -365,18 +382,34 @@ export async function POST(request: NextRequest) {
         selectorReasoning = selection.reasoning;
         if (selection.selectedIds.length > 0) {
           const order = new Map(selection.selectedIds.map((id, idx) => [id, idx]));
-          selectedReferenceImages = allPrimaryReferenceImages
+          selectedReferenceImages = allReferenceImages
             .filter(image => order.has(image.id))
-            .sort(
-              (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)
-            );
+            .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
         } else {
-          // El selector ha decidido que NINGUNA referencia ayuda en este slide
-          // (típico: logo / paisaje sin producto). Generamos sin referencias.
+          // El selector no ve referencias útiles (p. ej. una cita sobre color).
           selectedReferenceImages = [];
         }
       }
     }
+
+    // Ancla de producto garantizada: si hay fotos de producto pero ninguna ha
+    // quedado seleccionada, anteponemos la mejor (la primaria, o la primera).
+    if (productReferenceImages.length > 0) {
+      const alreadyHasProduct = selectedReferenceImages.some(
+        image => image.reference_role === 'product'
+      );
+      if (!alreadyHasProduct) {
+        const anchor =
+          productReferenceImages.find(image => image.is_primary) || productReferenceImages[0];
+        selectedReferenceImages = [anchor, ...selectedReferenceImages];
+        selectorReasoning = selectorReasoning
+          ? `${selectorReasoning} (+ancla de producto)`
+          : 'ancla de producto garantizada';
+      }
+    }
+
+    // Nunca pasamos más referencias de las que admite la edición.
+    selectedReferenceImages = selectedReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
 
     const projectPhysicalConstraints: string | null =
       typeof (project as { physical_constraints?: unknown }).physical_constraints === 'string' &&
@@ -395,53 +428,121 @@ export async function POST(request: NextRequest) {
       prompt = applyReferenceCaptionsToPrompt(prompt, selectedReferenceImages, selectorReasoning);
     }
 
+    const productAnchor = selectedReferenceImages.find(
+      image => image.reference_role === 'product'
+    );
+
     console.log(
       `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs ` +
-      `seleccionadas/totales: ${selectedReferenceImages.length}/${allPrimaryReferenceImages.length}, ` +
+      `seleccionadas/totales: ${selectedReferenceImages.length}/${allReferenceImages.length}, ` +
+      `producto: ${productReferenceImages.length}, ` +
       `orientation: ${projectOrientation} (${imageSize})` +
       (selectorReasoning ? `, selector: "${selectorReasoning}"` : '') +
       (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '') +
       (projectPhysicalConstraints ? `, physical_constraints: ${projectPhysicalConstraints.length} chars` : '')
     );
 
-    async function generateWithoutReferences() {
-      return openai.images.generate({
-        model: IMAGE_GENERATION_MODEL,
-        prompt,
-        n: 1,
-        size: imageSize,
-        quality: IMAGE_GENERATION_QUALITY,
-      });
-    }
-
-    let response: Awaited<ReturnType<typeof openai.images.generate>>;
-    if (selectedReferenceImages.length > 0) {
-      try {
-        const referenceFiles = await downloadReferenceImagesAsFiles(selectedReferenceImages);
-        response = await openai.images.edit({
+    // Genera una imagen con (o sin) referencias. Si OpenAI rechaza las
+    // referencias, reintenta sin ellas para no bloquear la pieza.
+    async function generateImageB64(
+      genPrompt: string,
+      refs: ProjectReferenceImage[]
+    ): Promise<string> {
+      let resp: Awaited<ReturnType<typeof openai.images.generate>>;
+      if (refs.length > 0) {
+        try {
+          const referenceFiles = await downloadReferenceImagesAsFiles(refs);
+          resp = await openai.images.edit({
+            model: IMAGE_GENERATION_MODEL,
+            image: referenceFiles,
+            prompt: genPrompt,
+            size: imageSize,
+            quality: IMAGE_GENERATION_QUALITY,
+          });
+        } catch (editErr) {
+          if (!isOpenAIReferenceImageRejection(editErr)) throw editErr;
+          console.warn(
+            `[generate-image] ${visual_id}: OpenAI rechazó las referencias (${(editErr as any)?.message}). ` +
+            `Generando sin referencias para no bloquear la pieza.`
+          );
+          resp = await openai.images.generate({
+            model: IMAGE_GENERATION_MODEL,
+            prompt: genPrompt,
+            n: 1,
+            size: imageSize,
+            quality: IMAGE_GENERATION_QUALITY,
+          });
+        }
+      } else {
+        resp = await openai.images.generate({
           model: IMAGE_GENERATION_MODEL,
-          image: referenceFiles,
-          prompt,
+          prompt: genPrompt,
+          n: 1,
           size: imageSize,
           quality: IMAGE_GENERATION_QUALITY,
         });
-      } catch (editErr) {
-        if (!isOpenAIReferenceImageRejection(editErr)) {
-          throw editErr;
-        }
-        console.warn(
-          `[generate-image] ${visual_id}: OpenAI rechazó las referencias (${(editErr as any)?.message}). ` +
-          `Volviendo a generar sin referencias para no bloquear la pieza.`
-        );
-        response = await generateWithoutReferences();
       }
-    } else {
-      response = await generateWithoutReferences();
+      const out = resp.data?.[0]?.b64_json;
+      if (!out) throw new Error('La API de OpenAI no devolvió imagen (b64_json vacío)');
+      return out;
     }
 
-    const b64 = response.data?.[0]?.b64_json;
-    if (!b64) {
-      throw new Error('La API de OpenAI no devolvió imagen (b64_json vacío)');
+    let b64 = await generateImageB64(prompt, selectedReferenceImages);
+
+    // === QA visual de fidelidad ===
+    // Solo cuando hay un producto anclado. Comparamos la imagen generada con la
+    // foto real del producto (solo identidad, no escena). Si falla claramente,
+    // hacemos UN reintento centrado en la fidelidad (solo refs de producto +
+    // las violaciones como correcciones), y nos quedamos con la mejor versión.
+    let fidelity: ProductFidelityResult | null = null;
+    if (productAnchor) {
+      fidelity = await assessProductFidelity({
+        apiKey,
+        generatedImageUrl: `data:image/png;base64,${b64}`,
+        product: {
+          identity: productAnchor.product_identity ?? null,
+          traits: productAnchor.product_traits ?? null,
+          imageUrl: productAnchor.image_url,
+        },
+      });
+      console.log(
+        `[generate-image] ${visual_id}: fidelidad inicial = ${fidelity ? `${fidelity.score} (${fidelity.verdict})` : 'n/d'}`
+      );
+
+      if (fidelity && fidelity.verdict === 'fail') {
+        const violationsText = fidelity.violations.length
+          ? fidelity.violations.map(v => `- ${v}`).join('\n')
+          : '- El producto generado no coincide con el producto real de las referencias.';
+        const retryPrompt = applyUserFeedbackToPrompt(prompt, violationsText);
+        const retryRefs = productReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
+        try {
+          const b64Retry = await generateImageB64(
+            retryPrompt,
+            retryRefs.length > 0 ? retryRefs : selectedReferenceImages
+          );
+          const fidelityRetry = await assessProductFidelity({
+            apiKey,
+            generatedImageUrl: `data:image/png;base64,${b64Retry}`,
+            product: {
+              identity: productAnchor.product_identity ?? null,
+              traits: productAnchor.product_traits ?? null,
+              imageUrl: productAnchor.image_url,
+            },
+          });
+          console.log(
+            `[generate-image] ${visual_id}: fidelidad reintento = ${fidelityRetry ? `${fidelityRetry.score} (${fidelityRetry.verdict})` : 'n/d'}`
+          );
+          // Nos quedamos con la mejor de las dos versiones.
+          if (!fidelityRetry || fidelityRetry.score >= fidelity.score) {
+            b64 = b64Retry;
+            fidelity = fidelityRetry ?? fidelity;
+          }
+        } catch (retryErr) {
+          console.warn(
+            `[generate-image] ${visual_id}: reintento de fidelidad falló, conservamos la primera versión: ${(retryErr as Error)?.message}`
+          );
+        }
+      }
     }
 
     const buffer = Buffer.from(b64, 'base64');
@@ -519,9 +620,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[generate-image] ✓ Visual ${visual_id} → ${imageUrl} (${(buffer.length / 1024).toFixed(0)} KB)`);
+    console.log(
+      `[generate-image] ✓ Visual ${visual_id} → ${imageUrl} (${(buffer.length / 1024).toFixed(0)} KB)` +
+      (fidelity ? `, fidelidad ${fidelity.score} (${fidelity.verdict})` : '')
+    );
 
-    return NextResponse.json({ image_url: imageUrl, status: 'ready' });
+    return NextResponse.json({
+      image_url: imageUrl,
+      status: 'ready',
+      ...(fidelity
+        ? {
+            fidelity: {
+              score: fidelity.score,
+              verdict: fidelity.verdict,
+              violations: fidelity.violations,
+            },
+          }
+        : {}),
+    });
   } catch (err: any) {
     console.error(`[generate-image] ✗ Visual ${visual_id}:`, err?.message || err);
 

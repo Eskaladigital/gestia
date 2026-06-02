@@ -205,6 +205,31 @@ export interface Project {
 
 export type ProjectReferenceCaptionStatus = 'pending' | 'generating' | 'ready' | 'error';
 
+/**
+ * Rol de una imagen de referencia (migración 028). Determina cómo la usa el
+ * pipeline de generación:
+ * - product : ES el producto → fidelidad 100% (ancla dura del `images.edit`).
+ * - style   : inspiración de estética → copiar ambiente, NO formas.
+ * - place   : lugar/entorno → copiar contexto, NO formas.
+ * - logo    : identidad gráfica → respetar exacto en slides de marca.
+ * - person  : persona/retrato.
+ * - scene   : escena de uso genérica.
+ * - other   : no encaja en lo anterior.
+ * - pending : aún no se ha analizado.
+ */
+export type ProjectReferenceRole =
+  | 'pending'
+  | 'product'
+  | 'style'
+  | 'place'
+  | 'logo'
+  | 'person'
+  | 'scene'
+  | 'other';
+
+/** Punto de vista de una foto de producto (migración 028). */
+export type ProjectReferenceView = 'exterior' | 'interior' | 'detalle';
+
 export interface ProjectReferenceImage {
   id: string;
   project_id: string;
@@ -225,6 +250,18 @@ export interface ProjectReferenceImage {
   caption_status?: ProjectReferenceCaptionStatus;
   caption_at?: string | null;
   caption_is_manual?: boolean;
+  /** Rol clasificado por IA al subir (migración 028). Editable por el usuario. */
+  reference_role?: ProjectReferenceRole;
+  /** Confianza 0..1 de la clasificación de rol. */
+  role_confidence?: number | null;
+  /** Si es true, el rol lo fijó el usuario y no se sobrescribe al reanalizar. */
+  role_is_manual?: boolean;
+  /** Cuando reference_role = product: qué producto es. */
+  product_identity?: string | null;
+  /** Cuando reference_role = product: rasgos inviolables separados por " · ". */
+  product_traits?: string | null;
+  /** Vista de la foto de producto: exterior / interior / detalle. */
+  reference_view?: ProjectReferenceView | null;
   created_at: string;
   updated_at: string;
 }

@@ -11,9 +11,59 @@
  * nativos, y revienta el build de Vercel).
  */
 
+import type { ProjectReferenceImage, ProjectReferenceRole } from '@/types';
+
 export const PROJECT_REFERENCE_IMAGES_BUCKET = 'project-reference-images';
 export const MAX_PROJECT_REFERENCE_IMAGES = 10;
 export const DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI = 4;
+
+/** Roles válidos de una imagen de referencia (migración 028). */
+export const PROJECT_REFERENCE_ROLES: ProjectReferenceRole[] = [
+  'pending',
+  'product',
+  'style',
+  'place',
+  'logo',
+  'person',
+  'scene',
+  'other',
+];
+
+/** Etiquetas en español para mostrar el rol en la UI. */
+export const PROJECT_REFERENCE_ROLE_LABELS: Record<ProjectReferenceRole, string> = {
+  pending: 'Sin clasificar',
+  product: 'Producto',
+  style: 'Estilo',
+  place: 'Lugar',
+  logo: 'Logo',
+  person: 'Persona',
+  scene: 'Escena',
+  other: 'Otro',
+};
+
+/** Roles que el usuario puede asignar a mano (sin "pending"). */
+export const PROJECT_REFERENCE_ROLE_CHOICES: ProjectReferenceRole[] =
+  PROJECT_REFERENCE_ROLES.filter(role => role !== 'pending');
+
+export function isProductRole(role: ProjectReferenceRole | null | undefined): boolean {
+  return role === 'product';
+}
+
+export function isProjectReferenceRole(value: unknown): value is ProjectReferenceRole {
+  return typeof value === 'string' && (PROJECT_REFERENCE_ROLES as string[]).includes(value);
+}
+
+/** True si la imagen aún no pasó por el análisis estructurado (caption y/o rol). */
+export function referenceImageNeedsReanalysis(image: ProjectReferenceImage): boolean {
+  if (image.caption_is_manual && image.role_is_manual) return false;
+  const status = image.caption_status ?? 'pending';
+  const roleMissing = !image.reference_role || image.reference_role === 'pending';
+  return status !== 'ready' || !image.caption || roleMissing;
+}
+
+export function countReferenceImagesNeedingReanalysis(images: ProjectReferenceImage[]): number {
+  return images.filter(referenceImageNeedsReanalysis).length;
+}
 
 export const NORMALIZED_REFERENCE_MIME = 'image/png';
 export const NORMALIZED_REFERENCE_EXTENSION = 'png';
@@ -50,12 +100,17 @@ export function buildProductReferenceGuidance(referenceCount: number): string {
   if (referenceCount <= 0) return '';
   return [
     '## REFERENCIAS VISUALES DEL PRODUCTO',
-    `Dispones de ${referenceCount} imagen(es) reales de referencia del producto. Debes usarlas como fuente prioritaria para respetar la identidad visual del producto real.`,
-    '- Usa las referencias para mantener forma, proporciones, acabados, colores, materiales y rasgos distintivos del producto.',
-    '- NO copies necesariamente el mismo ángulo, la misma altura de cámara, la misma distancia ni el mismo encuadre de las referencias.',
-    '- Decide el tipo de plano, perspectiva y distancia en función del objetivo editorial de la pieza y del prompt concreto.',
-    '- Debe haber variedad de enfoques entre imágenes del mismo proyecto: plano general, plano medio, detalle, contrapicado, cenital o contexto de uso cuando tenga sentido.',
-    '- Las referencias fijan qué producto es; el prompt y la pieza deciden cómo se fotografía.',
+    `Dispones de ${referenceCount} imagen(es) reales del producto. Hay dos ejes independientes y NO debes mezclarlos:`,
+    '',
+    'EJE 1 — IDENTIDAD DEL PRODUCTO (SAGRADA, se replica al 100%):',
+    '- La forma, la geometría, las proporciones, los materiales, los colores estructurales y los rasgos distintivos del producto que ves en las referencias son LA VERDAD del proyecto y deben reproducirse con total fidelidad.',
+    '- No inventes un producto genérico ni cambies su tipología: si la referencia es una sauna de barril cilíndrica, NUNCA debe salir una cabaña rectangular, y viceversa.',
+    '',
+    'EJE 2 — DIRECCIÓN DE ESCENA (LIBRE):',
+    '- El ángulo, la altura de cámara, la distancia, el encuadre, el plano, la luz, la hora y el contexto los decide el prompt de cada pieza, no las referencias.',
+    '- Busca variedad de planos entre piezas (general, medio, detalle, contrapicado, cenital, contexto de uso) manteniendo SIEMPRE intacta la identidad del producto.',
+    '',
+    'En resumen: las referencias fijan QUÉ es el producto (inviolable); el prompt decide CÓMO se fotografía (libre).',
   ].join('\n');
 }
 

@@ -1,12 +1,15 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import type { ProjectReferenceImage } from '@/types';
+import type { ProjectReferenceImage, ProjectReferenceRole } from '@/types';
 import {
+  countReferenceImagesNeedingReanalysis,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   MAX_PROJECT_REFERENCE_IMAGES,
+  PROJECT_REFERENCE_ROLE_CHOICES,
+  PROJECT_REFERENCE_ROLE_LABELS,
 } from '@/lib/projects/reference-images-shared';
 
 interface ProjectReferenceImagesCardProps {
@@ -42,6 +45,9 @@ export function ProjectReferenceImagesCard({
   const [captionBusyId, setCaptionBusyId] = useState<string | null>(null);
   const [bulkCaptioning, setBulkCaptioning] = useState(false);
   const [generatingRules, setGeneratingRules] = useState(false);
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+  const [autoAnalyzing, setAutoAnalyzing] = useState(false);
+  const autoReanalyzeStarted = useRef(false);
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -209,6 +215,25 @@ export function ProjectReferenceImagesCard({
     }
   }
 
+  async function changeRole(imageId: string, role: ProjectReferenceRole) {
+    setRoleBusyId(imageId);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/reference-images`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageId, role }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res));
+      setMessage({ type: 'ok', text: 'Tipo de imagen actualizado.' });
+      router.refresh();
+    } catch (error: unknown) {
+      setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error actualizando el tipo' });
+    } finally {
+      setRoleBusyId(null);
+    }
+  }
+
   async function regenerateCaption(imageId: string) {
     setCaptionBusyId(imageId);
     setMessage(null);
@@ -249,11 +274,51 @@ export function ProjectReferenceImagesCard({
 
   const primaryCount = initialImages.filter(image => image.is_primary).length;
   const canUploadMore = initialImages.length < MAX_PROJECT_REFERENCE_IMAGES;
-  const pendingCaptionCount = initialImages.filter(image => {
-    if (image.caption_is_manual) return false;
-    const status = image.caption_status ?? 'pending';
-    return status !== 'ready' || !image.caption;
-  }).length;
+  const needsAnalysisCount = countReferenceImagesNeedingReanalysis(initialImages);
+  const pendingCaptionCount = needsAnalysisCount;
+
+  // Tras la migración 028 (o fotos antiguas sin rol), reanalizamos solas al
+  // abrir el proyecto: clasificación + reglas físicas si hay producto.
+  useEffect(() => {
+    if (initialImages.length === 0 || needsAnalysisCount === 0 || autoReanalyzeStarted.current) {
+      return;
+    }
+    autoReanalyzeStarted.current = true;
+    setAutoAnalyzing(true);
+    setMessage(null);
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/reference-images`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ regenerateAllPending: true }),
+        });
+        if (!res.ok) throw new Error(await readApiError(res));
+        const data = (await res.json()) as { processed?: number };
+        const n = data.processed ?? needsAnalysisCount;
+        setMessage({
+          type: 'ok',
+          text:
+            n === 0
+              ? 'Referencias ya clasificadas.'
+              : `Clasificación automática: ${n} imagen${n === 1 ? '' : 'es'} analizadas (tipo de producto, reglas si aplica).`,
+        });
+        router.refresh();
+      } catch (error: unknown) {
+        setMessage({
+          type: 'err',
+          text:
+            error instanceof Error
+              ? error.message
+              : 'Error en la clasificación automática de referencias',
+        });
+        autoReanalyzeStarted.current = false;
+      } finally {
+        setAutoAnalyzing(false);
+      }
+    })();
+  }, [projectId, needsAnalysisCount, initialImages.length, router]);
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal mb-6 overflow-hidden">
@@ -285,14 +350,19 @@ export function ProjectReferenceImagesCard({
             className="hidden"
             onChange={event => void handleUpload(event.target.files)}
           />
-          {pendingCaptionCount > 0 && (
+          {(autoAnalyzing || bulkCaptioning) && (
+            <span className="text-xs font-bold text-amber-200 animate-pulse">
+              Clasificando imágenes con IA…
+            </span>
+          )}
+          {pendingCaptionCount > 0 && !autoAnalyzing && (
             <Button
               variant="secondary"
               size="md"
               onClick={() => void regenerateAllPendingCaptions()}
               loading={bulkCaptioning}
             >
-              Generar {pendingCaptionCount} descripcion{pendingCaptionCount === 1 ? '' : 'es'} IA
+              Reclasificar {pendingCaptionCount} imagen{pendingCaptionCount === 1 ? '' : 'es'}
             </Button>
           )}
           {initialImages.length > 0 && (
@@ -329,10 +399,11 @@ export function ProjectReferenceImagesCard({
             segundo plano o detalle según la pieza.
           </p>
           <p className="text-xs text-surface-600 mt-2 font-medium leading-relaxed">
-            Cuando tengas las fotos subidas, pulsa <strong>«✨ Generar reglas físicas con IA»</strong>: la IA mirará
-            estas imágenes y escribirá las <strong>reglas físicas e identitarias inviolables</strong> del producto
-            (geometría, materiales, identidad, prohibiciones) y las guardará en Ajustes. Es lo que hace que las
-            imágenes generadas se parezcan de verdad al producto real.
+            Al subir cada imagen, la IA la clasifica automáticamente por <strong>tipo</strong>: las marcadas como
+            <strong> Producto</strong> se reproducen con fidelidad total y las de <strong>Estilo</strong> o
+            <strong> Lugar</strong> solo inspiran ambiente. Si la IA se equivoca, corrige el tipo en el desplegable de
+            cada foto. En cuanto detecta producto, redacta y guarda solas las <strong>reglas físicas e identitarias
+            inviolables</strong>; con <strong>«✨ Generar reglas físicas con IA»</strong> puedes regenerarlas a mano.
           </p>
           <div className="flex flex-wrap gap-2 mt-3 text-[10px] font-bold uppercase tracking-wider">
             <span className="border-2 border-surface-900 px-2 py-1 bg-white">
@@ -341,13 +412,17 @@ export function ProjectReferenceImagesCard({
             <span className="border-2 border-surface-900 px-2 py-1 bg-white">
               {primaryCount}/{DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI} principales
             </span>
-            {pendingCaptionCount > 0 ? (
+            {autoAnalyzing ? (
               <span className="border-2 border-amber-500 px-2 py-1 bg-amber-500/20 text-amber-900">
-                {pendingCaptionCount} sin descripción IA
+                Clasificando con IA…
+              </span>
+            ) : pendingCaptionCount > 0 ? (
+              <span className="border-2 border-amber-500 px-2 py-1 bg-amber-500/20 text-amber-900">
+                {pendingCaptionCount} pendiente{pendingCaptionCount === 1 ? '' : 's'} de clasificar
               </span>
             ) : initialImages.length > 0 ? (
               <span className="border-2 border-emerald-500 px-2 py-1 bg-emerald-500/20 text-emerald-900">
-                Todas con descripción
+                Todas clasificadas
               </span>
             ) : null}
           </div>
@@ -380,6 +455,51 @@ export function ProjectReferenceImagesCard({
                     <p className="text-[10px] text-surface-500 uppercase tracking-wider font-bold mt-1">
                       {image.is_primary ? 'Principal para IA' : 'Secundaria'}
                     </p>
+                  </div>
+
+                  {/* Tipo de imagen (rol): la IA lo detecta al subir; el usuario puede corregirlo. */}
+                  <div className="border-2 border-surface-900 bg-surface-50 p-2">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-surface-700">
+                        Tipo de imagen
+                      </span>
+                      {image.reference_role === 'product' ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border bg-emerald-500/20 text-emerald-800 border-emerald-500">
+                          Fidelidad 100%
+                        </span>
+                      ) : (!image.reference_role || image.reference_role === 'pending') ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border bg-surface-200 text-surface-700 border-surface-400">
+                          Sin clasificar
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border bg-surface-100 text-surface-700 border-surface-400">
+                          Referencia
+                        </span>
+                      )}
+                    </div>
+                    <select
+                      value={image.reference_role && image.reference_role !== 'pending' ? image.reference_role : ''}
+                      onChange={event => void changeRole(image.id, event.target.value as ProjectReferenceRole)}
+                      disabled={roleBusyId === image.id}
+                      className="w-full text-xs border-2 border-surface-900 p-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-surface-900 disabled:opacity-60"
+                    >
+                      {(!image.reference_role || image.reference_role === 'pending') && (
+                        <option value="" disabled>
+                          Sin clasificar…
+                        </option>
+                      )}
+                      {PROJECT_REFERENCE_ROLE_CHOICES.map(role => (
+                        <option key={role} value={role}>
+                          {PROJECT_REFERENCE_ROLE_LABELS[role]}
+                        </option>
+                      ))}
+                    </select>
+                    {image.reference_role === 'product' && image.product_identity && (
+                      <p className="text-[10px] text-surface-600 mt-1 leading-snug">
+                        <strong>Producto:</strong> {image.product_identity}
+                        {image.reference_view ? ` · ${image.reference_view}` : ''}
+                      </p>
+                    )}
                   </div>
 
                   {/* Caption: descripción IA / manual */}
