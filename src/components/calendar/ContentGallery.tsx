@@ -48,6 +48,56 @@ const MONTH_NAMES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
 
+/** Densidad de la rejilla de cards de visuals en la pestaña Contenido. */
+type GridDensity = 'large' | 'medium' | 'small';
+
+const GRID_DENSITY_CONFIG: Record<
+  GridDensity,
+  { label: string; cols: string; gap: string; singleMaxW: string }
+> = {
+  large: {
+    label: 'Grande',
+    cols: 'grid-cols-1 md:grid-cols-2',
+    gap: 'gap-4',
+    singleMaxW: 'max-w-2xl',
+  },
+  medium: {
+    label: 'Mediana',
+    cols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    gap: 'gap-3',
+    singleMaxW: 'max-w-3xl',
+  },
+  small: {
+    label: 'Pequeña',
+    cols: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
+    gap: 'gap-2',
+    singleMaxW: 'max-w-full',
+  },
+};
+
+function gridStorageKey(projectId: string) {
+  return `gestia-content-grid-${projectId}`;
+}
+
+function readStoredGridDensity(projectId: string): GridDensity {
+  if (typeof window === 'undefined') return 'large';
+  try {
+    const v = localStorage.getItem(gridStorageKey(projectId));
+    if (v === 'medium' || v === 'small' || v === 'large') return v;
+  } catch {
+    /* quota / modo privado */
+  }
+  return 'large';
+}
+
+function visualsGridClass(density: GridDensity, visualCount: number): string {
+  const cfg = GRID_DENSITY_CONFIG[density];
+  if (visualCount === 1) {
+    return `grid ${cfg.gap} grid-cols-1 ${cfg.singleMaxW}`;
+  }
+  return `grid ${cfg.gap} ${cfg.cols}`;
+}
+
 function getMondayOfWeek(d: Date): Date {
   const date = new Date(d);
   const day = date.getDay();
@@ -89,6 +139,9 @@ interface WeekGroup {
 export function ContentGallery({ items, projectId, imageOrientation }: ContentGalleryProps) {
   const aspectClass = aspectClassForOrientation(imageOrientation);
   const supabase = createClient();
+  const [gridDensity, setGridDensity] = useState<GridDensity>(() =>
+    readStoredGridDensity(projectId),
+  );
   const [visualsMap, setVisualsMap] = useState<Record<string, ContentItemVisual[]>>({});
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -129,6 +182,18 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
   visualsMapRef.current = visualsMap;
 
   const itemsWithBriefs = useMemo(() => items.filter(i => i.visual_prompt?.trim()), [items]);
+
+  useEffect(() => {
+    setGridDensity(readStoredGridDensity(projectId));
+  }, [projectId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(gridStorageKey(projectId), gridDensity);
+    } catch {
+      /* ignore */
+    }
+  }, [gridDensity, projectId]);
 
   // Navegación por mes (igual que en la vista Calendario)
   const initialDate = useMemo(() => {
@@ -630,6 +695,30 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
       {weekGroups.length > 0 && (
       <div className="flex flex-col lg:flex-row lg:items-center gap-3 border-2 border-surface-900 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-surface-500 mr-1">
+            Vista
+          </span>
+          {(Object.keys(GRID_DENSITY_CONFIG) as GridDensity[]).map(id => {
+            const active = gridDensity === id;
+            const hint =
+              id === 'large' ? '2 por fila' : id === 'medium' ? '4 por fila' : '6 por fila';
+            return (
+              <button
+                key={id}
+                type="button"
+                title={`${GRID_DENSITY_CONFIG[id].label} — ${hint}`}
+                onClick={() => setGridDensity(id)}
+                className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 border-2 transition-all ${
+                  active
+                    ? 'bg-brand-600 text-white border-surface-900 shadow-brutal-sm'
+                    : 'bg-white text-surface-600 border-surface-300 hover:border-surface-900 hover:text-surface-900'
+                }`}
+              >
+                {GRID_DENSITY_CONFIG[id].label}
+              </button>
+            );
+          })}
+          <span className="hidden sm:inline w-px h-5 bg-surface-300 mx-1" aria-hidden />
           <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest">
             {weekGroups.reduce((s, g) => s + g.posts.length, 0)} posts
           </span>
@@ -761,7 +850,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                     </div>
 
                     {/* Visuals grid */}
-                    <div className={`grid gap-4 ${visuals.length === 1 ? 'grid-cols-1 max-w-2xl' : 'grid-cols-1 md:grid-cols-2'}`}>
+                    <div className={visualsGridClass(gridDensity, visuals.length)}>
                       {visuals.map(visual => {
                         const hasImage = visual.image_status === 'ready' && visual.image_url;
                         const hasError = visual.image_status === 'error';
