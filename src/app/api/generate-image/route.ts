@@ -691,7 +691,15 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error(`[generate-image] ✗ Visual ${visual_id}:`, err?.message || err);
 
-    const errorMsg = err?.message || 'Error desconocido generando la imagen';
+    // Un 401 de OpenAI en la edición/generación de imagen casi siempre significa
+    // que la API key no tiene PERMISO de generación de imágenes (gpt-image), no
+    // que la clave sea inválida (los modelos de texto sí funcionan). Damos un
+    // mensaje accionable en vez del críptico "401 Not authorized".
+    const isImageAuthError =
+      err?.status === 401 || /\b401\b/.test(String(err?.message || ''));
+    const errorMsg = isImageAuthError
+      ? 'La API key de OpenAI no tiene permiso para generar imágenes (gpt-image). Revisa en Ajustes → Proveedores IA que la clave tenga habilitada la generación de imágenes y que la organización esté verificada en OpenAI.'
+      : err?.message || 'Error desconocido generando la imagen';
     const { error: markErr } = await service
       .from('content_item_visuals')
       .update({
