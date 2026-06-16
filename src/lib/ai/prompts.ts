@@ -816,10 +816,24 @@ function buildBrandContext(project: Project): string {
   const lines: string[] = [];
 
   if (project.brand_colors?.length) {
-    lines.push('COLORES DE MARCA:');
-    for (const c of project.brand_colors) {
-      lines.push(`- ${c.hex} (${c.name}) — ${c.usage}${c.notes ? `: ${c.notes}` : ''}`);
+    const accentUsages = ['accent', 'gradient'];
+    const accents = project.brand_colors.filter(c => accentUsages.includes(c.usage));
+    const base = project.brand_colors.filter(c => !accentUsages.includes(c.usage));
+
+    lines.push('COLORES DE MARCA (guía de uso — NO obligan a teñir la escena):');
+    if (base.length) {
+      lines.push('- Base / neutros (pueden aparecer de forma natural en superficies, ropa o atrezo):');
+      for (const c of base) {
+        lines.push(`  · ${c.hex} (${c.name}) — ${c.usage}${c.notes ? `: ${c.notes}` : ''}`);
+      }
     }
+    if (accents.length) {
+      lines.push('- Acento (USO PUNTUAL Y DISCRETO — un pequeño detalle, JAMÁS el color dominante de la imagen):');
+      for (const c of accents) {
+        lines.push(`  · ${c.hex} (${c.name}) — ${c.usage}${c.notes ? `: ${c.notes}` : ''}`);
+      }
+    }
+    lines.push('PRINCIPIO DE COLOR: el color dominante de cada imagen debe nacer del ENTORNO real de la escena (luz, localización, materiales, piel, vegetación, arquitectura), NO de la paleta de marca. Los colores de marca —y muy especialmente el acento— aparecen solo como toques sutiles. EVITA que el acento de marca sea el tono protagonista: si se repite en todas las publicaciones el muro se vuelve monótono y publicitario. Busca DIVERSIDAD cromática entre posts (cada publicación con su propia atmósfera de color según su tema y localización) para que el muro se vea orgánico.');
   }
 
   if (project.brand_fonts?.length) {
@@ -1298,7 +1312,7 @@ export function buildSingleVisualPrompt(
 - El visual_prompt DEBE tener al menos 300 palabras, con las 7 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo, Movimiento).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y cinematográficos.
 - FUNDAMENTAL: Describe un FOTOGRAMA DE VÍDEO, no una fotografía. Debe transmitir movimiento, acción, narrativa y ritmo.
-- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- Aplica la GUÍA DE COLOR de la identidad de marca: el color DOMINANTE lo marca el entorno real de la escena; usa los colores de marca (y sobre todo el acento) solo como toques PUNTUALES, nunca como tinte global. Da a esta publicación una atmósfera de color propia para que el muro sea cromáticamente diverso.
 - Describe movimientos de cámara, velocidades, transiciones, motion blur y dinámica de la escena.
 - El resultado debe ser tan detallado que al copiarlo en Sora, Runway o Kling, el vídeo generado sea EXACTAMENTE lo que describes.`;
 
@@ -1333,7 +1347,7 @@ export function buildSingleVisualPrompt(
 - Si en el MAPA COMPLETO ya hay un slide con un plano de tres cuartos del producto/sujeto principal en entorno abierto (carretera, calle, paisaje), está PROHIBIDO que este slide sea otro plano del mismo tipo. Busca un detalle, un interior, una escena humana, un cenital, un POV o un entorno sin el sujeto principal.
 - ${carouselShotCardLine}
 - Deja ZONAS LIMPIAS para texto overlay en postproducción.${visualIndex === 0 ? '\n- Este es el slide de GANCHO: máximo impacto visual e intriga, pero EVITA el plano de catálogo más obvio del sector.' : ''}${visualIndex === totalVisuals - 1 ? '\n- Este es el slide FINAL (CTA): composición limpia y directa, espacio para texto de llamada a la acción.' : ''}
-- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- Aplica la GUÍA DE COLOR de la identidad de marca: el color DOMINANTE lo marca el entorno real de la escena; usa los colores de marca (y sobre todo el acento) solo como toques PUNTUALES, nunca como tinte global. Da a esta publicación una atmósfera de color propia para que el muro sea cromáticamente diverso.
 - El resultado debe ser tan detallado que al copiarlo en el modelo de imagen, la imagen generada sea EXACTAMENTE lo que describes.`;
 
   } else if (isStory) {
@@ -1348,7 +1362,7 @@ export function buildSingleVisualPrompt(
 - FUNDAMENTAL: Piensa en VERTICAL FULLSCREEN 9:16. La imagen ocupa toda la pantalla del móvil.
 - Deja ESPACIO VISUAL para texto overlay (zona superior o inferior más limpia, ~20% del encuadre).
 - La Story debe sentirse NATIVA de Instagram: cercana, auténtica, con impacto inmediato.
-- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- Aplica la GUÍA DE COLOR de la identidad de marca: el color DOMINANTE lo marca el entorno real de la escena; usa los colores de marca (y sobre todo el acento) solo como toques PUNTUALES, nunca como tinte global. Da a esta publicación una atmósfera de color propia para que el muro sea cromáticamente diverso.
 - El resultado debe ser tan detallado que al copiarlo en Midjourney o DALL-E, la imagen generada sea EXACTAMENTE lo que describes.`;
 
   } else {
@@ -1361,7 +1375,7 @@ export function buildSingleVisualPrompt(
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y táctiles.
 - NO uses descripciones vagas como "ambiente agradable", "escena bonita" o "plano general". Sé HIPER-CONCRETO y ESPECÍFICO.
-- Usa los colores de marca CONCRETOS (hex) de la identidad de marca proporcionada arriba.
+- Aplica la GUÍA DE COLOR de la identidad de marca: el color DOMINANTE lo marca el entorno real de la escena; usa los colores de marca (y sobre todo el acento) solo como toques PUNTUALES, nunca como tinte global. Da a esta publicación una atmósfera de color propia para que el muro sea cromáticamente diverso.
 - Describe texturas, materiales, temperaturas de color, ángulos de luz y profundidad de campo con precisión técnica.
 - El resultado debe ser tan detallado que al copiarlo en Midjourney, DALL-E o Sora, la imagen generada sea EXACTAMENTE lo que describes.`;
   }
