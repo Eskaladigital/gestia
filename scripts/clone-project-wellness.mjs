@@ -116,6 +116,11 @@ function buildReferenceStoragePath(projectId, index, filename) {
 //  disruption: disruptivo → conservador
 
 // Overrides comunes a todos los perfiles monotemáticos de Retiru.
+// IMPORTANTE: url = null para que "analizar web" NO scrapee retiru.com (catálogo
+// de retiros) y la ficha de negocio se construya desde la descripción temática
+// + ai_rules + SERP del sector correcto. Los competidores de marketplace tampoco
+// se copian (copyCompetitors:false en cada perfil): la búsqueda los encuentra del
+// sector real (centro de yoga, mindfulness, etc.).
 const BASE_OVERRIDES = {
   client_type: 'premium',
   primary_goal: 'comunidad',
@@ -128,6 +133,7 @@ const BASE_OVERRIDES = {
   sells_physical_product: false,
   physical_constraints: null,
   physical_constraints_at: null,
+  url: null,
 };
 
 // --- Perfil "yoga" (SOLO yoga) --------------------------------------------
@@ -228,6 +234,7 @@ const PROFILES = {
   yoga: {
     name: 'Retiru - Yoga',
     copyReferences: false,
+    copyCompetitors: false,
     overrides: {
       ...BASE_OVERRIDES,
       sector: 'Centro de yoga',
@@ -246,6 +253,7 @@ const PROFILES = {
   wellness: {
     name: 'Retiru - Wellness',
     copyReferences: false,
+    copyCompetitors: false,
     overrides: {
       ...BASE_OVERRIDES,
       sector: 'Bienestar y vida sana',
@@ -264,6 +272,7 @@ const PROFILES = {
   mindfulness: {
     name: 'Retiru - Mindfulness',
     copyReferences: false,
+    copyCompetitors: false,
     overrides: {
       ...BASE_OVERRIDES,
       sector: 'Mindfulness y meditación',
@@ -282,6 +291,7 @@ const PROFILES = {
   ayurveda: {
     name: 'Retiru - Ayurveda',
     copyReferences: false,
+    copyCompetitors: false,
     overrides: {
       ...BASE_OVERRIDES,
       sector: 'Ayurveda y estilo de vida ayurvédico',
@@ -426,6 +436,9 @@ async function applyProfileToExisting(service, projectId, profile, newName, dryR
 
   if (dryRun) {
     console.log('✓ (dry-run) Se actualizaría el proyecto con la config anterior.');
+    if (profile.copyCompetitors === false) {
+      console.log('  · (dry-run) Además se borrarían los competidores heredados (perfil temático).');
+    }
     return;
   }
   const { error: upErr } = await service.from('projects').update(update).eq('id', projectId);
@@ -434,6 +447,20 @@ async function applyProfileToExisting(service, projectId, profile, newName, dryR
     process.exit(1);
   }
   console.log('✓ Proyecto actualizado.');
+
+  // Perfiles temáticos: eliminar competidores heredados del marketplace de retiros
+  // para que "analizar competidores" descubra los del sector real (vía SERP).
+  if (profile.copyCompetitors === false) {
+    const { data: comps } = await service
+      .from('competitors')
+      .select('id, name')
+      .eq('project_id', projectId);
+    if (comps && comps.length > 0) {
+      const { error: delErr } = await service.from('competitors').delete().eq('project_id', projectId);
+      if (delErr) console.warn('  ⚠ No se pudieron borrar competidores heredados:', delErr.message);
+      else console.log(`✓ Competidores de marketplace eliminados: ${comps.length} (se descubrirán del sector).`);
+    }
+  }
 }
 
 function buildClonedProjectRow(source, profile, newName) {
@@ -578,7 +605,7 @@ async function main() {
   const force = hasFlag('force');
   // Copia de referencias: el perfil define el default; --references / --no-references lo fuerzan.
   const copyRefs = hasFlag('no-references') ? false : hasFlag('references') ? true : profile.copyReferences !== false;
-  const copyComp = !hasFlag('no-competitors');
+  const copyComp = !hasFlag('no-competitors') && profile.copyCompetitors !== false;
 
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
