@@ -613,10 +613,10 @@ REGLAS CRÍTICAS:
 - Cada "scheduled_date" debe ser una de las fechas listadas para el tramo de esa semana.
 - El campo "format" SOLO puede ser: "story", "carrusel", "publicacion" o "reel"
 - El campo "content_type" SOLO puede ser: "educativo", "inspiracional", "comercial", "entretenimiento", "personal" o "corporativo"
-- Cada post debe tener un copy COMPLETO y listo para publicar (no solo ideas)
+- Cada post debe tener un copy COMPLETO, RICO EN CONTENIDO y listo para publicar (no un titular ni una lista de palabras sueltas): el texto debe aportar valor por sí mismo aunque no se vean las imágenes
 - Respeta los pilares de contenido y sus porcentajes
 - El tono de cada copy debe coincidir con la configuración
-- Incluye CTAs relevantes
+- Termina cada copy con UNA sola llamada a la acción integrada de forma natural (no varias, y sin repetir el mismo CTA dos veces)
 - Los hashtags deben ser reales y relevantes para el sector
 - Mantén variedad temática: evita repetir el mismo ángulo, la misma promesa o el mismo CTA varias veces
 ${opts?.priorMonthsDigest?.trim() ? '- Si hay sección "CONTINUIDAD CON EL PERIODO YA GENERADO", trátala como memoria obligatoria: nuevos ángulos y CTAs, sin reescribir ni parafrasear de forma estrecha lo ya cubierto' : ''}
@@ -624,6 +624,17 @@ ${opts?.minDate ? `- PROHIBIDO programar posts anteriores a ${opts.minDate}. Usa
 ${opts?.excludeDates?.length ? `- PROHIBIDO usar estas fechas (ya hay un post programado ese día): ${opts.excludeDates.join(', ')}. Si por error apareciera alguna, descarta ese post.` : ''}
 - Cada idea debe sentirse publicable para Instagram sin depender de contexto externo no proporcionado
 - "platforms" debe incluir "instagram"
+
+═══════════════════════════════════════════
+CALIDAD Y PROFUNDIDAD DEL COPY (OBLIGATORIO)
+═══════════════════════════════════════════
+El copy es CONTENIDO, no un pie de foto decorativo:
+- DESARROLLA, no enumeres. Si el post promete "3 ajustes", "5 claves" o "X pasos", el copy debe EXPLICAR cada uno con sustancia: el CÓMO se hace y el POR QUÉ funciona (o el error común que evita), en 1-2 frases por punto. Nunca te limites a nombrarlos.
+- Aporta valor real y específico del tema (un matiz, un dato, contexto, una idea que el lector no supiera), no frases motivacionales genéricas válidas para cualquier marca.
+- Estructura: (1) gancho que conecta con un problema o situación real; (2) cuerpo desarrollado con la enseñanza o idea explicada de verdad; (3) cierre con sentido + UNA llamada a la acción natural.
+- Extensión según formato y complejidad configurada: carrusel, publicación y reel educativos/inspiracionales = copy desarrollado (aprox. 90-200 palabras, en varios párrafos cortos); story = más breve y directo. Ajusta la profundidad al nivel de complejidad del proyecto.
+- Cada frase debe sumar información, criterio o emoción. PROHIBIDO el relleno y las generalidades.
+- Usa saltos de línea para que sea legible en Instagram. Emojis solo si encajan con el tono.
 - Las fechas deben ser del mes de ${month} ${year}
 - Reparte los posts del tramo en días distintos (prioriza lun–vie cuando haya cupo)
 - Las Stories suelen ir en días de alta actividad (martes-jueves)
@@ -671,8 +682,8 @@ FORMATO DE RESPUESTA JSON:
       "content_type": "educativo|inspiracional|comercial|entretenimiento|personal|corporativo",
       "format": "story|carrusel|publicacion|reel",
       "idea": "Idea principal del post en una línea",
-      "copy": "Copy COMPLETO del post, listo para publicar. Incluye emojis si procede. Mínimo 3 líneas.",
-      "cta": "Llamada a la acción específica",
+      "copy": "Caption final lista para publicar y RICA EN CONTENIDO: desarrolla y EXPLICA las ideas (el cómo y el porqué de cada punto), no las enumeres. Varios párrafos cortos con valor real. Termina con UNA sola llamada a la acción integrada de forma natural.",
+      "cta": "Etiqueta corta del objetivo de acción del post (p. ej. 'guardar para la próxima práctica', 'comentar experiencia'). NO repitas literalmente la frase final del copy.",
       "post_goal": "Objetivo específico de este post",
       "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
       "platforms": ["instagram"],
