@@ -15,6 +15,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const BATCH_SIZE = 10;
+/** Reintentos por visual ante fallos transitorios de la IA (timeout, rate limit, JSON vacío). */
+const MAX_VISUAL_ATTEMPTS = 3;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function clip(text: unknown, max = 6000): string {
   const s = typeof text === 'string' ? text.trim() : '';
@@ -108,27 +112,39 @@ async function processOneVisual(
     siblingShotCards: job.siblingShotCards,
   }, referenceGuidance);
 
-  const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
-    agentKey,
-    userId,
-    maxTokens: 4096,
-    inputImages: referenceImageUrls,
-  });
+  // Reintento automático: ante un fallo transitorio de la IA o un prompt vacío,
+  // se reintenta con pequeña espera creciente, en vez de descartar el visual.
+  let vPrompt = '';
+  for (let attempt = 1; attempt <= MAX_VISUAL_ATTEMPTS; attempt++) {
+    try {
+      const aiResponse = await callAI<SingleVisualAIResponse>(system, userPrompt, {
+        agentKey,
+        userId,
+        maxTokens: 4096,
+        inputImages: referenceImageUrls,
+      });
 
-  const rawData = aiResponse.data as unknown as Record<string, unknown> | null;
+      const rawData = aiResponse.data as unknown as Record<string, unknown> | null;
+      vPrompt = clip(rawData?.visual_prompt);
 
-  let vPrompt = clip(rawData?.visual_prompt);
+      if (!vPrompt && rawData) {
+        const firstStringValue = Object.values(rawData).find(v => typeof v === 'string' && v.length > 50);
+        if (firstStringValue) {
+          console.warn(`[generate-visual-briefs] visual_prompt not found, using first long string field. Keys: ${Object.keys(rawData).join(',')}`);
+          vPrompt = clip(firstStringValue);
+        }
+      }
 
-  if (!vPrompt && rawData) {
-    const firstStringValue = Object.values(rawData).find(v => typeof v === 'string' && v.length > 50);
-    if (firstStringValue) {
-      console.warn(`[generate-visual-briefs] visual_prompt not found, using first long string field. Keys: ${Object.keys(rawData).join(',')}`);
-      vPrompt = clip(firstStringValue);
+      if (vPrompt) break;
+      console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId}[${job.visualIndex}] (intento ${attempt}/${MAX_VISUAL_ATTEMPTS}).`);
+    } catch (err) {
+      console.warn(`[generate-visual-briefs] AI error ${job.contentItemId}[${job.visualIndex}] (intento ${attempt}/${MAX_VISUAL_ATTEMPTS}):`, err instanceof Error ? err.message : err);
     }
+    if (attempt < MAX_VISUAL_ATTEMPTS) await sleep(700 * attempt);
   }
 
   if (!vPrompt) {
-    console.warn(`[generate-visual-briefs] Empty prompt for ${job.contentItemId}[${job.visualIndex}]. rawData keys: ${rawData ? Object.keys(rawData).join(',') : 'null'}`);
+    console.warn(`[generate-visual-briefs] Visual descartado tras ${MAX_VISUAL_ATTEMPTS} intentos: ${job.contentItemId}[${job.visualIndex}].`);
     return null;
   }
 

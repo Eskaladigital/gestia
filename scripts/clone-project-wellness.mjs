@@ -338,6 +338,123 @@ function printProfileSummary(profile, copyRefs) {
   console.log('');
 }
 
+/** Imprime la estrategia más reciente de un proyecto para revisar el resultado. */
+async function showStrategy(service, projectId) {
+  const { data: proj } = await service
+    .from('projects')
+    .select('name, sector')
+    .eq('id', projectId)
+    .maybeSingle();
+  console.log(`Estrategia de "${proj?.name || projectId}" (sector: ${proj?.sector || '—'})\n`);
+
+  const { data: strat, error } = await service
+    .from('strategies')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !strat) {
+    console.log('No hay estrategia generada todavía.', error?.message || '');
+    return;
+  }
+
+  const show = (label, val) => {
+    if (val === null || val === undefined || val === '') return;
+    const text = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+    console.log(`\n=== ${label} ===\n${text}`);
+  };
+
+  show('PROPUESTA DE VALOR', strat.value_proposition);
+  show('PÚBLICO OBJETIVO', strat.target_audience);
+  show('POSICIONAMIENTO', strat.positioning);
+  show('PILARES DE CONTENIDO', strat.content_pillars);
+  show('ANÁLISIS WEB (web_site_analysis)', strat.web_site_analysis);
+  show('ANÁLISIS COMPETENCIA', strat.competitor_analysis);
+  show('RECOMENDACIONES', strat.recommendations);
+}
+
+/** Imprime el calendario (content_items) de un proyecto para revisar el resultado. */
+async function showCalendar(service, projectId) {
+  const { data: proj } = await service
+    .from('projects')
+    .select('name, sector')
+    .eq('id', projectId)
+    .maybeSingle();
+  console.log(`Calendario de "${proj?.name || projectId}" (sector: ${proj?.sector || '—'})\n`);
+
+  const { data: items, error } = await service
+    .from('content_items')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('scheduled_date', { ascending: true });
+  if (error || !items || items.length === 0) {
+    console.log('No hay publicaciones en el calendario todavía.', error?.message || '');
+    return;
+  }
+
+  console.log(`Total publicaciones: ${items.length}\n`);
+  items.forEach((it, i) => {
+    const date = it.scheduled_date || it.publish_date || '—';
+    const fmt = it.format || it.post_type || it.content_type || '—';
+    const pillar = it.pillar || it.content_pillar || '—';
+    const title = it.title || it.headline || it.idea || '(sin título)';
+    const caption = (it.caption || it.copy || it.description || '').toString().replace(/\s+/g, ' ').slice(0, 220);
+    console.log(`${String(i + 1).padStart(2, '0')}. [${date}] (${fmt} · ${pillar}) ${title}`);
+    if (caption) console.log(`    ${caption}${caption.length >= 220 ? '…' : ''}`);
+  });
+}
+
+/** Imprime los briefs visuales (content_item_visuals) de un proyecto. */
+async function showBriefs(service, projectId, limit) {
+  const { data: proj } = await service
+    .from('projects')
+    .select('name, sector')
+    .eq('id', projectId)
+    .maybeSingle();
+  console.log(`Briefs visuales de "${proj?.name || projectId}" (sector: ${proj?.sector || '—'})\n`);
+
+  const { data: items, error: itemsErr } = await service
+    .from('content_items')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('scheduled_date', { ascending: true });
+  if (itemsErr || !items || items.length === 0) {
+    console.log('No hay publicaciones.', itemsErr?.message || '');
+    return;
+  }
+  const byId = new Map(items.map(it => [it.id, it]));
+  const ids = items.map(it => it.id);
+
+  const { data: visuals, error } = await service
+    .from('content_item_visuals')
+    .select('*')
+    .in('content_item_id', ids);
+  if (error || !visuals || visuals.length === 0) {
+    console.log('Todavía no hay briefs visuales generados.', error?.message || '');
+    return;
+  }
+
+  visuals.sort((a, b) => {
+    const da = byId.get(a.content_item_id)?.scheduled_date || '';
+    const db = byId.get(b.content_item_id)?.scheduled_date || '';
+    if (da !== db) return da < db ? -1 : 1;
+    return (a.visual_index ?? 0) - (b.visual_index ?? 0);
+  });
+
+  const max = limit && limit > 0 ? limit : visuals.length;
+  console.log(`Total briefs visuales: ${visuals.length} (mostrando ${Math.min(max, visuals.length)})\n`);
+  visuals.slice(0, max).forEach(v => {
+    const it = byId.get(v.content_item_id);
+    const date = it?.scheduled_date || '—';
+    const fmt = it?.format || it?.post_type || '—';
+    const idx = v.visual_index ?? 0;
+    const prompt = (v.visual_prompt || v.visual_brief || '(sin prompt)').toString().replace(/\s+/g, ' ');
+    console.log(`\n[${date}] (${fmt}) "${it?.title || ''}" — visual #${idx + 1}`);
+    console.log(prompt);
+  });
+}
+
 /** Borra un proyecto y todas sus filas hijas. Tolera tablas/columnas ausentes. */
 async function deleteProject(service, projectId, dryRun) {
   const { data: proj, error } = await service
@@ -623,6 +740,27 @@ async function main() {
       ? '— MODO PREVISUALIZACIÓN (no se escribe nada). Añade --confirm para crear. —\n'
       : '— MODO ESCRITURA (--confirm) —\n'
   );
+
+  // Modo leer la estrategia de un proyecto (solo lectura).
+  const showStrategyId = getArg('show-strategy');
+  if (showStrategyId) {
+    await showStrategy(service, showStrategyId);
+    return;
+  }
+
+  // Modo leer el calendario de un proyecto (solo lectura).
+  const showCalendarId = getArg('show-calendar');
+  if (showCalendarId) {
+    await showCalendar(service, showCalendarId);
+    return;
+  }
+
+  // Modo leer los briefs visuales de un proyecto (solo lectura).
+  const showBriefsId = getArg('show-briefs');
+  if (showBriefsId) {
+    await showBriefs(service, showBriefsId, parseInt(getArg('limit') || '0', 10));
+    return;
+  }
 
   // Modo borrar un proyecto (no clona).
   const deleteId = getArg('delete-id');

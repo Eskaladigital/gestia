@@ -7,6 +7,12 @@ import { X } from 'lucide-react';
 type Phase = 'connecting' | 'running' | 'complete' | 'cancelled' | 'error';
 
 const BATCH_SIZE = 10;
+/** Reintentos de una misma tanda ante un fallo transitorio de red/IA. */
+const MAX_BATCH_RETRIES = 2;
+/** Pasadas completas para barrer publicaciones que sigan pendientes. */
+const MAX_SWEEPS = 4;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export interface BriefsProgressModalProps {
   projectId: string;
@@ -66,7 +72,7 @@ export function BriefsProgressModal({
     abortRef.current?.abort();
   }, []);
 
-  const runOneBatch = useCallback(async (offset: number): Promise<{ hasMore: boolean; nextOffset: number }> => {
+  const runOneBatch = useCallback(async (offset: number): Promise<{ hasMore: boolean; nextOffset: number; totalVisuals: number }> => {
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -96,6 +102,7 @@ export function BriefsProgressModal({
     let buffer = '';
     let hasMore = false;
     let nextOffset = 0;
+    let initTotalVisuals = 0;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -122,6 +129,7 @@ export function BriefsProgressModal({
           case 'init':
             setTotalPosts(data.totalPosts || 0);
             setTotalVisuals(data.totalVisuals || 0);
+            initTotalVisuals = data.totalVisuals || 0;
             break;
 
           case 'progress':
@@ -169,8 +177,53 @@ export function BriefsProgressModal({
       }
     }
 
-    return { hasMore, nextOffset };
+    return { hasMore, nextOffset, totalVisuals: initTotalVisuals };
   }, [projectId, contentItemIds]);
+
+  /** Una pasada completa por todas las tandas. Reintenta cada tanda y, si una
+   *  agota reintentos, la salta para no abortar el resto. Devuelve cuántos
+   *  visuales había pendientes al empezar (0 = no quedaba nada). */
+  const runFullPass = useCallback(async (): Promise<{ pendingAtStart: number }> => {
+    let offset = 0;
+    let batch = 0;
+    let pendingAtStart = -1;
+
+    while (true) {
+      if (cancelledRef.current) break;
+      batch++;
+      setBatchNum(batch);
+
+      let result: { hasMore: boolean; nextOffset: number; totalVisuals: number } | null = null;
+      let attempt = 0;
+      while (true) {
+        try {
+          result = await runOneBatch(offset);
+          break;
+        } catch (err: any) {
+          if (err?.name === 'AbortError' || cancelledRef.current) throw err;
+          attempt++;
+          if (attempt > MAX_BATCH_RETRIES) {
+            // Saltar esta tanda; el barrido posterior reintentará lo pendiente.
+            const total = pendingAtStart < 0 ? 0 : pendingAtStart;
+            result = {
+              hasMore: total > 0 && offset + BATCH_SIZE < total,
+              nextOffset: offset + BATCH_SIZE,
+              totalVisuals: total,
+            };
+            break;
+          }
+          await sleep(1000 * attempt);
+        }
+      }
+
+      if (!result) break;
+      if (pendingAtStart < 0) pendingAtStart = result.totalVisuals;
+      if (!result.hasMore || cancelledRef.current) break;
+      offset = result.nextOffset;
+    }
+
+    return { pendingAtStart: pendingAtStart < 0 ? 0 : pendingAtStart };
+  }, [runOneBatch]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -178,23 +231,21 @@ export function BriefsProgressModal({
 
     (async () => {
       try {
-        let offset = 0;
-        let batch = 0;
         setPhase('running');
 
-        while (true) {
-          if (cancelledRef.current) {
-            setPhase('cancelled');
-            return;
-          }
+        // Solo barremos pendientes en modo "generar todos"; al regenerar posts
+        // concretos hacemos una única pasada para no reprocesarlos en bucle.
+        const canSweep = !(contentItemIds && contentItemIds.length > 0);
 
-          batch++;
-          setBatchNum(batch);
+        // Primera pasada completa.
+        await runFullPass();
 
-          const { hasMore, nextOffset } = await runOneBatch(offset);
-
-          if (!hasMore || cancelledRef.current) break;
-          offset = nextOffset;
+        // Barrido: repetir mientras queden publicaciones pendientes (hasta un tope).
+        let sweep = 1;
+        while (!cancelledRef.current && canSweep && sweep < MAX_SWEEPS) {
+          const { pendingAtStart } = await runFullPass();
+          sweep++;
+          if (pendingAtStart === 0) break; // ya no queda nada pendiente
         }
 
         setPhase(cancelledRef.current ? 'cancelled' : 'complete');
@@ -212,7 +263,7 @@ export function BriefsProgressModal({
       cancelledRef.current = true;
       abortRef.current?.abort();
     };
-  }, [runOneBatch]);
+  }, [runFullPass, contentItemIds]);
 
   const isTerminal = phase === 'complete' || phase === 'cancelled' || phase === 'error';
   const progressPct = totalVisuals > 0 ? Math.round((visualsDone / totalVisuals) * 100) : phase === 'complete' ? 100 : 0;
