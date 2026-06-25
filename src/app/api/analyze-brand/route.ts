@@ -390,8 +390,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }
 
+    // Sin URL no hay web de la que extraer identidad de marca. No es un error:
+    // los proyectos temáticos conservan la marca copiada al clonar. Saltamos
+    // este paso para no romper el "Todo en uno".
     if (!project.url) {
-      return NextResponse.json({ error: 'El proyecto no tiene URL configurada' }, { status: 400 });
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason: 'El proyecto no tiene URL; se mantiene la identidad de marca existente.',
+      });
     }
 
     const url = normalizeUrl(project.url);
