@@ -57,8 +57,8 @@ const IMAGE_REALISM_TAIL = [
   'Tomada como fotografia real con camara full frame profesional y optica de reportaje de alta calidad,',
   'luz existente fisicamente creible, color natural y balance de blancos realista, contraste moderado,',
   'grano minimo natural, detalle autentico en piel, telas, piedra, vegetacion o arquitectura segun la escena;',
-  'sujeto u objeto principal ocupando entre un tercio y dos tercios del encuadre, con fondo real visible que contextualice;',
-  'siempre de dia, luminosa y clara, nunca nocturna ni sombria;',
+  'respeta el TIPO DE PLANO y la ESCALA que describe la escena (desde el detalle macro o el plano cenital hasta el plano general amplio), sin imponer por defecto un encuadre medio;',
+  'respeta la HORA y la CALIDAD DE LUZ que describe la escena (amanecer, mediodia, tarde, golden hour, luz interior calida, cielo nublado), sin forzar siempre el mismo dia luminoso;',
   'si aparecen personas, secundarias, naturales y no posadas;',
   'sin HDR agresivo, sin acabado plastico, sin render 3D, sin pintura digital, sin ilustracion, sin tipografia ni logotipos.',
 ].join(' ');

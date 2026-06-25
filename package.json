@@ -14,7 +14,8 @@
     "images:regenerate-project": "node scripts/regenerate-project-images.js",
     "images:import-project-references": "node scripts/import-project-reference-images.js",
     "references:reanalyze": "node scripts/run-reanalyze.mjs",
-    "references:sync-rules": "node scripts/run-reanalyze.mjs -- --sync-only"
+    "references:sync-rules": "node scripts/run-reanalyze.mjs -- --sync-only",
+    "project:clone-wellness": "node -r ./scripts/preload-tls-local.cjs scripts/clone-project-wellness.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",
