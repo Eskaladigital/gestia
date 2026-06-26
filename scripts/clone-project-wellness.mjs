@@ -43,6 +43,8 @@
  *   --update-id=<uuid>            Aplica el perfil a un proyecto YA EXISTENTE (no clona).
  *   --delete-id=<uuid>            Borra un proyecto y sus filas hijas (requiere --confirm).
  *   --tune-id=<uuid>             Ajuste fino: reescribe SOLO ai_rules (Retiru original comercial).
+ *   --rewrite-copies=<uuid>      Reescribe los textos de redes (caption/cta/hashtags) EN SITIO,
+ *                                conservando imágenes y briefs. Usa --limit=N y --confirm.
  *   --new-name="..."              Nombre del proyecto nuevo (def: según el perfil).
  *   --confirm                     Ejecuta la escritura. SIN este flag solo previsualiza.
  *   --references / --no-references Forzar copiar / no copiar imágenes de referencia (def: según perfil).
@@ -336,6 +338,186 @@ function printProfileSummary(profile, copyRefs) {
   console.log(`  · content_style = ${JSON.stringify(o.content_style)}`);
   console.log(`  · ai_rules = posicionamiento monotemático + pilares definidos (1ª línea: "${(o.ai_rules || '').split('\n')[0].slice(0, 60)}…")`);
   console.log('');
+}
+
+// ============================================================
+// REESCRITURA DE TEXTOS PARA REDES (en sitio, conserva imágenes)
+// ============================================================
+const OPENAI_MODEL = 'gpt-5.4';
+
+async function callOpenAIChatJson(system, user, maxTokens = 1600) {
+  const key = (process.env.OPENAI_API_KEY || '').trim();
+  if (!key) throw new Error('Falta OPENAI_API_KEY en .env.local');
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          max_completion_tokens: maxTokens,
+          response_format: { type: 'json_object' },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        lastErr = new Error(`OpenAI ${res.status}: ${body.slice(0, 200)}`);
+        if ((res.status === 429 || res.status === 503) && attempt < 3) {
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+          continue;
+        }
+        throw lastErr;
+      }
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      return JSON.parse(content);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1200 * attempt));
+        continue;
+      }
+    }
+  }
+  throw lastErr;
+}
+
+function buildCopyRewritePrompt(project, post) {
+  const specs = post.production_specs && typeof post.production_specs === 'object' ? post.production_specs : {};
+  const scene = specs.scene_summary || '';
+  const system = `Eres un copywriter senior de Instagram (especialista en captions que generan guardados y alcance) para una cuenta del sector "${project.sector || 'contenido'}".
+Tu tarea: reescribir el TEXTO PARA PEGAR (caption) de una publicación, dejándolo listo para publicar, RICO EN CONTENIDO y optimizado según las buenas prácticas de Instagram 2026.
+
+ESTRUCTURA DEL CAPTION PERFECTO (síguela):
+1) GANCHO (línea 1): lo más importante. Los primeros ~125 caracteres (10-12 palabras) son lo único visible antes del "ver más", así que deben parar el scroll. Usa tensión, curiosidad, una pregunta o un contraste (antes/después) e incluye de forma natural la KEYWORD principal del tema. NO empieces por el nombre de la marca ni por un hashtag. Evita arranques que suenen a IA o a eslogan.
+2) DESARROLLO (cuerpo): explica el contenido de verdad. Si el post promete consejos/pasos/claves, DESARROLLA cada uno (el cómo se hace y el porqué funciona, o el error que evita) en 1-2 frases. Aporta valor real y específico (un matiz, un dato, contexto), nada de frases motivacionales genéricas.
+3) CIERRE del copy: una frase de cierre con sentido (una idea que redondee el tema). IMPORTANTE: el "copy" NO debe terminar con la llamada a la acción; la CTA va SOLO en el campo "cta".
+
+LLAMADA A LA ACCIÓN (campo "cta"):
+- Es una FRASE COMPLETA lista para publicar (la app la añade como último párrafo, debajo del copy), no una etiqueta de una palabra. Mal: "guardar". Bien: "Guarda este carrusel para revisar tus apoyos en tu próxima práctica 🧘‍♀️".
+- UNA sola CTA, concreta (guardar, comentar algo específico, escribir una palabra...). No la repitas dentro del "copy".
+
+REGLAS OBLIGATORIAS:
+- Las imágenes son ORIENTATIVAS y NO llevan texto. El caption es lo ÚNICO que transmite el mensaje: TODO el valor debe estar escrito.
+- COHERENCIA con el plan visual de los slides: el texto cuenta lo mismo que ilustran las imágenes, en el mismo orden.
+- LEGIBILIDAD: párrafos de 1-2 frases separados por saltos de línea (nunca un muro de texto). Las listas como "1) ... 2) ... 3) ...".
+- SEO: Instagram lee el texto del caption. Integra de forma natural keywords y variantes del nicho (sin repetir la misma frase más de dos veces, sin keyword stuffing).
+- EMOJIS: usa entre 3 y 5 emojis CON PROPÓSITO (marcar el tono o ayudar a escanear, p. ej. uno al inicio del gancho y alguno al principio de un punto clave). NUNCA los uses como viñetas de lista ni para sustituir palabras. Que sumen, no que ensucien.
+- Respeta el TONO y las REGLAS IA del proyecto. Mantén el TEMA del proyecto, sin mezclar otros.
+- HASHTAGS: 3-5, hiperespecíficos del nicho (evita genéricos tipo #love #instagood). Van SOLO en el campo "hashtags" del JSON; NO los escribas dentro de "copy" (se añaden aparte al publicar, si no se duplicarían).
+- Extensión: caption desarrollado (carrusel/post educativo aprox. 120-220 palabras; story más breve).
+- Devuelve SOLO JSON válido: {"copy": "caption con saltos de línea y emojis, SIN la CTA final y SIN hashtags", "cta": "frase de llamada a la acción completa y lista para publicar", "hashtags": ["#..", "3-5"]}`;
+
+  const tone = `Tono 0..100 (low→high): formalidad ${project.tone_formality}, proximidad ${project.tone_proximity}, emoción ${project.tone_emotion}, humor ${project.tone_humor}, disrupción ${project.tone_disruption}. Complejidad: ${project.complexity || 'media'}.`;
+  const user = `PROYECTO: ${project.name}
+SECTOR: ${project.sector || '—'}
+DESCRIPCIÓN: ${project.description || '—'}
+${tone}
+REGLAS IA DEL PROYECTO (léelas como ley):
+${(project.ai_rules || '—')}
+
+PUBLICACIÓN A REESCRIBIR:
+- Formato: ${post.format || '—'}
+- Tipo de contenido: ${post.content_type || '—'}
+- Idea: ${post.idea || '—'}
+- Plan visual de los slides (lo que muestran las imágenes, SIN texto): ${scene || '—'}
+- Caption actual (mejóralo de verdad, NO lo copies; es demasiado pobre): ${post.copy || '—'}
+
+Reescribe el caption para que, al publicarlo junto a las imágenes orientativas, aporte el valor completo del tema.`;
+  return { system, user };
+}
+
+function stripTrailingHashtags(copy) {
+  if (!copy) return copy;
+  const lines = copy.replace(/\r/g, '').split('\n');
+  while (lines.length) {
+    const last = lines[lines.length - 1].trim();
+    // Quita líneas finales vacías o compuestas solo de hashtags.
+    if (last === '' || /^(#[\p{L}\p{N}_]+\s*)+$/u.test(last)) {
+      lines.pop();
+    } else {
+      break;
+    }
+  }
+  return lines.join('\n').trim();
+}
+
+function normalizeHashtags(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map(h => String(h).trim())
+    .filter(Boolean)
+    .map(h => (h.startsWith('#') ? h : `#${h}`))
+    .slice(0, 5);
+}
+
+async function rewriteCopies(service, projectId, dryRun, limit) {
+  const { data: project, error: pErr } = await service
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (pErr || !project) throw new Error(`No se encontró el proyecto ${projectId}: ${pErr?.message || 'inexistente'}`);
+
+  console.log(`Reescritura de textos de "${project.name}" (sector: ${project.sector || '—'})\n`);
+
+  const { data: items, error: iErr } = await service
+    .from('content_items')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('scheduled_date', { ascending: true });
+  if (iErr || !items || items.length === 0) {
+    console.log('No hay publicaciones que reescribir.', iErr?.message || '');
+    return;
+  }
+
+  const max = limit && limit > 0 ? Math.min(limit, items.length) : items.length;
+  console.log(`Publicaciones: ${items.length} (procesando ${max})${dryRun ? ' — DRY-RUN, no se escribe' : ''}\n`);
+
+  let ok = 0;
+  for (let i = 0; i < max; i++) {
+    const post = items[i];
+    const tag = `${String(i + 1).padStart(2, '0')}/${max} [${post.scheduled_date || '—'}] ${post.format || ''}`;
+    try {
+      const { system, user } = buildCopyRewritePrompt(project, post);
+      const out = await callOpenAIChatJson(system, user);
+      const newCopy = stripTrailingHashtags((out.copy || '').toString().trim());
+      const newCta = (out.cta || '').toString().trim() || post.cta || null;
+      const newTags = normalizeHashtags(out.hashtags);
+      if (!newCopy) {
+        console.warn(`${tag} · IA devolvió copy vacío, se mantiene el actual.`);
+        continue;
+      }
+
+      if (i === 0) {
+        console.log(`--- EJEMPLO (post 1) ---\nANTES:\n${(post.copy || '').trim()}\n\nDESPUÉS:\n${newCopy}\n\nCTA: ${newCta}\nHASHTAGS: ${newTags.join(' ')}\n------------------------\n`);
+      }
+
+      if (!dryRun) {
+        const { error: upErr } = await service
+          .from('content_items')
+          .update({ copy: newCopy, cta: newCta, hashtags: newTags })
+          .eq('id', post.id);
+        if (upErr) {
+          console.warn(`${tag} · error guardando: ${upErr.message}`);
+          continue;
+        }
+      }
+      ok++;
+      console.log(`${dryRun ? '·' : '✓'} ${tag} · ${post.idea ? post.idea.slice(0, 60) : ''}`);
+    } catch (err) {
+      console.warn(`${tag} · fallo: ${err?.message || err}`);
+    }
+  }
+
+  console.log(`\n${dryRun ? 'Previsualizadas' : 'Reescritas'}: ${ok}/${max}.`);
+  if (dryRun) console.log('Añade --confirm para guardar los cambios.');
+  else console.log('Listo. Las imágenes y briefs se conservan (solo cambió el texto).');
 }
 
 /** Imprime la estrategia más reciente de un proyecto para revisar el resultado. */
@@ -759,6 +941,28 @@ async function main() {
   const showBriefsId = getArg('show-briefs');
   if (showBriefsId) {
     await showBriefs(service, showBriefsId, parseInt(getArg('limit') || '0', 10));
+    return;
+  }
+
+  // Modo listar proyectos (id + nombre) para localizar el que quieres.
+  if (hasFlag('list')) {
+    const { data, error } = await service
+      .from('projects')
+      .select('id, name, sector, status')
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    console.log(`Proyectos (${data?.length || 0}):\n`);
+    for (const p of data || []) {
+      console.log(`  ${p.id}  ·  ${p.name}  ·  ${p.sector || '—'}  ·  ${p.status || '—'}`);
+    }
+    return;
+  }
+
+  // Modo reescribir los textos para redes (caption/cta/hashtags) en sitio.
+  // Conserva imágenes y briefs; solo mejora el texto usando la línea editorial.
+  const rewriteId = getArg('rewrite-copies');
+  if (rewriteId) {
+    await rewriteCopies(service, rewriteId, dryRun, parseInt(getArg('limit') || '0', 10));
     return;
   }
 

@@ -3,7 +3,7 @@ import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/serv
 import { requireAdmin } from '@/lib/auth/roles';
 import { isDeletedAtColumnError } from '@/lib/supabase/project-queries';
 
-/** Restaurar proyecto en papelera (solo administradores). */
+/** Restaurar o archivar proyecto (solo administradores). */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,8 +17,8 @@ export async function PATCH(
     await requireAdmin(supabase, user.id);
 
     const body = (await request.json().catch(() => ({}))) as { action?: string };
-    if (body.action !== 'restore') {
-      return NextResponse.json({ error: 'Se espera { "action": "restore" }' }, { status: 400 });
+    if (body.action !== 'restore' && body.action !== 'trash') {
+      return NextResponse.json({ error: 'Se espera { "action": "restore" | "trash" }' }, { status: 400 });
     }
 
     const service = createServiceSupabase();
@@ -29,8 +29,14 @@ export async function PATCH(
       .maybeSingle();
 
     if (fetchErr && isDeletedAtColumnError(fetchErr)) {
+      if (body.action === 'restore') {
+        return NextResponse.json(
+          { error: 'No hay columna deleted_at; no hay papelera que restaurar.' },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
-        { error: 'No hay columna deleted_at; no hay papelera que restaurar.' },
+        { error: 'No hay columna deleted_at; no se puede archivar en papelera.' },
         { status: 503 }
       );
     }
@@ -40,13 +46,28 @@ export async function PATCH(
     if (!row) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }
-    if (row.deleted_at == null) {
-      return NextResponse.json({ error: 'El proyecto ya está activo' }, { status: 400 });
+
+    if (body.action === 'restore') {
+      if (row.deleted_at == null) {
+        return NextResponse.json({ error: 'El proyecto ya está activo' }, { status: 400 });
+      }
+      const { error: upErr } = await service.from('projects').update({ deleted_at: null }).eq('id', id);
+      if (upErr) {
+        return NextResponse.json({ error: upErr.message }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true });
     }
 
-    const { error: upErr } = await service.from('projects').update({ deleted_at: null }).eq('id', id);
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
+    if (row.deleted_at != null) {
+      return NextResponse.json({ error: 'El proyecto ya está en la papelera' }, { status: 400 });
+    }
+
+    const { error: trashErr } = await service
+      .from('projects')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
+    if (trashErr) {
+      return NextResponse.json({ error: trashErr.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
@@ -59,7 +80,7 @@ export async function PATCH(
   }
 }
 
-/** Borrado definitivo de un proyecto en papelera (solo administradores). */
+/** Borrado definitivo de cualquier proyecto (solo administradores). */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -75,27 +96,15 @@ export async function DELETE(
     const service = createServiceSupabase();
     const { data: row, error: fetchErr } = await service
       .from('projects')
-      .select('deleted_at')
+      .select('id')
       .eq('id', id)
       .maybeSingle();
 
-    if (fetchErr && isDeletedAtColumnError(fetchErr)) {
-      const { error } = await service.from('projects').delete().eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (fetchErr) {
+    if (fetchErr && !isDeletedAtColumnError(fetchErr)) {
       return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     }
     if (!row) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
-    }
-    if (row.deleted_at == null) {
-      return NextResponse.json(
-        { error: 'Solo se puede eliminar del todo un proyecto que esté en la papelera' },
-        { status: 400 }
-      );
     }
 
     const { error } = await service.from('projects').delete().eq('id', id);

@@ -31,7 +31,7 @@ function AdminProjectsTable({
 }) {
   if (rows.length === 0) return null;
 
-  const lastHeading = variant === 'trashed' ? 'Acciones' : 'Ficha';
+  const lastHeading = 'Acciones';
 
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal-sm overflow-x-auto">
@@ -78,18 +78,21 @@ function AdminProjectsTable({
                 </span>
               </td>
               <td className="px-4 py-3 align-top text-right">
-                {variant === 'trashed' ? (
-                  <AdministratorTrashedProjectActions projectId={p.id} projectName={p.name} />
-                ) : !p.deleted_at ? (
-                  <Link
-                    href={projectDashboardBasePath(p.id, true)}
-                    className="text-xs font-bold text-red-700 uppercase tracking-wider hover:underline"
-                  >
-                    Abrir →
-                  </Link>
-                ) : (
-                  <span className="text-[10px] font-medium text-surface-400">—</span>
-                )}
+                <div className="flex flex-col items-end gap-2">
+                  {variant === 'active' && !p.deleted_at ? (
+                    <Link
+                      href={projectDashboardBasePath(p.id, true)}
+                      className="text-xs font-bold text-red-700 uppercase tracking-wider hover:underline"
+                    >
+                      Abrir →
+                    </Link>
+                  ) : null}
+                  <AdministratorTrashedProjectActions
+                    projectId={p.id}
+                    projectName={p.name}
+                    variant={variant}
+                  />
+                </div>
               </td>
             </tr>
           ))}
@@ -175,7 +178,7 @@ export default async function AdministratorProjectsPage() {
           <section className="mb-2">
             <h2 className="font-display text-lg font-bold text-surface-900 mb-1">Activos</h2>
             <p className="text-xs text-surface-500 font-medium mb-4 max-w-2xl">
-              Proyectos en uso. La ficha de administración solo está disponible mientras el proyecto no esté archivado en papelera.
+              Proyectos en uso. Puedes abrir la ficha, moverlos a la papelera o eliminarlos del todo (tuyos o de cualquier cliente).
             </p>
             {activeRows.length > 0 ? (
               <AdminProjectsTable rows={activeRows} variant="active" />

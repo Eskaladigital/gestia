@@ -616,8 +616,8 @@ REGLAS CRÍTICAS:
 - Cada post debe tener un copy COMPLETO, RICO EN CONTENIDO y listo para publicar (no un titular ni una lista de palabras sueltas): el texto debe aportar valor por sí mismo aunque no se vean las imágenes
 - Respeta los pilares de contenido y sus porcentajes
 - El tono de cada copy debe coincidir con la configuración
-- Termina cada copy con UNA sola llamada a la acción integrada de forma natural (no varias, y sin repetir el mismo CTA dos veces)
-- Los hashtags deben ser reales y relevantes para el sector
+- El "copy" NO debe terminar con la llamada a la acción: la CTA va SOLO en el campo "cta" (la app la añade como párrafo final). El copy acaba con una frase de cierre con sentido.
+- Los hashtags deben ser reales y relevantes para el sector, MÁXIMO 5 por post (idealmente 3-5)
 - Mantén variedad temática: evita repetir el mismo ángulo, la misma promesa o el mismo CTA varias veces
 ${opts?.priorMonthsDigest?.trim() ? '- Si hay sección "CONTINUIDAD CON EL PERIODO YA GENERADO", trátala como memoria obligatoria: nuevos ángulos y CTAs, sin reescribir ni parafrasear de forma estrecha lo ya cubierto' : ''}
 ${opts?.minDate ? `- PROHIBIDO programar posts anteriores a ${opts.minDate}. Usa SOLO fechas listadas en "Fechas permitidas" de cada semana.` : ''}
@@ -629,12 +629,18 @@ ${opts?.excludeDates?.length ? `- PROHIBIDO usar estas fechas (ya hay un post pr
 CALIDAD Y PROFUNDIDAD DEL COPY (OBLIGATORIO)
 ═══════════════════════════════════════════
 El copy es CONTENIDO, no un pie de foto decorativo:
+- LAS IMÁGENES SON ORIENTATIVAS Y NO LLEVAN TEXTO. Por tanto, el copy es el ÚNICO que transmite el mensaje: TODO el valor (los consejos concretos, los pasos, el dato, el cómo y el porqué) DEBE estar escrito en el copy. Nunca delegues el contenido en las imágenes ni en un "texto overlay" que no existe.
+- COHERENCIA CON LOS SLIDES: el copy y el "scene_summary" cuentan lo MISMO. Si el copy da 3 consejos, los slides los ilustran en el mismo orden; el copy desarrolla la enseñanza, las imágenes la acompañan visualmente.
+- GANCHO (1ª línea): los primeros ~125 caracteres (10-12 palabras) son lo único visible antes del "ver más"; deben parar el scroll con tensión, curiosidad, pregunta o contraste, e incluir la KEYWORD principal de forma natural. No empieces por el nombre de la marca ni por un hashtag, ni con frases que suenen a IA o eslogan.
 - DESARROLLA, no enumeres. Si el post promete "3 ajustes", "5 claves" o "X pasos", el copy debe EXPLICAR cada uno con sustancia: el CÓMO se hace y el POR QUÉ funciona (o el error común que evita), en 1-2 frases por punto. Nunca te limites a nombrarlos.
 - Aporta valor real y específico del tema (un matiz, un dato, contexto, una idea que el lector no supiera), no frases motivacionales genéricas válidas para cualquier marca.
-- Estructura: (1) gancho que conecta con un problema o situación real; (2) cuerpo desarrollado con la enseñanza o idea explicada de verdad; (3) cierre con sentido + UNA llamada a la acción natural.
-- Extensión según formato y complejidad configurada: carrusel, publicación y reel educativos/inspiracionales = copy desarrollado (aprox. 90-200 palabras, en varios párrafos cortos); story = más breve y directo. Ajusta la profundidad al nivel de complejidad del proyecto.
+- Estructura: (1) gancho; (2) cuerpo desarrollado con la enseñanza o idea explicada de verdad; (3) cierre con sentido. La CTA NO va en el copy: va en el campo "cta".
+- Extensión según formato y complejidad configurada: carrusel, publicación y reel educativos/inspiracionales = copy desarrollado (aprox. 120-220 palabras, en varios párrafos cortos); story = más breve y directo. Ajusta la profundidad al nivel de complejidad del proyecto.
+- SEO: Instagram lee el texto del caption; integra keywords y variantes del nicho de forma natural (sin repetir la misma frase más de dos veces, sin keyword stuffing).
 - Cada frase debe sumar información, criterio o emoción. PROHIBIDO el relleno y las generalidades.
-- Usa saltos de línea para que sea legible en Instagram. Emojis solo si encajan con el tono.
+- Usa saltos de línea para que sea legible en Instagram (párrafos de 1-2 frases). Las listas como "1) ... 2) ... 3) ...".
+- EMOJIS: usa entre 3 y 5 con propósito (marcar tono o ayudar a escanear, p. ej. al inicio del gancho o de un punto clave). NUNCA como viñetas de lista ni sustituyendo palabras.
+- HASHTAGS: 3-5, hiperespecíficos del nicho (evita genéricos tipo #love #instagood). Instagram ya no premia los bloques de hashtags.
 - Las fechas deben ser del mes de ${month} ${year}
 - Reparte los posts del tramo en días distintos (prioriza lun–vie cuando haya cupo)
 - Las Stories suelen ir en días de alta actividad (martes-jueves)
@@ -682,10 +688,10 @@ FORMATO DE RESPUESTA JSON:
       "content_type": "educativo|inspiracional|comercial|entretenimiento|personal|corporativo",
       "format": "story|carrusel|publicacion|reel",
       "idea": "Idea principal del post en una línea",
-      "copy": "Caption final lista para publicar y RICA EN CONTENIDO: desarrolla y EXPLICA las ideas (el cómo y el porqué de cada punto), no las enumeres. Varios párrafos cortos con valor real. Termina con UNA sola llamada a la acción integrada de forma natural.",
-      "cta": "Etiqueta corta del objetivo de acción del post (p. ej. 'guardar para la próxima práctica', 'comentar experiencia'). NO repitas literalmente la frase final del copy.",
+      "copy": "Caption final lista para publicar y RICA EN CONTENIDO: desarrolla y EXPLICA las ideas (el cómo y el porqué de cada punto), no las enumeres. Varios párrafos cortos con valor real. NO incluyas aquí la CTA ni los hashtags; el copy termina con una frase de cierre con sentido.",
+      "cta": "Frase de llamada a la acción COMPLETA y lista para publicar (la app la añade como último párrafo). Mal: 'guardar'. Bien: 'Guarda este carrusel para revisar tus apoyos en tu próxima práctica'. Una sola CTA, no la repitas en el copy.",
       "post_goal": "Objetivo específico de este post",
-      "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+      "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],  // máximo 5, idealmente 3-5 específicos
       "platforms": ["instagram"],
       "production_specs": {
         "num_slides": 5,

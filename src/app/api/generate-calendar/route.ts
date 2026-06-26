@@ -176,7 +176,7 @@ function normalizeCalendarPosts(raw: CalendarGeneration['posts'] | undefined, ex
         copy: clipText(post?.copy, 6000),
         cta,
         post_goal,
-        hashtags: cleanStringArray(post?.hashtags, 12, 80, '#'),
+        hashtags: cleanStringArray(post?.hashtags, 5, 80, '#'),
         platforms: ['instagram'],
         production_specs: normalizeProductionSpecs(post?.production_specs, format),
       };
