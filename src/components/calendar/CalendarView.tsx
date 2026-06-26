@@ -14,11 +14,12 @@ import { BriefsProgressModal } from '../projects/BriefsProgressModal';
 interface CalendarViewProps {
   items: ContentItem[];
   projectId: string;
+  projectName: string;
   /** Orientación de imagen del proyecto (migración 022). null si la columna aún no existe. */
   imageOrientation?: string | null;
 }
 
-export function CalendarView({ items, projectId, imageOrientation }: CalendarViewProps) {
+export function CalendarView({ items, projectId, projectName, imageOrientation }: CalendarViewProps) {
   const router = useRouter();
   const [view, setView] = useState<'list' | 'calendar' | 'content'>('calendar');
   const [editingItem, setEditingItem] = useState<ContentItem | null>(null);
@@ -209,6 +210,7 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
         <CalendarTable
           items={localItems}
           projectId={projectId}
+          projectName={projectName}
           onItemsChange={setLocalItems}
           onGenerateBriefForPost={(id) => handleGenerateVisualBriefs([id])}
           generatingBrief={false}
@@ -224,12 +226,13 @@ export function CalendarView({ items, projectId, imageOrientation }: CalendarVie
         </>
       )}
       {view === 'content' && (
-        <ContentGallery items={localItems} projectId={projectId} imageOrientation={imageOrientation ?? null} />
+        <ContentGallery items={localItems} projectId={projectId} projectName={projectName} imageOrientation={imageOrientation ?? null} />
       )}
 
       {editingItem && (
         <PostEditor
           item={localItems.find(i => i.id === editingItem.id) ?? editingItem}
+          projectName={projectName}
           onSave={(updates) => handleSave(editingItem.id, updates)}
           onStatusChange={(status) => handleStatusUpdate(editingItem.id, status)}
           onClose={() => setEditingItem(null)}

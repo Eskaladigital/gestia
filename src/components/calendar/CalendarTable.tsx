@@ -22,6 +22,7 @@ import { buildImageFilename } from './ContentGallery';
 interface CalendarTableProps {
   items: ContentItem[];
   projectId: string;
+  projectName: string;
   onItemsChange: (next: ContentItem[]) => void;
   onGenerateBriefForPost?: (contentItemId: string) => void | Promise<void>;
   generatingBrief?: boolean;
@@ -99,6 +100,7 @@ interface WeekGroup {
 export function CalendarTable({
   items,
   projectId: _projectId,
+  projectName,
   onItemsChange,
   onGenerateBriefForPost,
   generatingBrief,
@@ -662,7 +664,7 @@ export function CalendarTable({
                                                 onClick={() =>
                                                   void handleDownloadVisual(
                                                     visual,
-                                                    buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                                    buildImageFilename(projectName, item.scheduled_date, item.format, visual.visual_index, visual.label),
                                                   )
                                                 }
                                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900 text-white border-2 border-surface-900 px-2 py-1 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
@@ -813,6 +815,7 @@ export function CalendarTable({
       {editingId && (
         <PostEditor
           item={items.find(i => i.id === editingId)!}
+          projectName={projectName}
           onSave={(updates) => handleSave(editingId, updates)}
           onStatusChange={(status) => handleStatusChange(editingId, status)}
           onClose={() => setEditingId(null)}

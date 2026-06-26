@@ -53,6 +53,7 @@ export default async function CalendarPage({ params }: { params: Promise<{ id: s
         <CalendarView
           items={items}
           projectId={id}
+          projectName={project.name}
           imageOrientation={(project as { image_orientation?: string | null }).image_orientation ?? null}
         />
       ) : (

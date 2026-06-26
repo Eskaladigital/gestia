@@ -36,6 +36,7 @@ function buildProductionSpecs(
 
 interface PostEditorProps {
   item: ContentItem;
+  projectName: string;
   onSave: (updates: Partial<ContentItem>) => void;
   /** Guarda solo el estado (borrador / aprobado / …) sin marcar is_edited ni cerrar el modal */
   onStatusChange?: (status: ContentItemStatus) => void | Promise<void>;
@@ -52,7 +53,7 @@ const STATUS_OPTIONS: { value: ContentItemStatus; label: string }[] = [
   { value: 'archived', label: 'Archivado' },
 ];
 
-export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, onGenerateBrief, generatingBrief }: PostEditorProps) {
+export function PostEditor({ item, projectName, onSave, onStatusChange, onClose, onDelete, onGenerateBrief, generatingBrief }: PostEditorProps) {
   const [deleting, setDeleting] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -597,7 +598,7 @@ export function PostEditor({ item, onSave, onStatusChange, onClose, onDelete, on
                                 onClick={() =>
                                   void handleDownloadVisual(
                                     visual,
-                                    buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                    buildImageFilename(projectName, item.scheduled_date, item.format, visual.visual_index, visual.label),
                                   )
                                 }
                                 className="text-[10px] font-bold uppercase tracking-wider bg-surface-900/90 backdrop-blur text-white border border-surface-900 px-2 py-1 rounded-lg hover:bg-surface-900 transition-colors"

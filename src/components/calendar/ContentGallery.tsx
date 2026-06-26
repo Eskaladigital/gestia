@@ -31,19 +31,28 @@ import { aspectClassForOrientation } from '@/lib/ai/constants';
 
 /**
  * Genera el nombre de archivo para una imagen visual.
- * Formato: "2025-04-13 CARRUSEL 1.png"
+ * Formato: "Wellness Spa 20250413 CARRUSEL 1.png"
  */
+function sanitizeFilenamePart(value: string): string {
+  return value
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function buildImageFilename(
+  projectName: string,
   scheduledDate: string,
   format: string | null,
   visualIndex: number,
   label?: string | null,
 ): string {
-  const date = scheduledDate.slice(0, 10);
+  const project = sanitizeFilenamePart(projectName) || 'Proyecto';
+  const date = scheduledDate.slice(0, 10).replace(/-/g, '');
   const fmt = (format || 'POST').toUpperCase();
   const idx = visualIndex + 1;
   const suffix = label ? ` ${label}` : '';
-  return `${date} ${fmt} ${idx}${suffix}.png`;
+  return `${project} ${date} ${fmt} ${idx}${suffix}.png`;
 }
 
 const WEEK_COLORS = [
@@ -156,6 +165,7 @@ function formatWeekRange(start: Date, end: Date): string {
 interface ContentGalleryProps {
   items: ContentItem[];
   projectId: string;
+  projectName: string;
   /** Orientación de las imágenes IA del proyecto (vertical/cuadrado/horizontal). */
   imageOrientation?: string | null;
 }
@@ -173,7 +183,7 @@ interface WeekGroup {
   posts: PostWithVisuals[];
 }
 
-export function ContentGallery({ items, projectId, imageOrientation }: ContentGalleryProps) {
+export function ContentGallery({ items, projectId, projectName, imageOrientation }: ContentGalleryProps) {
   const aspectClass = aspectClassForOrientation(imageOrientation);
   const supabase = createClient();
   const [gridDensity, setGridDensity] = useState<GridDensity>(() =>
@@ -572,8 +582,8 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
       for (const visual of allReady) {
         const parentItem = itemsById[visual.content_item_id];
         let filename = parentItem
-          ? buildImageFilename(parentItem.scheduled_date, parentItem.format, visual.visual_index, visual.label)
-          : `visual-${visual.visual_index + 1}.png`;
+          ? buildImageFilename(projectName, parentItem.scheduled_date, parentItem.format, visual.visual_index, visual.label)
+          : `${sanitizeFilenamePart(projectName) || 'Proyecto'} visual-${visual.visual_index + 1}.png`;
 
         while (usedNames.has(filename)) {
           filename = filename.replace('.png', ' (copia).png');
@@ -621,7 +631,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
     } finally {
       setDownloadingZip(false);
     }
-  }, [monthVisuals, itemsById, projectId]);
+  }, [monthVisuals, itemsById, projectId, projectName]);
 
   useEffect(() => {
     if (!mobileSaveQueue?.length) {
@@ -1039,7 +1049,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                     onClick={() =>
                                       void handleDownloadVisual(
                                         visual,
-                                        buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                        buildImageFilename(projectName, item.scheduled_date, item.format, visual.visual_index, visual.label),
                                       )
                                     }
                                     className="bg-surface-900 text-white"
@@ -1059,7 +1069,7 @@ export function ContentGallery({ items, projectId, imageOrientation }: ContentGa
                                   if (!displayUrl) return;
                                   setLightbox({
                                     url: displayUrl,
-                                    filename: buildImageFilename(item.scheduled_date, item.format, visual.visual_index, visual.label),
+                                    filename: buildImageFilename(projectName, item.scheduled_date, item.format, visual.visual_index, visual.label),
                                     visualId: visual.id,
                                     contentItemId: item.id,
                                   });
