@@ -42,7 +42,9 @@
  *   --source-id=<uuid>            Id exacto del proyecto origen (tiene prioridad).
  *   --update-id=<uuid>            Aplica el perfil a un proyecto YA EXISTENTE (no clona).
  *   --delete-id=<uuid>            Borra un proyecto y sus filas hijas (requiere --confirm).
- *   --tune-id=<uuid>             Ajuste fino: reescribe SOLO ai_rules (Retiru original comercial).
+ *   --tune-id=<uuid>             Ajuste fino: reescribe SOLO ai_rules. Combina con --rules=retiros|eskala.
+ *   --rules=retiros|eskala|furgocasa  Set de reglas a aplicar con --tune-id (def: retiros). furgocasa ajusta también content_style.
+ *   --set-sells-product=<uuid>   Fija sells_physical_product. Combina con --value=true|false|null (def: true).
  *   --rewrite-copies=<uuid>      Reescribe los textos de redes (caption/cta/hashtags) EN SITIO,
  *                                conservando imágenes y briefs. Usa --limit=N y --confirm.
  *   --new-name="..."              Nombre del proyecto nuevo (def: según el perfil).
@@ -232,6 +234,80 @@ REGLAS PARA LAS IMÁGENES (VARIEDAD OBLIGATORIA, romper la monotonía):
 - Varía la composición y el ángulo; alterna con y sin personas (huéspedes naturales, no posados).
 - PROHIBIDO repetir la misma postal una y otra vez; busca diversidad de destinos, encuadres y atmósferas dentro del sur de España.`;
 
+const ESKALA_AI_RULES = `VOZ Y TONO (innegociable):
+- Hablamos de TÚ, nunca de usted. Voz murciana, directa, cercana y con chispa: "Murcianos. Digitales. Directos.". Sin jerga de agencia, sin humo, sin postureo. Frases cortas, afirmaciones con seguridad, algo de descaro y humor inteligente (no payasadas).
+- Disrupción alta: hooks que incomodan, sorprenden o señalan un problema real. PROHIBIDOS los clichés de agencia ("potencia tu marca", "lleva tu negocio al siguiente nivel", "soluciones a medida"). Nunca sonar como "una agencia más".
+
+POSICIONAMIENTO / TERRITORIO:
+- Eskala es la agencia de Murcia que hace crecer negocios locales y pymes combinando marketing + tecnología/IA aplicada, con RESULTADOS MEDIBLES y demostrables: "sin humo, con objetivos, plazos y números encima de la mesa".
+- Contenido DEMOSTRATIVO, no discursivo: transformaciones reales, errores comunes, antes/después, mini-auditorías, usos prácticos de IA. Si una pieza no aterriza en un proceso o resultado de negocio concreto (leads, ventas, tráfico, tiempo, conversión, citas), no se publica.
+
+ACTIVOS REALES QUE HAY QUE EXPLOTAR (son ciertos, úsalos como prueba):
+- CASOS DE ÉXITO con números: clientes murcianos con +300% en ventas y +200% en tráfico, con testimonios reales (nombre y apellido). Es el activo nº1 para confianza y viralidad: muéstralo, no lo escondas.
+- PORTFOLIO de alto nivel: Health4Spain, primer marketplace de España que centraliza seguros, abogados, inmobiliarias y gestorías para extranjeros — multiidioma en 5 lenguas, formulario inteligente de 4 pasos y +150 profesionales en 19 ciudades, diseñado y desarrollado por Eskala. Demuestra que construimos plataformas y apps serias, no solo "webs".
+- CAPACIDAD CREATIVA/TÉCNICA premium: web 3D en WebGL (el "Universo" donde cada servicio es un planeta). Diferenciador potente y material de contenido entretenido.
+- METODOLOGÍA propia de 4 pasos: Diagnóstico → Estrategia → Ejecución → Medición y mejora continua. Cada negocio empieza con una auditoría, no con plantillas.
+- 8 SERVICIOS combinables, cada uno con su métrica: Diseño web, SEO local, Redes sociales, Google Ads, Apps con IA, Chatbots, Branding y Email marketing. No reducir la cuenta solo a "IA": enseñar también esa amplitud.
+- CERCANÍA LOCAL real: sede en Murcia, reuniones presenciales, clientes en Murcia, Cartagena, Lorca y Molina; sectores como abogados, clínicas, comercios, restaurantes, inmobiliarias y asesorías.
+- GANCHOS COMERCIALES: primera consultoría gratis, respuesta en menos de 24 h, "si no somos tu mejor opción, también te lo decimos".
+
+REGLAS DE CONTENIDO:
+- Mezcla viralidad + utilidad: hooks de problema potentes, mito vs realidad, teardowns/auditorías, "manual vs automatizado", antes/después siempre con el PORQUÉ.
+- IA SIEMPRE aterrizada: qué tarea concreta resuelve, en qué tipo de empresa y qué mejora produce. Nunca IA abstracta ni "futurista".
+- Aprovecha los casos y el portfolio como prueba recurrente; convierte resultados reales en contenido compartible.
+
+IMÁGENES (variedad y craft, nada de stock genérico):
+- Estética tecnológica de alto contraste, con energía y movimiento; metáforas de aceleración o tensión digital, pantallas, dashboards, datos, manos sobre teclado, comparativas antes/después. Guiño al universo 3D/espacial de la marca cuando encaje.
+- Varía sujeto, plano y escena en cada pieza. Presencia humana media (manos, equipo, fundador puntual) para credibilidad, sin convertir la cuenta en marca personal. Evita el plano de catálogo obvio del sector.`;
+
+const FURGOCASA_AI_RULES = `LÍNEA EDITORIAL (PRIORITARIA — define DE QUÉ VA el contenido):
+- Furgocasa NO es una cuenta que "explica el alquiler": es una cuenta de EXPERIENCIA Y ESTILO DE VIDA camper, al nivel de Yescapa, Indie Campers o Roadsurfer. Primero enamoramos con la experiencia (libertad, naturaleza, momentos reales, emoción, gente disfrutando); el alquiler aparece como consecuencia natural, nunca como protagonista permanente.
+- MENOS explicación, MÁS experiencia. Reduce al mínimo los checklists, "qué cabe", "qué incluye el precio", "cómo aparcar", "reserva en 2 pagos" y similares. Cuando un tema útil sea necesario, cuéntalo DESDE la experiencia y la emoción, no como tutorial ni ficha.
+- Reparto editorial deseado (oriéntate a él):
+  · ~50% EXPERIENCIA / LIFESTYLE ASPIRACIONAL: rutas y destinos vividos, momentos reales (amanecer con café, baño en una cala, sobremesa, hoguera, perro asomado a la ventana, caminar por la montaña, atardecer en la puerta lateral abierta), libertad y desconexión. La gente y el lugar son protagonistas.
+  · ~20% VIDA A BORDO mostrada como experiencia (no como manual): el placer de cocinar dentro, despertar con vistas, el café de la mañana, leer en la cama con la puerta abierta. Sensaciones, no instrucciones.
+  · ~15% COMUNIDAD / TRATO FAMILIAR: clientes reales, momentos de entrega, historias de viajeros, vuelta a casa con ganas de repetir.
+  · ~15% UTILIDAD / COMERCIAL: objeciones, qué incluye, precio, km ilimitados... pero en MINORÍA y siempre envuelto en experiencia.
+- Cada pieza debe transmitir un DESEO o una EMOCIÓN de viaje, no solo información. Si una publicación solo informa y no hace soñar con la escapada, replantéala.
+
+IMÁGENES — PRIORIZA LA EXPERIENCIA SOBRE EL PRODUCTO:
+- Prioriza escenas de VIDA y EMOCIÓN: personas disfrutando (parejas, familias, amigos, mascotas), paisajes amplios del sureste y de España, momentos cotidianos del viaje. La camper puede estar de fondo, aparecer parcialmente o no aparecer.
+- Reduce al máximo los planos de producto/catálogo y de interior "de muestra". El interior solo cuando transmita experiencia (gente viviéndolo), nunca como ficha técnica.
+
+Las campers de Furgocasa son siempre FIAT DUCATO H2 L3.
+Las campers tienen solo un toldo y van siempre en el lado derecho.
+Cuando se recrea una imagen de una camper en movimiento, siempre debe haber un conductor. Si no, no resulta real.
+Deben crearse imágenes de las campers y de las personas desde cualquier tipo de ángulo y distancia. No centrarnos solo en una perspectiva cercana ni primeros planos. Utilizar imágenes aéreas donde la camper tenga menos presencia o aparezca de fondo. Otras veces planos más cercanos, variedad en las imágenes. No es necesario que en todas las imágenes aparezca una camper. Las imágenes pueden representar experiencias de los usuarios.
+
+REGLAS DE VARIEDAD VISUAL PARA CARRUSELES (obligatorias):
+- Como mucho UN slide de cada carrusel puede ser un plano de tres cuartos de la camper en carretera, calle o paisaje abierto. El resto deben ser planos claramente distintos.
+- SE reducirá en lo posible la cantidad de imágenes del interior de la camper. Es preferible utilizar imágenes del exterior, de experiencias.
+- No es necesario que en todas las imágenes aparezca una camper. También pueden representar experiencias de los viajeros.
+- PROHIBIDO repetir el mismo plano principal (mismo encuadre + mismo sujeto + misma acción) en dos slides cualesquiera del mismo carrusel.
+- Al menos UN slide no debe contener la camper como sujeto principal.
+- El carrusel debe contar una micro-historia con principio, desarrollo y cierre. No es un álbum de la misma camper en distintos paisajes.
+
+REGLAS DE COHERENCIA Y VARIEDAD ENTRE PUBLICACIONES DEL CALENDARIO:
+- Mantener una misma cocina cromática y un mismo grano/look fotográfico a lo largo del proyecto, para que todas las publicaciones se sientan de la misma marca.
+- En publicaciones consecutivas, evitar repetir el mismo plano principal de la camper. Si en la publicación anterior la camper apareció en plano de tres cuartos en carretera, la siguiente debe variar en encuadre, sujeto, acción o momento del día.
+
+REGLAS DE REALISMO:
+- La camper Fiat Ducato H2 L3 debe respetarse en proporciones y silueta. No deformar el chasis, no exagerar la altura ni alargar el morro.
+- Toldo siempre en el lado derecho, nunca en ambos lados ni en el izquierdo.
+- Si la camper está en movimiento, siempre hay un conductor visible al volante.
+- Evitar el cliché publicitario de "camper en carretera vacía con cielo dramático y nubes saturadas". Buscar luz natural realista (mañana clara, mediodía, tarde clara, golden hour aún alto), no escenas tenebrosas ni atardeceres morados.`;
+
+const AI_RULES_BY_KEY = {
+  retiros: RETIROS_AI_RULES,
+  eskala: ESKALA_AI_RULES,
+  furgocasa: FURGOCASA_AI_RULES,
+};
+
+// content_style opcional a aplicar junto con --tune-id (mismo --rules).
+const CONTENT_STYLE_BY_KEY = {
+  furgocasa: { personal: 80, comercial: 25, educativo: 35, corporativo: 28, inspiracional: 92, entretenimiento: 78 },
+};
+
 const PROFILES = {
   yoga: {
     name: 'Retiru - Yoga',
@@ -410,7 +486,10 @@ REGLAS OBLIGATORIAS:
 - EMOJIS: usa entre 3 y 5 emojis CON PROPÓSITO (marcar el tono o ayudar a escanear, p. ej. uno al inicio del gancho y alguno al principio de un punto clave). NUNCA los uses como viñetas de lista ni para sustituir palabras. Que sumen, no que ensucien.
 - Respeta el TONO y las REGLAS IA del proyecto. Mantén el TEMA del proyecto, sin mezclar otros.
 - HASHTAGS: 3-5, hiperespecíficos del nicho (evita genéricos tipo #love #instagood). Van SOLO en el campo "hashtags" del JSON; NO los escribas dentro de "copy" (se añaden aparte al publicar, si no se duplicarían).
-- Extensión: caption desarrollado (carrusel/post educativo aprox. 120-220 palabras; story más breve).
+- EXTENSIÓN SEGÚN FORMATO (respétala con rigor):
+  · "story": MÁXIMO 2-4 frases. Es una pieza de interacción rápida (encuesta, pregunta, dato suelto), NO un caption largo. NO desarrolles puntos ni hagas listas; ve directo. 1-2 emojis bastan.
+  · "carrusel" y "publicacion": caption desarrollado (aprox. 120-220 palabras) con la enseñanza explicada.
+  · "reel": intermedio, ágil (aprox. 60-130 palabras), gancho fuerte y al grano.
 - Devuelve SOLO JSON válido: {"copy": "caption con saltos de línea y emojis, SIN la CTA final y SIN hashtags", "cta": "frase de llamada a la acción completa y lista para publicar", "hashtags": ["#..", "3-5"]}`;
 
   const tone = `Tono 0..100 (low→high): formalidad ${project.tone_formality}, proximidad ${project.tone_proximity}, emoción ${project.tone_emotion}, humor ${project.tone_humor}, disrupción ${project.tone_disruption}. Complejidad: ${project.complexity || 'media'}.`;
@@ -711,6 +790,34 @@ async function tuneAiRules(service, projectId, newRules, dryRun) {
   console.log('✓ ai_rules actualizado (estrategia y demás config intactas).');
 }
 
+/** Fija sells_physical_product (true/false/null) de un proyecto sin tocar nada más. */
+async function setSellsProduct(service, projectId, value, dryRun) {
+  const { data: existing, error } = await service
+    .from('projects')
+    .select('id, name, sells_physical_product')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (error || !existing) {
+    throw new Error(`No se encontró el proyecto ${projectId}: ${error?.message || 'inexistente'}`);
+  }
+  console.log(`Proyecto: "${existing.name}" (id: ${existing.id})`);
+  console.log(`sells_physical_product ANTES:  ${existing.sells_physical_product}`);
+  console.log(`sells_physical_product DESPUÉS: ${value}`);
+  if (dryRun) {
+    console.log('\n✓ (dry-run) Se actualizaría únicamente sells_physical_product.');
+    return;
+  }
+  const { error: upErr } = await service
+    .from('projects')
+    .update({ sells_physical_product: value })
+    .eq('id', projectId);
+  if (upErr) {
+    console.error('Error actualizando sells_physical_product:', upErr.message);
+    process.exit(1);
+  }
+  console.log('✓ sells_physical_product actualizado (resto de config intacta).');
+}
+
 /** Aplica los overrides de un perfil a un proyecto YA EXISTENTE (sin clonar). */
 async function applyProfileToExisting(service, projectId, profile, newName, dryRun) {
   const { data: existing, error } = await service
@@ -958,6 +1065,16 @@ async function main() {
     return;
   }
 
+  // Modo fijar sells_physical_product (true|false|null) de un proyecto.
+  const setProductId = getArg('set-sells-product');
+  if (setProductId) {
+    const rawVal = (getArg('value') || 'true').toLowerCase();
+    const value = rawVal === 'null' ? null : rawVal === 'false' ? false : true;
+    await setSellsProduct(service, setProductId, value, dryRun);
+    console.log('\nListo.');
+    return;
+  }
+
   // Modo reescribir los textos para redes (caption/cta/hashtags) en sitio.
   // Conserva imágenes y briefs; solo mejora el texto usando la línea editorial.
   const rewriteId = getArg('rewrite-copies');
@@ -974,13 +1091,38 @@ async function main() {
     return;
   }
 
-  // Modo ajuste fino: solo reescribe ai_rules (para el Retiru ORIGINAL comercial).
+  // Modo ajuste fino: solo reescribe ai_rules. Elige el set con --rules=retiros|eskala
+  // (por defecto: retiros, para el Retiru ORIGINAL comercial).
   const tuneId = getArg('tune-id');
   if (tuneId) {
-    await tuneAiRules(service, tuneId, RETIROS_AI_RULES, dryRun);
+    const rulesKey = (getArg('rules') || 'retiros').toLowerCase();
+    const rules = AI_RULES_BY_KEY[rulesKey];
+    if (!rules) {
+      throw new Error(`--rules desconocido: "${rulesKey}". Opciones: ${Object.keys(AI_RULES_BY_KEY).join(', ')}`);
+    }
+    console.log(`Aplicando reglas "${rulesKey}".`);
+    await tuneAiRules(service, tuneId, rules, dryRun);
+
+    const contentStyle = CONTENT_STYLE_BY_KEY[rulesKey];
+    if (contentStyle) {
+      console.log(`\ncontent_style DESPUÉS: ${JSON.stringify(contentStyle)}`);
+      if (!dryRun) {
+        const { error: csErr } = await service
+          .from('projects')
+          .update({ content_style: contentStyle })
+          .eq('id', tuneId);
+        if (csErr) {
+          console.error('Error actualizando content_style:', csErr.message);
+          process.exit(1);
+        }
+        console.log('✓ content_style actualizado.');
+      } else {
+        console.log('(dry-run) Se actualizaría también content_style.');
+      }
+    }
     console.log('\nListo.');
     if (!dryRun) {
-      console.log('Siguiente: en la app, regenera briefs/imágenes para que tomen las nuevas reglas.');
+      console.log('Siguiente: en la app, regenera ESTRATEGIA → calendario → briefs (o "Todo en uno") para que tomen las nuevas reglas.');
     }
     return;
   }

@@ -476,6 +476,18 @@ export function buildStrategyPrompt(
 Tu tarea es crear una estrategia ÚNICA Y DIFERENCIADA para este proyecto concreto. Si la estrategia podría servir para cualquier otra marca del mismo sector, has fracasado.
 
 ═══════════════════════════════════════════
+PRINCIPIO EDITORIAL UNIVERSAL (anti-catálogo)
+═══════════════════════════════════════════
+Una cuenta de Instagram se sigue por el INTERÉS DE LA AUDIENCIA, no como catálogo de producto. El producto o servicio del cliente debe aparecer como CONSECUENCIA natural del contenido, no como protagonista permanente. Si la mayoría de las piezas "venden" o "explican el producto", la cuenta aburre, se vuelve monótona y no crece.
+- Lidera con lo que le importa a la audiencia (su deseo, su problema, su aspiración o su aprendizaje); presenta la oferta del cliente como la herramienta que lo resuelve.
+- Adapta la FORMA de ese "interés de la audiencia" al TIPO DE NEGOCIO:
+  · Marcas de estilo de vida / producto aspiracional (viajes, camper, retiros, moda, hostelería, decoración): lidera con EXPERIENCIA, emoción y deseo; muestra la vida y los momentos alrededor del producto, no fichas ni catálogo de producto.
+  · Servicios / B2B / agencias / consultoría: lidera con DEMOSTRACIÓN y valor (casos reales, resultados, antes/después, errores comunes, criterio experto), no con un catálogo de servicios.
+  · Expertise / formación / salud / bienestar: lidera con ENSEÑANZA real y aplicable que el seguidor pueda usar hoy.
+- El contenido de venta o promoción directa debe ser MINORÍA (orientativo: como mucho ~15-20% de los pilares), salvo que las REGLAS IA del cliente o su objetivo principal indiquen explícitamente lo contrario.
+- Diseña los pilares para que el feed NO parezca un folleto: evita repetir el mismo ángulo comercial o el mismo tipo de pieza una y otra vez; busca variedad de enfoques que sostengan el interés durante meses.
+
+═══════════════════════════════════════════
 REGLAS DE PRIORIDAD (orden descendente)
 ═══════════════════════════════════════════
 1. REGLAS IA DEL PROYECTO — si el usuario las definió, son ley absoluta.
@@ -661,6 +673,7 @@ Cada post DEBE incluir un campo "production_specs" con detalles técnicos de pro
     · Al menos UN slide debe ser un detalle, flat lay o cenital sin el producto/sujeto principal protagonizando (un objeto secundario, una mano, un mapa, comida, una textura, un cuaderno abierto, una vista del lugar, una herramienta, un rincón).
     · Al menos UN slide debe ser interior (si tiene sentido en el tema) y al menos UN slide debe ser exterior (si tiene sentido); si el tema es 100% indoor o 100% outdoor, varía entonces escala y momento del día.
     · Cuando el tema gire alrededor de un producto/lugar muy "fotogénico repetible" (camper, autocaravana, coche, hotel, tienda, plato estrella, destino), está PROHIBIDO que más de UN slide sea el clásico plano de tres cuartos del producto en entorno abierto. El resto deben ser planos claramente distintos entre sí: detalle, interior, escena humana, entorno sin producto, cenital, POV, primer plano, etc.
+  - VARIEDAD ENTRE PUBLICACIONES DEL MES (anti-catálogo de feed): el conjunto del calendario NO debe parecer un catálogo del mismo producto repetido. En publicaciones consecutivas varía el enfoque visual (plano principal, sujeto, escena, momento del día); reparte protagonismo entre experiencia/personas/lugar y producto, en coherencia con el principio editorial anti-catálogo de la estrategia. No conviertas el feed en la misma foto del producto en distintos fondos.
   - Estructura recomendada (adáptala al tema):
     · Slide 1 = gancho visual con un plano poco esperado (no el típico de catálogo).
     · Slides intermedios = desarrollo narrativo con al menos 1 detalle, 1 escena humana o ambiental y 1 cambio de escala respecto al gancho.
