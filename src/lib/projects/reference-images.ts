@@ -719,7 +719,6 @@ async function requestConsolidatedRules(params: {
   const response = await params.openai.chat.completions.create({
     model: PRODUCT_IDENTITY_CONSOLIDATION_MODEL,
     reasoning_effort: 'medium',
-    temperature: 0.15,
     max_completion_tokens: 900,
     messages: [
       { role: 'system', content: PRODUCT_IDENTITY_SYSTEM },

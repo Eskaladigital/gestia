@@ -6,6 +6,12 @@ import type { AgentKey, AIProvider } from '@/types';
 const VALID_KEYS = AGENT_PIPELINE_ORDER;
 const VALID_PROVIDERS: AIProvider[] = ['openai', 'anthropic', 'google'];
 
+function resolveTemperature(provider: AIProvider, model: string, temperature: number): number {
+  return provider === 'openai' && (model === 'gpt-5.6' || model.startsWith('gpt-5.6-'))
+    ? 1
+    : temperature;
+}
+
 export async function GET() {
   try {
     const supabase = await createServerSupabase();
@@ -29,7 +35,11 @@ export async function GET() {
         icon: defaults.icon,
         provider,
         model,
-        temperature: saved?.temperature ?? defaults.temperature,
+        temperature: resolveTemperature(
+          provider,
+          model,
+          saved?.temperature ?? defaults.temperature
+        ),
         max_tokens: saved?.max_tokens ?? defaults.maxTokens,
         system_prompt_override: saved?.system_prompt_override ?? null,
         default_system_prompt: defaults.defaultSystemPrompt,
@@ -106,13 +116,18 @@ export async function PATCH(request: NextRequest) {
     const defaults = AGENT_DEFAULTS[agentKey];
     const resolvedProvider = (provider ?? defaults.provider) as AIProvider;
     const resolvedModel = resolveSupportedModel(resolvedProvider, model ?? defaults.model);
+    const resolvedTemperature = resolveTemperature(
+      resolvedProvider,
+      resolvedModel,
+      temperature ?? defaults.temperature
+    );
 
     const upsertData = {
       user_id: user.id,
       agent_key: agentKey,
       provider: resolvedProvider,
       model: resolvedModel,
-      ...(temperature !== undefined && { temperature }),
+      temperature: resolvedTemperature,
       ...(max_tokens !== undefined && { max_tokens }),
       ...(system_prompt_override !== undefined && { system_prompt_override }),
       ...(is_active !== undefined && { is_active }),

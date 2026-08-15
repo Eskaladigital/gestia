@@ -305,6 +305,9 @@ export default function AISettingsPage() {
             const providerModels = getModelsForProvider(config.provider);
             const isSaving = saving === config.agent_key;
             const isEditing = editingPrompt === config.agent_key;
+            const hasFixedTemperature =
+              config.provider === 'openai' &&
+              (config.model === 'gpt-5.6' || config.model.startsWith('gpt-5.6-'));
             const stepNumber = idx + 1;
 
             return (
@@ -376,7 +379,15 @@ export default function AISettingsPage() {
                       <label className="block text-[10px] font-bold text-surface-900 uppercase tracking-wider mb-1.5">Modelo</label>
                       <select
                         value={config.model}
-                        onChange={(e) => updateAgent(config.agent_key, { model: e.target.value })}
+                        onChange={(e) => {
+                          const model = e.target.value;
+                          updateAgent(config.agent_key, {
+                            model,
+                            ...(model === 'gpt-5.6' || model.startsWith('gpt-5.6-')
+                              ? { temperature: 1 }
+                              : {}),
+                          });
+                        }}
                         className="w-full px-3 py-2 border-2 border-surface-900 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 appearance-none cursor-pointer"
                       >
                         {providerModels.map(m => (
@@ -387,18 +398,24 @@ export default function AISettingsPage() {
 
                     <div className="lg:col-span-3">
                       <label className="block text-[10px] font-bold text-surface-900 uppercase tracking-wider mb-1.5">
-                        Temp: <span className="font-mono">{config.temperature.toFixed(1)}</span>
+                        Temp: <span className="font-mono">
+                          {hasFixedTemperature ? '1.0 (fija)' : config.temperature.toFixed(1)}
+                        </span>
                       </label>
                       <div className="relative h-8 flex items-center">
                         <div className="absolute inset-x-0 h-3 border-2 border-surface-900 bg-surface-100">
-                          <div className="h-full bg-brand-500" style={{ width: `${(config.temperature / 2) * 100}%` }} />
+                          <div
+                            className="h-full bg-brand-500"
+                            style={{ width: `${((hasFixedTemperature ? 1 : config.temperature) / 2) * 100}%` }}
+                          />
                         </div>
                         <input
                           type="range"
                           min={0} max={2} step={0.1}
-                          value={config.temperature}
+                          value={hasFixedTemperature ? 1 : config.temperature}
+                          disabled={hasFixedTemperature}
                           onChange={(e) => updateAgent(config.agent_key, { temperature: parseFloat(e.target.value) })}
-                          className="relative z-10 w-full h-3 appearance-none cursor-pointer bg-transparent
+                          className="relative z-10 w-full h-3 appearance-none cursor-pointer bg-transparent disabled:cursor-not-allowed
                             [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
                             [&::-webkit-slider-thumb]:bg-surface-900 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-surface-900
                             [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]

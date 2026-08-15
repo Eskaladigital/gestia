@@ -100,6 +100,7 @@ class OpenAIProvider implements LLMProvider {
 
   async chat(system: string, user: string, opts: LLMChatOptions): Promise<LLMResponse> {
     return withRetry(async () => {
+      const isGpt56 = this.model === 'gpt-5.6' || this.model.startsWith('gpt-5.6-');
       const content = opts.inputImages?.length
         ? [
             { type: 'text' as const, text: user },
@@ -116,13 +117,11 @@ class OpenAIProvider implements LLMProvider {
           { role: 'system', content: system },
           { role: 'user', content },
         ],
-        temperature: opts.temperature,
+        // GPT-5.6 solo admite la temperatura predeterminada (1). Omitirla evita
+        // errores 400 y deja que reasoning_effort controle el trabajo del modelo.
+        ...(!isGpt56 ? { temperature: opts.temperature } : {}),
         max_completion_tokens: opts.maxTokens,
-        ...(
-          this.model === 'gpt-5.6' || this.model.startsWith('gpt-5.6-')
-            ? { reasoning_effort: opts.reasoningEffort ?? 'low' }
-            : {}
-        ),
+        ...(isGpt56 ? { reasoning_effort: opts.reasoningEffort ?? 'low' } : {}),
         ...(opts.jsonMode !== false ? { response_format: { type: 'json_object' as const } } : {}),
       });
 
