@@ -6,7 +6,7 @@ Aplicación SaaS para crear estrategias y calendarios de contenido para redes so
 
 **Repositorio:** [github.com/Eskaladigital/gestia](https://github.com/Eskaladigital/gestia)
 
-**Última actualización de esta documentación:** 24 de julio de 2026 (bootstrap/pipeline de proyectos cliente, auth Bearer en APIs, brand analysis anti-theme-builder).
+**Última actualización de esta documentación:** 15 de agosto de 2026 (generación de imágenes vía Responses API + gpt-image-2, SDK OpenAI 7).
 
 ## Stack
 
@@ -16,7 +16,7 @@ Aplicación SaaS para crear estrategias y calendarios de contenido para redes so
 - **Tailwind CSS**
 - **ESLint 9** + `eslint-config-next` 16 (requerido para `npm install` sin conflictos de peer dependencies)
 - **Supabase** (PostgreSQL + Auth + RLS)
-- **OpenAI API** (modelo configurable; por defecto orientado a GPT-4o)
+- **OpenAI API** (`openai` **7.x**): modelos de texto/visión configurables por agente; agentes principales y orquestación de imágenes con `gpt-5.6-terra`, briefs/refinado con `gpt-5.4-mini`, tool `image_generation` → `gpt-image-2` y fallback a **Images API** (`images.generate` / `images.edit`)
 - **Google GenAI** (`@google/genai`) — animación image-to-video con **Veo** (`POST /api/generate-video`)
 - **Puppeteer** (Chrome sin cabeza en el servidor: miniaturas de las URLs analizadas → Supabase Storage)
 - **Zustand** (estado del onboarding)
@@ -223,11 +223,37 @@ GestIA separa dos capas que el cliente no debe mezclar:
 
 **Generación de imagen** (`POST /api/generate-image`):
 
-- Prompt en **dos ejes**: identidad del producto (inviolable) vs escena (libre: plano, luz, encuadre).
-- **Ancla de producto**: si hay refs `product`, siempre entra al menos una en `images.edit`.
-- Selector de referencias por rol/vista y caption del slide.
-- Sufijo final con `physical_constraints`; las `ai_rules` y el `user_feedback` quedan **subordinados** (no pueden cambiar la tipología del producto).
-- **QA de fidelidad** post-generación (`assessProductFidelity`): si la puntuación es baja, **un reintento** automático con correcciones derivadas del QA.
+Pipeline en **dos capas** (constantes en `src/lib/ai/constants.ts`):
+
+| Capa | Modelo / API | Rol |
+|------|----------------|-----|
+| **Orquestación** (vía principal) | `gpt-5.6-terra` (`reasoning: medium`) + **Responses API** + tool `image_generation` | Lee el prompt final y las referencias con visión (`detail: high`), optimiza instrucciones y dispara la generación. |
+| **Ejecución** | `gpt-image-2` (`quality: high`) | Renderiza la imagen. Con referencias: `input_fidelity: high`. |
+| **Fallback** | Images API (`images.edit` / `images.generate`) | Si la Responses API falla; mismo modelo, tamaño y calidad. Si OpenAI rechaza las refs, reintenta sin ellas. |
+
+**Antes de la API de imagen**, el prompt pasa por:
+
+1. **Refinador de realismo** (`gpt-5.4-mini`): retoca vocabulario fotográfico sin cambiar la escena.
+2. **Instrucciones de referencias** (dos ejes: identidad de producto vs escena libre, o moodboard de estilo).
+3. **`user_feedback`** del usuario (prioridad sobre la versión anterior de esa imagen).
+4. **`physical_constraints`** (solo modo fidelidad de producto).
+5. **Cola de realismo** (`IMAGE_REALISM_TAIL`) y captions por referencia seleccionada.
+
+**Referencias y fidelidad:**
+
+- Selector de refs relevantes por slide (`gpt-4o-mini`) + **ancla de producto** si hay rol `product`.
+- Referencias normalizadas con **sharp** (PNG sRGB, ≤2048 px) → data URLs en Responses API o archivos en `images.edit`.
+- **QA de fidelidad** post-generación (`assessProductFidelity`, `gpt-4o-mini`): informativo en la respuesta JSON. Reintento automático solo si `IMAGE_FIDELITY_AUTO_RETRY=true` en `.env` (duplica latencia).
+
+**Resolución** (`projects.image_orientation`, migración 022):
+
+| Orientación | Tamaño OpenAI | Ratio |
+|-------------|---------------|-------|
+| Vertical (defecto) | `1248×1872` | 2:3 |
+| Cuadrado | `1248×1248` | 1:1 |
+| Horizontal | `1872×1248` | 3:2 |
+
+Coste orientativo en UI: ~**$0,25** / imagen (`IMAGE_GENERATION_ESTIMATED_COST_USD`). La ruta usa `runtime: nodejs` y `maxDuration: 300` (2–3 min con referencias).
 
 Proyectos **sin producto físico** (consultoría, branding puro): las fotos son inspiración (`style` / `place`); no se activa el modo fidelidad estricta.
 
@@ -399,7 +425,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 | `POST /api/generate-strategy` | Estrategia de contenido |
 | `POST /api/generate-calendar` | Calendario (`calendar_mode`: append / replace, etc.) |
 | `POST /api/generate-visual-briefs` | Brief creativo + prompt generativo por ítem del calendario |
-| `POST /api/generate-image` | Imagen IA por visual: refs por rol/vista, ancla de producto, `physical_constraints` (prioridad máxima), `ai_rules` subordinadas, `user_feedback` acotado, QA de fidelidad + 1 reintento automático. |
+| `POST /api/generate-image` | Imagen IA por visual: Responses API (`gpt-5.6-terra` → `gpt-image-2`, refs con `input_fidelity: high`), fallback Images API, `physical_constraints`, QA de fidelidad (reintento opcional vía `IMAGE_FIDELITY_AUTO_RETRY`). |
 | `POST /api/generate-video` | Anima con Veo la imagen ya generada de un visual (`video_motion_prompt` → `video_url`); no regenera la imagen estática. |
 | `POST /api/save-visual-image-edit` | Multipart: guarda PNG editado + `image_edit_json` en `content_item_visuals` (bucket `visual-assets`); `clear=true` borra edición y vuelve a la imagen IA base. |
 | `POST /api/report-image-error` | Guarda en `content_item_visuals.user_feedback` un texto libre del usuario describiendo un error de la imagen; se usa al regenerar. |
@@ -439,7 +465,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [ ] Integración Firecrawl explícita si quieres otro proveedor de extracción
 - [ ] Streaming de respuestas IA (SSE)
 - [ ] Exportación a CSV / Google Sheets
-- [x] Generación de imágenes IA (con espejo horizontal persistente y descarga)
+- [x] Generación de imágenes IA con **Responses API** (`gpt-5.6-terra` + `gpt-image-2`, resolución premium, fallback Images API)
 - [x] Reporte de error por imagen con texto libre, aplicado como corrección al regenerar
 - [x] Carruseles con variedad narrativa forzada (ficha técnica por slide + mapa completo al director de arte)
 - [x] Orientación de imagen por proyecto (vertical / cuadrado / horizontal)
@@ -447,7 +473,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [x] Clasificación por rol de referencia (`product` / `style` / `place` / …) + identidad y vista de producto (migración 028)
 - [x] Reglas físicas generadas y mantenidas por la app (no editables por el cliente si hay fotos de producto)
 - [x] Captions IA por imagen de referencia + selector de refs relevantes por slide + ancla de producto en generate-image
-- [x] QA visual de fidelidad post-generación con reintento automático
+- [x] QA visual de fidelidad post-generación (reintento automático opcional con `IMAGE_FIDELITY_AUTO_RETRY`)
 - [x] Scripts CLI: `references:reanalyze`, `references:sync-rules`, inspección de fidelidad
 - [x] Editor de imagen post-IA inmersivo (UI oscura, chips «Aa», tipografías Google Fonts, efectos, rotación, opacidad, filtros, PNG en `edited_image_url`)
 - [x] Animación a vídeo por visual (Veo, desde imagen existente)

@@ -1,6 +1,6 @@
 # Capturas de páginas analizadas (Gestia RRSS)
 
-Documentación complementaria del proyecto: ver el [**README principal**](https://github.com/Eskaladigital/gestia/blob/main/README.md) en la raíz (junio 2026: fidelidad de producto, vista Contenido, editor de imagen, Veo, migraciones 001–028).
+Documentación complementaria del proyecto: ver el [**README principal**](https://github.com/Eskaladigital/gestia/blob/main/README.md) en la raíz (agosto 2026: Responses API para imágenes, fidelidad de producto, vista Contenido, editor, Veo, migraciones 001–028).
 
 Para **fidelidad de producto**, referencias clasificadas y reglas físicas automáticas, consulta la sección *Fidelidad de producto* del README principal; este archivo solo cubre capturas web (`screenshots`).
 

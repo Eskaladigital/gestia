@@ -9,6 +9,7 @@ import {
   IMAGE_GENERATION_QUALITY,
   IMAGE_INPUT_FIDELITY,
   IMAGE_ORCHESTRATOR_MODEL,
+  IMAGE_ORCHESTRATOR_REASONING_EFFORT,
   IMAGE_PROMPT_REFINER_MODEL,
   resolveImageSize,
 } from '@/lib/ai/constants';
@@ -29,7 +30,7 @@ import {
 } from '@/lib/projects/product-fidelity';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
-// enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6 + gpt-image-2 + referencias.
+// enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6-terra + gpt-image-2 + referencias.
 // - runtime nodejs: sharp no funciona en Edge.
 // - maxDuration 300: con 4 referencias la generación orquestada puede pasar
 //   de 60s de Vercel Pro por defecto.
@@ -492,7 +493,7 @@ export async function POST(request: NextRequest) {
     );
 
     // === VÍA PRINCIPAL: Responses API ===
-    // gpt-5.6 orquesta la generación: lee el prompt y las referencias con
+    // gpt-5.6-terra orquesta la generación: lee el prompt y las referencias con
     // visión de alto detalle, optimiza las instrucciones con su conocimiento
     // del mundo y llama al tool image_generation (gpt-image-2, calidad high).
     // Es la vía que OpenAI recomienda para máxima calidad e instruction
@@ -513,6 +514,7 @@ export async function POST(request: NextRequest) {
 
       const response = await openai.responses.create({
         model: IMAGE_ORCHESTRATOR_MODEL,
+        reasoning: { effort: IMAGE_ORCHESTRATOR_REASONING_EFFORT },
         input: [{ role: 'user', content }],
         tools: [
           {

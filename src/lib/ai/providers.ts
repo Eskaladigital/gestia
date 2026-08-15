@@ -2,17 +2,26 @@ import type { AIProvider } from '@/types';
 import OpenAI from 'openai';
 import { sleep } from '@/lib/utils';
 import { createServiceSupabase } from '@/lib/supabase/server';
+import type { ReasoningEffort } from './constants';
 
 export interface LLMResponse {
   content: string;
   usage: { prompt_tokens: number; completion_tokens: number };
 }
 
+interface LLMChatOptions {
+  temperature: number;
+  maxTokens: number;
+  reasoningEffort?: ReasoningEffort;
+  jsonMode?: boolean;
+  inputImages?: string[];
+}
+
 export interface LLMProvider {
   chat(
     system: string,
     user: string,
-    opts: { temperature: number; maxTokens: number; jsonMode?: boolean; inputImages?: string[] }
+    opts: LLMChatOptions
   ): Promise<LLMResponse>;
 }
 
@@ -89,7 +98,7 @@ class OpenAIProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; jsonMode?: boolean; inputImages?: string[] }): Promise<LLMResponse> {
+  async chat(system: string, user: string, opts: LLMChatOptions): Promise<LLMResponse> {
     return withRetry(async () => {
       const content = opts.inputImages?.length
         ? [
@@ -109,6 +118,11 @@ class OpenAIProvider implements LLMProvider {
         ],
         temperature: opts.temperature,
         max_completion_tokens: opts.maxTokens,
+        ...(
+          this.model === 'gpt-5.6' || this.model.startsWith('gpt-5.6-')
+            ? { reasoning_effort: opts.reasoningEffort ?? 'low' }
+            : {}
+        ),
         ...(opts.jsonMode !== false ? { response_format: { type: 'json_object' as const } } : {}),
       });
 
@@ -143,7 +157,7 @@ class AnthropicProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; inputImages?: string[] }): Promise<LLMResponse> {
+  async chat(system: string, user: string, opts: LLMChatOptions): Promise<LLMResponse> {
     const apiKey = this.apiKey;
 
     return withRetry(async () => {
@@ -195,7 +209,7 @@ class GoogleProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(system: string, user: string, opts: { temperature: number; maxTokens: number; inputImages?: string[] }): Promise<LLMResponse> {
+  async chat(system: string, user: string, opts: LLMChatOptions): Promise<LLMResponse> {
     const apiKey = this.apiKey;
 
     return withRetry(async () => {

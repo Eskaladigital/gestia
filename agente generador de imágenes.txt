@@ -1,14 +1,21 @@
 AGENTE GENERADOR DE IMAGENES
 Version exportable del flujo de Retiru
 
-NOTA GESTIA RRSS (junio 2026)
+NOTA GESTIA RRSS (agosto 2026)
 En este repositorio, el pipeline de imagenes del calendario esta integrado en Next.js
 (POST /api/generate-image). Ademas del dossier y prompts visuales, GestIA aplica:
 - Referencias clasificadas por rol (migracion 028): product / style / place / ...
 - Reglas fisicas automaticas (physical_constraints) desde fotos de producto
 - Reglas IA blandas (ai_rules) subordinadas a la fidelidad del producto
-- QA de fidelidad post-generacion con un reintento
+- Refinador de realismo (gpt-5.4-mini) + cola IMAGE_REALISM_TAIL
+- Generacion orquestada: Responses API (gpt-5.6-terra, reasoning medium + tool image_generation -> gpt-image-2)
+- Fallback a Images API (images.edit / images.generate) si falla Responses
+- input_fidelity: high cuando hay referencias de producto
+- Resolucion premium segun orientacion: 1248x1872 | 1248x1248 | 1872x1248
+- QA de fidelidad post-generacion (reintento solo con IMAGE_FIDELITY_AUTO_RETRY=true)
+- SDK OpenAI 7.x
 Documentacion viva: README.md en la raiz del repo.
+Constantes: src/lib/ai/constants.ts | Ruta: src/app/api/generate-image/route.ts
 
 OBJETIVO
 
@@ -40,7 +47,7 @@ Se le entrega antes una interpretacion editorial, geografica, tematica y fotogra
 
 ARQUITECTURA DEL FLUJO
 
-FLUJO COMPLETO
+FLUJO COMPLETO (Retiru / especificacion historica)
 
 Entrada estructurada
 -> construir dossier textual rico
@@ -51,7 +58,49 @@ Entrada estructurada
 -> guardar imagen
 
 
+FLUJO ACTUAL EN GESTIA RRSS (agosto 2026)
+
+visual_prompt (brief por slide, ya generado)
+-> buildFinalPrompt: refinador gpt-5.4-mini + reglas refs + user_feedback + physical_constraints + IMAGE_REALISM_TAIL + captions
+-> [VIA PRINCIPAL] Responses API:
+     gpt-5.6-terra lee prompt + referencias (input_image, detail high)
+     -> tool image_generation (gpt-image-2, quality high, input_fidelity high si hay refs)
+-> [FALLBACK] Images API: images.edit (con refs) o images.generate (sin refs)
+-> assessProductFidelity (opcional reintento si IMAGE_FIDELITY_AUTO_RETRY=true)
+-> subir PNG a Supabase visual-assets
+
+
 MODELOS Y PARAMETROS USADOS
+
+--- GestIA RRSS (implementacion actual) ---
+
+Refinador de prompt antes de imagen:
+- gpt-5.4-mini (IMAGE_PROMPT_REFINER_MODEL)
+- temperature: 0.18
+- max_completion_tokens: 1200
+
+Orquestador (Responses API):
+- gpt-5.6-terra (IMAGE_ORCHESTRATOR_MODEL, reasoning medium)
+- tool: image_generation
+- tool_choice: { type: image_generation }
+
+Modelo de imagen:
+- gpt-image-2 (IMAGE_GENERATION_MODEL)
+
+Parametros del tool / Images API:
+- quality: high
+- size segun projects.image_orientation:
+  - vertical: 1248x1872
+  - cuadrado: 1248x1248
+  - horizontal: 1872x1248
+- output_format: png (Responses)
+- input_fidelity: high (si hay referencias de producto)
+- moderation: low (Responses; menos falsos positivos en marca)
+
+Selector de referencias por slide: gpt-4o-mini
+QA fidelidad post-imagen: gpt-4o-mini (informativo; reintento opcional)
+
+--- Retiru / flujo historico de referencia ---
 
 Modelo para interpretar la ficha y redactar prompts:
 - gpt-4o
@@ -464,9 +513,42 @@ Si adaptas el sistema a otro proyecto, ajusta solo:
 - presencia o ausencia de personas
 
 
-PASO 5 - PETICION FINAL A GPT-IMAGE-1.5
+PASO 5 - GENERACION DE IMAGEN
 
-PETICION RECOMENDADA
+GESTIA RRSS (recomendado - Responses API)
+
+POST https://api.openai.com/v1/responses
+
+El SDK Node (openai 7.x) equivalente:
+
+  openai.responses.create({
+    model: "gpt-5.6-terra",
+    reasoning: { effort: "medium" },
+    input: [{
+      role: "user",
+      content: [
+        { type: "input_text", text: "PROMPT_FINAL" },
+        // por cada referencia normalizada:
+        { type: "input_image", image_url: "data:image/png;base64,...", detail: "high" }
+      ]
+    }],
+    tools: [{
+      type: "image_generation",
+      model: "gpt-image-2",
+      quality: "high",
+      size: "1248x1872",
+      output_format: "png",
+      moderation: "low",
+      input_fidelity: "high"
+    }],
+    tool_choice: { type: "image_generation" }
+  })
+
+La imagen base64 sale en response.output[].type === "image_generation_call" -> .result
+
+FALLBACK GestIA: POST /v1/images/edits o /v1/images/generations con gpt-image-2
+
+--- Retiru / Images API directa (historico) ---
 
 POST https://api.openai.com/v1/images/generations
 
@@ -503,6 +585,13 @@ Regla usada:
 
 PARAMETROS QUE HAN DADO BUEN RESULTADO
 
+GestIA RRSS (2026):
+- Refinador: gpt-5.4-mini, temp baja
+- Orquestacion: gpt-5.6-terra (reasoning medium) + Responses API + image_generation
+- Imagen: gpt-image-2, quality high, input_fidelity high con refs
+- Tamanos: 1248x1872 (vertical), 1248x1248 (cuadrado), 1872x1248 (horizontal)
+
+Retiru (historico):
 Para la interpretacion del dossier:
 - gpt-4o
 - temp media-baja
@@ -641,7 +730,23 @@ function buildPromptWithLLM(dossier):
   - valida longitud
   - devuelve prompt final
 
-function generateImage(prompt):
+function generateImageGestia(prompt, referenceImages, orientation):
+  - promptFinal = buildFinalPrompt(prompt, refs, feedback, physical_constraints)
+  - try:
+      - refsAsDataUrls = normalizeWithSharp(referenceImages)
+      - response = openai.responses.create({
+          model: "gpt-5.6-terra",
+          reasoning: { effort: "medium" },
+          input: [{ role: "user", content: [text(promptFinal), ...images(refsAsDataUrls)] }],
+          tools: [{ type: "image_generation", model: "gpt-image-2", quality: "high",
+                    size: resolveImageSize(orientation), input_fidelity: "high" }],
+          tool_choice: { type: "image_generation" }
+        })
+      - return response.output image_generation_call.result (base64)
+    catch:
+      - return openai.images.edit or .generate (mismo modelo y size, fallback)
+
+function generateImageRetiru(prompt):
   - llama a /v1/images/generations
   - model: gpt-image-1.5
   - size: 1536x1024

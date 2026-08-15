@@ -657,7 +657,7 @@ Devuelve hasta ${maxResults} ids ordenados de más a menos relevantes para ese s
 //
 // La app regenera y guarda siempre que haya fotos de producto clasificadas.
 
-export const PRODUCT_IDENTITY_CONSOLIDATION_MODEL = 'gpt-4o';
+export const PRODUCT_IDENTITY_CONSOLIDATION_MODEL = 'gpt-5.6-terra';
 const PRODUCT_IDENTITY_MAX_CHARS = 4000;
 
 const PRODUCT_IDENTITY_SYSTEM = `Eres el motor de fidelidad de producto de una app de marketing. Redactas las "REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO" que la app guardará y aplicará SIEMPRE al generar imágenes, sin que el cliente tenga que escribirlas. El cliente solo pondrá deseos creativos sueltos en otro campo (p. ej. "que salga una piscina"); esas ideas NUNCA pueden cambiar la forma del producto.
@@ -718,6 +718,7 @@ async function requestConsolidatedRules(params: {
 
   const response = await params.openai.chat.completions.create({
     model: PRODUCT_IDENTITY_CONSOLIDATION_MODEL,
+    reasoning_effort: 'medium',
     temperature: 0.15,
     max_completion_tokens: 900,
     messages: [

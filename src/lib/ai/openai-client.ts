@@ -5,9 +5,10 @@
 import type { AgentKey, AIProvider } from '@/types';
 import { createProviderWithResolvedKey } from './providers';
 import { AGENT_DEFAULTS, resolveSupportedModel } from './constants';
+import type { ReasoningEffort } from './constants';
 import { createServiceSupabase } from '@/lib/supabase/server';
 
-export const AI_MODEL = 'gpt-5.4';
+export const AI_MODEL = 'gpt-5.6-terra';
 
 export interface AIResponse<T> {
   data: T;
@@ -32,6 +33,7 @@ export function mapOpenAIError(err: unknown): string {
 interface AgentConfig {
   provider: AIProvider;
   model: string;
+  reasoningEffort: ReasoningEffort;
   temperature: number;
   maxTokens: number;
   systemPromptOverride: string | null;
@@ -70,6 +72,7 @@ async function getAgentConfig(agentKey: AgentKey, userId?: string): Promise<Agen
         return {
           provider,
           model: resolveSupportedModel(provider, data.model),
+          reasoningEffort: defaults.reasoningEffort,
           temperature: data.temperature,
           maxTokens: data.max_tokens,
           systemPromptOverride: data.system_prompt_override,
@@ -83,6 +86,7 @@ async function getAgentConfig(agentKey: AgentKey, userId?: string): Promise<Agen
   return {
     provider: defaults.provider,
     model: resolveSupportedModel(defaults.provider, defaults.model),
+    reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
     maxTokens: defaults.maxTokens,
     systemPromptOverride: null,
@@ -106,6 +110,7 @@ export async function callAI<T>(
     : {
         provider: 'openai' as AIProvider,
         model: resolveSupportedModel('openai', AI_MODEL),
+        reasoningEffort: 'low' as ReasoningEffort,
         temperature: 0.7,
         maxTokens: 4096,
         systemPromptOverride: null,
@@ -119,6 +124,7 @@ export async function callAI<T>(
   const result = await provider.chat(finalSystem, userPrompt, {
     temperature: temp,
     maxTokens: maxTok,
+    reasoningEffort: config.reasoningEffort,
     jsonMode: true,
     inputImages: options?.inputImages,
   });
