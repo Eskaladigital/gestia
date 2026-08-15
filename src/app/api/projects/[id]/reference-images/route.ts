@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
-import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import {
   buildProjectReferenceImageStoragePath,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
@@ -50,7 +50,7 @@ function referenceAnalysisContext(project: {
 
 async function getOwnedProject(projectId: string, userId: string) {
   const supabase = await createServerSupabase();
-  const { data: project } = await fetchActiveProjectForUser(supabase, userId, projectId);
+  const { project } = await fetchAccessibleProject(supabase, userId, projectId);
   return { project, supabase };
 }
 

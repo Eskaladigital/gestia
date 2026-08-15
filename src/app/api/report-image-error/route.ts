@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { canActOnOwnedProject, isAdmin } from '@/lib/auth/roles';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
@@ -55,7 +56,8 @@ export async function POST(request: NextRequest) {
   }
 
   const ownerId = (visual as any).content_items?.projects?.user_id;
-  if (!ownerId || ownerId !== user.id) {
+  const userIsAdmin = await isAdmin(authSupabase, user.id);
+  if (!canActOnOwnedProject(user.id, ownerId, userIsAdmin)) {
     return NextResponse.json({ error: 'No autorizado para este visual' }, { status: 403 });
   }
 

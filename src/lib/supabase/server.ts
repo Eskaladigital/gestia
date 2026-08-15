@@ -1,8 +1,31 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { cookies, headers } from 'next/headers';
 
+/**
+ * Cliente Supabase del usuario autenticado.
+ * - Cookies (flujo web normal con @supabase/ssr)
+ * - Authorization: Bearer <access_token> (scripts / automatización del pipeline)
+ */
 export async function createServerSupabase() {
+  const headerStore = await headers();
+  const authHeader = headerStore.get('authorization');
+  const bearer =
+    authHeader && /^Bearer\s+/i.test(authHeader)
+      ? authHeader.replace(/^Bearer\s+/i, '').trim()
+      : '';
+
+  if (bearer) {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      }
+    );
+  }
+
   const cookieStore = await cookies();
 
   return createServerClient(

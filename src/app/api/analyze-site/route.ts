@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase, markProjectPipelineError } from '@/lib/supabase/server';
-import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import { getScrapingProvider } from '@/lib/scraping';
 import { fetchSerpContextForBusinessAnalysis, hasGoogleSerpRestKey } from '@/lib/scraping/serp';
 import { captureWebScreenshotsToStorage, type ScreenshotResult } from '@/lib/scraping/screenshots-puppeteer';
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'project_id es obligatorio' }, { status: 400 });
     }
 
-    const { data: project, error: projectError } = await fetchActiveProjectForUser(
+    const { project, error: projectError } = await fetchAccessibleProject(
       supabase,
       user.id,
       project_id

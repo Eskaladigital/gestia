@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
-import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import { buildSingleVisualPrompt, decomposePostIntoVisuals, callAI, type VisualBriefInput } from '@/lib/ai';
 import {
   countProductReferenceImages,
@@ -240,7 +240,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'project_id es obligatorio' }, { status: 400 });
     }
 
-    const { data: project } = await fetchActiveProjectForUser(supabase, user.id, project_id);
+    const { project } = await fetchAccessibleProject(supabase, user.id, project_id);
     if (!project) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }

@@ -1,10 +1,62 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
 import { isAdminRole, isTrialExpired, postLoginPathForRole } from '@/lib/auth/roles';
 
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request: { headers: request.headers } });
+type SessionResolution = {
+  user: { id: string } | null;
+  response: NextResponse;
+  supabase: SupabaseClient;
+};
 
+function getBearerToken(request: NextRequest): string {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !/^Bearer\s+/i.test(authHeader)) return '';
+  return authHeader.replace(/^Bearer\s+/i, '').trim();
+}
+
+async function resolveSession(request: NextRequest): Promise<SessionResolution> {
+  const bearer = getBearerToken(request);
+
+  // Scripts / automatización: Authorization Bearer (sin cookies SSR).
+  // En Edge el getUser() a Supabase puede fallar por TLS corporativo; en /api/*
+  // dejamos pasar y valida createServerSupabase (Node) en la ruta.
+  if (bearer && request.nextUrl.pathname.startsWith('/api/')) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      }
+    );
+    return {
+      user: { id: 'bearer-pending-route-auth' },
+      response: NextResponse.next({ request: { headers: request.headers } }),
+      supabase,
+    };
+  }
+
+  if (bearer) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      }
+    );
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return {
+      user,
+      response: NextResponse.next({ request: { headers: request.headers } }),
+      supabase,
+    };
+  }
+
+  let response = NextResponse.next({ request: { headers: request.headers } });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -27,8 +79,23 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return { user, response, supabase };
+}
+
+export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const isApiPath = path.startsWith('/api/');
+
+  // Automatización: Bearer en /api/* → la ruta valida el JWT en runtime Node.
+  // Evita getUser() en Edge (TLS corporativo) y el redirect HTML a /login.
+  if (isApiPath && getBearerToken(request)) {
+    return NextResponse.next({ request: { headers: request.headers } });
+  }
+
+  const { user, response, supabase } = await resolveSession(request);
 
   const publicPaths = ['/', '/login', '/register', '/callback', '/pricing', '/saber-mas', '/contacto', '/trial-expired'];
   const isPublicPath = publicPaths.some(
@@ -36,6 +103,10 @@ export async function updateSession(request: NextRequest) {
   );
 
   if (!user && !isPublicPath) {
+    // APIs: 401 JSON (no redirect HTML) para que scripts fallen con claridad.
+    if (isApiPath) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

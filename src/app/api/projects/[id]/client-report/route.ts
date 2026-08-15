@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 export async function GET(
@@ -11,12 +12,7 @@ export async function GET(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { data: project, error: pErr } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const { project, error: pErr } = await fetchAccessibleProject(supabase, user.id, id);
 
     if (pErr || !project) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });

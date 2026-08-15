@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase, markProjectPipelineError } from '@/lib/supabase/server';
-import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import { buildCalendarPrompt, callAI, redistributeCalendarPostsBySegments } from '@/lib/ai';
 import { getMonthName } from '@/lib/utils';
 import {
@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
     const startDate: string | null =
       typeof rawStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawStartDate) ? rawStartDate : null;
 
-    const { data: project } = await fetchActiveProjectForUser(supabase, user.id, project_id);
+    const { project } = await fetchAccessibleProject(supabase, user.id, project_id);
 
     if (!project) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });

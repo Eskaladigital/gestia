@@ -6,7 +6,7 @@ Aplicación SaaS para crear estrategias y calendarios de contenido para redes so
 
 **Repositorio:** [github.com/Eskaladigital/gestia](https://github.com/Eskaladigital/gestia)
 
-**Última actualización de esta documentación:** 2 de junio de 2026 (fidelidad de producto con referencias clasificadas, reglas físicas automáticas, vista Contenido, editor de imagen post-IA, animación Veo y scripts de mantenimiento).
+**Última actualización de esta documentación:** 24 de julio de 2026 (bootstrap/pipeline de proyectos cliente, auth Bearer en APIs, brand analysis anti-theme-builder).
 
 ## Stack
 
@@ -33,14 +33,19 @@ public/
 └── icons/                   # icon-192.svg, icon-512.svg (también apple touch)
 
 scripts/
-├── screenshot-portfolio.js           # Regenerar capturas web sin repetir analyze-site
-├── reanalyze-reference-images.ts     # Reclasificar referencias (rol, caption, identidad de producto)
-├── run-reanalyze.mjs                 # Launcher con TLS local (Windows / proxy corporativo)
-├── preload-tls-local.cjs             # Workaround certificado SSL en Node local
-├── inspect-project-fidelity.mjs      # Inspección rápida reglas + roles por proyecto
-├── fix-nine-waves-fidelity.mjs       # Script puntual de corrección (mantenimiento)
-├── regenerate-project-images.js      # Regenerar en lote visuals promptados (npm run images:regenerate-project)
-└── import-project-reference-images.js # Importar fotos locales al bucket de referencias
+├── screenshot-portfolio.js              # Regenerar capturas web sin repetir analyze-site
+├── reanalyze-reference-images.ts        # Reclasificar referencias (rol, caption, identidad de producto)
+├── run-reanalyze.mjs                    # Launcher con TLS local (Windows / proxy corporativo)
+├── preload-tls-local.cjs                # Workaround certificado SSL en Node local
+├── inspect-project-fidelity.mjs         # Inspección rápida reglas + roles por proyecto
+├── fix-nine-waves-fidelity.mjs          # Script puntual de corrección (mantenimiento)
+├── fix-eskala-moodboard.mjs             # Ajuste puntual moodboard Eskala
+├── regenerate-project-images.js         # Regenerar en lote visuals promptados (npm run images:regenerate-project)
+├── import-project-reference-images.js   # Importar fotos locales al bucket de referencias
+├── create-premium-user.mjs              # Crear/actualizar usuario premium (service role)
+├── clone-project-wellness.mjs           # Clonar/afinar proyectos (Retiru, Furgocasa, Eskala…); npm run project:clone-wellness
+├── bootstrap-rebel-classic-raid.mjs     # Crear/actualizar proyecto Rebel Classic Raid (onboarding + ai_rules)
+└── run-rcr-pipeline.mjs                 # Pipeline RCR vía API (Bearer): marca→web→comp→estrategia→calendario→briefs
 
 src/
 ├── app/
@@ -79,8 +84,8 @@ src/
 │   ├── strategy/
 │   └── projects/            # BrandCard, BusinessCard, CompetitorsCard, ProjectReferenceImagesCard, ProjectSettingsPanel
 ├── lib/
-│   ├── supabase/            # Client, Server, Middleware, project-queries
-│   ├── ai/                  # Cliente LLM, prompts (estrategia con ADN visual), providers, constants
+│   ├── supabase/            # Client, Server (cookies + Bearer), Middleware (401 JSON en /api), project-queries
+│   ├── ai/                  # Cliente LLM, prompts (estrategia, brand anti-theme-builder), providers, constants
 │   ├── scraping/            # Scraping (fetch + Apify opcional) + screenshots-puppeteer.ts (Storage)
 │   ├── projects/            # reference-images.ts (servidor), reference-images-shared.ts (cliente)
 │   ├── visual-image-edit.ts # Estado del editor (capas de texto, filtros, presets)
@@ -348,6 +353,11 @@ Requieren `.env.local` con Supabase + OpenAI (o clave en `provider_api_keys` del
 | `npm run images:import-project-references` | Importa JPG/PNG desde una carpeta local al bucket y tabla de referencias (`--project-name`, `--project-id`, `--source-dir`). |
 | `npm run images:regenerate-project` | Regenera en lote imágenes ya promptadas de un proyecto (`--project-name`, `--project-id`, `--limit`, `--skip`, `--debug`, `--no-references`). |
 | `node -r ./scripts/preload-tls-local.cjs ./node_modules/tsx/dist/cli.mjs scripts/inspect-project-fidelity.mjs` | Inspección en consola de reglas y roles actuales. |
+| `npm run project:clone-wellness` | Clona/afina proyectos (perfiles wellness, `--rules=furgocasa\|retiros\|eskala`, `--tune-id`). Requiere `--confirm` para escribir. |
+| `node -r ./scripts/preload-tls-local.cjs scripts/bootstrap-rebel-classic-raid.mjs --confirm` | Crea/actualiza el proyecto **Rebel Classic Raid** con config editorial. |
+| `node -r ./scripts/preload-tls-local.cjs scripts/run-rcr-pipeline.mjs --project-id=<uuid>` | Ejecuta el pipeline contra `npm run dev` con `Authorization: Bearer` (pasos: `brand,site,competitors,strategy,calendar,briefs`). |
+
+Las rutas `/api/*` aceptan **Bearer access_token** (además de cookies SSR) para automatización; sin sesión, responden **401 JSON** (no redirect a `/login`).
 
 En **Windows** con error `UNABLE_TO_VERIFY_LEAF_SIGNATURE` al conectar a Supabase, usa siempre los launchers `npm run references:*` (no `tsx` directo): incluyen `preload-tls-local.cjs`.
 

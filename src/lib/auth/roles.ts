@@ -1,6 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Profile, UserRole } from '@/types';
-import { isDeletedAtColumnError } from '@/lib/supabase/project-queries';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
+import type { Profile, Project, UserRole } from '@/types';
+import { fetchProjectForDashboard, isDeletedAtColumnError } from '@/lib/supabase/project-queries';
 
 const DEFAULT_MAX_PROJECTS = 1;
 
@@ -56,6 +56,33 @@ export async function requireAdmin(
     throw new Error('FORBIDDEN');
   }
   return profile;
+}
+
+/** Dueño del proyecto o administrador: puede operar sobre cualquier ficha. */
+export function canActOnOwnedProject(
+  userId: string,
+  ownerId: string | null | undefined,
+  userIsAdmin: boolean
+): boolean {
+  return userIsAdmin || (!!ownerId && ownerId === userId);
+}
+
+/** Carga un proyecto activo si el usuario es dueño o admin. */
+export async function fetchAccessibleProject(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  select: string = '*'
+): Promise<{ project: Project | null; error: PostgrestError | null; userIsAdmin: boolean }> {
+  const userIsAdmin = await isAdmin(supabase, userId);
+  const { data, error } = await fetchProjectForDashboard(
+    supabase,
+    userId,
+    projectId,
+    userIsAdmin,
+    select
+  );
+  return { project: data, error, userIsAdmin };
 }
 
 export interface UserLimits {

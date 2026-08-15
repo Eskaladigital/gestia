@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import { createServerSupabase } from '@/lib/supabase/server';
 import type { Json } from '@/types';
 
@@ -27,12 +28,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const body = (await request.json()) as PatchBody;
 
-    const { data: project, error: projErr } = await supabase
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const { project, error: projErr } = await fetchAccessibleProject(
+      supabase,
+      user.id,
+      projectId,
+      'id'
+    );
 
     if (projErr || !project) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });

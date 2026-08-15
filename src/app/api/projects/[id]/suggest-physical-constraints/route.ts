@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
-import { fetchActiveProjectForUser } from '@/lib/supabase/project-queries';
+import { fetchAccessibleProject } from '@/lib/auth/roles';
 import {
   listProjectReferenceImages,
   resolveOpenAIKeyForUser,
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { data: project } = await fetchActiveProjectForUser(supabase, user.id, id);
+    const { project } = await fetchAccessibleProject(supabase, user.id, id);
     if (!project) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchAccessibleProject, isAdmin } from '@/lib/auth/roles';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { listProjectReferenceImages } from '@/lib/projects/reference-images';
 import { projectHasManagedProductFidelity } from '@/lib/projects/product-fidelity';
@@ -79,7 +80,7 @@ function validateWeeklyDist(d: unknown): WeeklyFormatDistribution | null {
   return out;
 }
 
-/** Actualización parcial de ajustes del proyecto (propietario). */
+/** Actualización parcial de ajustes del proyecto (propietario o admin). */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -90,6 +91,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    const { project: accessible } = await fetchAccessibleProject(supabase, user.id, id, 'id');
+    if (!accessible) {
+      return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }
 
     const body = (await request.json()) as PatchBody;
@@ -118,7 +124,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           .from('projects')
           .select('primary_goal')
           .eq('id', id)
-          .eq('user_id', user.id)
           .maybeSingle();
         primary = row?.primary_goal ?? null;
       }
@@ -218,7 +223,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           .from('projects')
           .select('sells_physical_product')
           .eq('id', id)
-          .eq('user_id', user.id)
           .maybeSingle();
         if (!sellsErr && row && typeof row.sells_physical_product === 'boolean') {
           sellsPhysical = row.sells_physical_product;
@@ -245,7 +249,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .from('projects')
         .select()
         .eq('id', id)
-        .eq('user_id', user.id)
         .maybeSingle();
       if (!current) {
         return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
@@ -263,7 +266,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .from('projects')
       .update(payload)
       .eq('id', id)
-      .eq('user_id', user.id)
       .select()
       .single();
 
@@ -277,7 +279,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       warnings.push('Los honorarios mensuales no se guardaron (falta columna monthly_fee — migración 009).');
       payload = rest;
-      const retry = await supabase.from('projects').update(payload).eq('id', id).eq('user_id', user.id).select().single();
+      const retry = await supabase.from('projects').update(payload).eq('id', id).select().single();
       project = retry.data;
       upErr = retry.error;
     }
@@ -292,7 +294,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       warnings.push('Las reglas IA no se guardaron (falta columna ai_rules — migración 010).');
       payload = rest;
-      const retry = await supabase.from('projects').update(payload).eq('id', id).eq('user_id', user.id).select().single();
+      const retry = await supabase.from('projects').update(payload).eq('id', id).select().single();
       project = retry.data;
       upErr = retry.error;
     }
@@ -320,7 +322,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .from('projects')
         .update(payload)
         .eq('id', id)
-        .eq('user_id', user.id)
         .select()
         .single();
       project = retry.data;
@@ -346,7 +347,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .from('projects')
         .update(payload)
         .eq('id', id)
-        .eq('user_id', user.id)
         .select()
         .single();
       project = retry.data;
@@ -372,7 +372,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .from('projects')
         .update(payload)
         .eq('id', id)
-        .eq('user_id', user.id)
         .select()
         .single();
       project = retry.data;
@@ -409,15 +408,15 @@ export async function DELETE(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { data: row, error: fetchErr } = await supabase
-      .from('projects')
-      .select('deleted_at')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const userIsAdmin = await isAdmin(supabase, user.id);
+    let fetchQ = supabase.from('projects').select('deleted_at').eq('id', id);
+    if (!userIsAdmin) fetchQ = fetchQ.eq('user_id', user.id);
+    const { data: row, error: fetchErr } = await fetchQ.maybeSingle();
 
     if (fetchErr && isDeletedAtColumnError(fetchErr)) {
-      const { error } = await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
+      let delQ = supabase.from('projects').delete().eq('id', id);
+      if (!userIsAdmin) delQ = delQ.eq('user_id', user.id);
+      const { error } = await delQ;
       if (error) throw error;
       return NextResponse.json({ ok: true });
     }
@@ -437,7 +436,9 @@ export async function DELETE(
       );
     }
 
-    const { error } = await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
+    let delQ = supabase.from('projects').delete().eq('id', id);
+    if (!userIsAdmin) delQ = delQ.eq('user_id', user.id);
+    const { error } = await delQ;
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {

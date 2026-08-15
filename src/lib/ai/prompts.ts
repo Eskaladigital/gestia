@@ -777,6 +777,8 @@ REGLAS ESTRICTAS:
 - Cada "brand_colors[].hex" debe ser un #RRGGBB válido.
 - PROHIBIDO en "brand_fonts[].name": tokens genéricos como font-heading, font-medium, font-sans, var(--...), etc.
 - Logo/favicon: null si no hay evidencia suficiente.
+- IGNORA colores/fuentes del builder o theme genérico (Oxygen, Elementor, Divi, Gutenberg defaults, --color1/--color2 de iconos SVG del kit, Manrope/Fira Code de sistema) si NO aparecen en logo, botones CTA de marca, hero o assets con nombre de marca. Prioriza colores del logo/SVG de marca y de CTAs reales del negocio.
+- Si el nombre de archivo del logo o la comunicación visual sugieren una paleta (p. ej. "rojoynegro") y el CSS solo aporta azules de theme, marca esos azules como "neutral/theme" y NO como primary de marca.
 - En los textos largos, cita patrones reales del código cuando sea posible.
 - Responde en español.
 - Devuelve SOLO JSON válido, sin texto adicional.

@@ -60,7 +60,17 @@ function sanitizeText(text: string | null | undefined): string {
       .replace(/\p{Emoji_Presentation}/gu, '')
       .replace(/\p{Extended_Pictographic}/gu, '')
       .replace(/[\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, '')
-      .replace(/\s{2,}/g, ' ')
+      .replace(/[→⇒]/g, '->')
+      .replace(/[←⇐]/g, '<-')
+      .replace(/[↔]/g, '<->')
+      .replace(/[—–−]/g, '-')
+      .replace(/[“”„«»]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/[…]/g, '...')
+      .replace(/[•]/g, '-')
+      .replace(/[×]/g, 'x')
+      .replace(/[^\t\n\r\x20-\x7E\u00A0-\u00FF]/g, '')
+      .replace(/[ \t]{2,}/g, ' ')
       .trim()
   );
 }
@@ -72,7 +82,14 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
     setLoading(true);
     try {
       const res = await fetch(`/api/projects/${projectId}/client-report`);
-      if (!res.ok) throw new Error('Error al obtener datos');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === 'string' && body.error
+            ? body.error
+            : `Error al obtener datos (${res.status})`
+        );
+      }
       const data = await res.json();
 
       const { jsPDF } = await import('jspdf');
@@ -124,14 +141,16 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         if (!value) return;
         const clean = sanitizeText(value);
         if (!clean) return;
-        
+
+        const indent = style === 'card' ? 5 : 0;
         doc.setFont('helvetica', 'normal');
         const lines = doc.splitTextToSize(clean, contentW - (style === 'card' ? 10 : 0));
         const neededHeight = lines.length * 5 + (style === 'card' ? 16 : 10);
-        
-        checkPage(neededHeight);
-        
-        if (style === 'card') {
+        const fitsAsCard = style === 'card' && neededHeight > 8 && neededHeight < pageH - 50;
+
+        checkPage(Math.min(neededHeight, 20));
+
+        if (fitsAsCard) {
           doc.setFillColor(LIGHT_BG[0], LIGHT_BG[1], LIGHT_BG[2]);
           doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
           doc.setLineWidth(0.3);
@@ -139,19 +158,21 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           y += 6;
         }
 
-        const indent = style === 'card' ? 5 : 0;
-
         doc.setFontSize(8);
         doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
         doc.setFont('helvetica', 'bold');
         doc.text(label.toUpperCase(), margin + indent, y);
         y += 5;
-        
+
         doc.setFontSize(10);
         doc.setTextColor(DARK[0], DARK[1], DARK[2]);
         doc.setFont('helvetica', 'normal');
-        doc.text(lines, margin + indent, y);
-        y += lines.length * 5 + (style === 'card' ? 5 : 4);
+        for (const line of lines) {
+          checkPage(6);
+          doc.text(line, margin + indent, y);
+          y += 5;
+        }
+        y += style === 'card' ? 5 : 4;
       }
 
       // ========== PORTADA ==========
@@ -881,7 +902,12 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       doc.save(`Estrategia_${safeName}.pdf`);
     } catch (err) {
       console.error('Error generando PDF:', err);
-      alert('Error al generar el PDF. Inténtalo de nuevo.');
+      const detail = err instanceof Error ? err.message : '';
+      alert(
+        detail && /no encontrado|no autorizado|obtener datos/i.test(detail)
+          ? 'No se pudo cargar el proyecto para el PDF. Recarga e inténtalo de nuevo.'
+          : 'Error al generar el PDF. Inténtalo de nuevo.'
+      );
     } finally {
       setLoading(false);
     }

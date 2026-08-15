@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { canActOnOwnedProject, isAdmin } from '@/lib/auth/roles';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import {
   VIDEO_GENERATION_DURATION_SECONDS,
@@ -117,7 +118,8 @@ export async function POST(request: NextRequest) {
   }
 
   const project = (visual as any).content_items?.projects;
-  if (!project || project.user_id !== user.id) {
+  const userIsAdmin = await isAdmin(authSupabase, user.id);
+  if (!project || !canActOnOwnedProject(user.id, project.user_id, userIsAdmin)) {
     return NextResponse.json({ error: 'No autorizado para este proyecto' }, { status: 403 });
   }
 
