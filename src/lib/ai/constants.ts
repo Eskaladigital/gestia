@@ -234,40 +234,58 @@ export function resolveSupportedModel(provider: AIProvider, model?: string | nul
 
 export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
 export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
+
+/**
+ * Modelo "orquestador" de la Responses API para generación de imágenes.
+ * No genera la imagen él mismo: interpreta el prompt y las referencias con
+ * todo su conocimiento del mundo, optimiza las instrucciones y llama al tool
+ * `image_generation` (que ejecuta IMAGE_GENERATION_MODEL). Es la vía que
+ * OpenAI recomienda para máxima calidad e instruction following.
+ */
+export const IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.6';
+
+/**
+ * Fidelidad de las imágenes de entrada (referencias) en la generación.
+ * 'high' hace que el modelo se esfuerce al máximo en respetar los rasgos
+ * del producto/marca de las referencias (caras, logos, geometría).
+ */
+export const IMAGE_INPUT_FIDELITY = 'high' as const;
+
 export const VIDEO_GENERATION_MODEL = 'veo-3.1-fast-generate-preview';
 export const VIDEO_GENERATION_DURATION_SECONDS = 8;
 export const VIDEO_GENERATION_ESTIMATED_COST_USD = 1.2;
 
 /**
- * Tamaños que usamos realmente en la app. Lo limitamos a estos 3 porque
- * son los únicos comunes a `openai.images.generate` Y `openai.images.edit`
- * (la API de edit NO acepta 1024x1792 ni 1792x1024). Mantener el union
- * estricto evita casts y permite que TypeScript valide el `size:` que se
- * pasa a ambas funciones del SDK sin sorpresas en build.
+ * Tamaños que usamos realmente en la app. gpt-image-2 acepta resoluciones
+ * arbitrarias (múltiplos de 16, ratio ≤ 3:1, ≤ 2560x1440 px totales sin ser
+ * "experimental"), tanto en `images.generate`/`images.edit` como en el tool
+ * `image_generation` de la Responses API. Usamos ~1.5x la resolución clásica
+ * (1024) manteniendo los ratios 2:3, 1:1 y 3:2: más nitidez tras el reescalado
+ * de Instagram (que sirve a 1080px) sin disparar coste ni latencia.
  */
 export type OpenAIImageSize =
-  | '1024x1024'
-  | '1024x1536'
-  | '1536x1024';
+  | '1248x1248'
+  | '1248x1872'
+  | '1872x1248';
 
 /** Tamaño legacy / fallback. Usa `resolveImageSize(orientation)` para nuevas llamadas. */
-export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1024x1536';
+export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1248x1872';
 export const IMAGE_GENERATION_QUALITY = 'high';
-export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.17;
+export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.25;
 
 /** Orientación por defecto de un proyecto cuando la columna aún no existe (pre-migración 022). */
 export const DEFAULT_IMAGE_ORIENTATION: ImageOrientation = 'vertical';
 
 /**
- * Tamaños soportados por gpt-image-2 / gpt-image-1 según orientación.
- * - vertical   → 9:16 aproximado (móvil, Stories, Reels, TikTok)
+ * Tamaños según orientación (resolución premium de gpt-image-2).
+ * - vertical   → 2:3 (móvil, Stories, Reels, TikTok)
  * - cuadrado   → 1:1 (feed clásico Instagram, LinkedIn)
- * - horizontal → 16:9 aproximado (web, blog, LinkedIn artículo)
+ * - horizontal → 3:2 (web, blog, LinkedIn artículo)
  */
 export const IMAGE_SIZE_BY_ORIENTATION: Record<ImageOrientation, OpenAIImageSize> = {
-  vertical: '1024x1536',
-  cuadrado: '1024x1024',
-  horizontal: '1536x1024',
+  vertical: '1248x1872',
+  cuadrado: '1248x1248',
+  horizontal: '1872x1248',
 };
 
 export function resolveImageSize(orientation: ImageOrientation | string | null | undefined): OpenAIImageSize {
@@ -280,7 +298,7 @@ export function resolveImageSize(orientation: ImageOrientation | string | null |
 /**
  * Clase de Tailwind con el aspect-ratio real de las imágenes generadas para
  * cada orientación. Coincide con los tamaños reales de OpenAI:
- * 1024×1536 → 2/3, 1024×1024 → 1/1, 1536×1024 → 3/2.
+ * 1248×1872 → 2/3, 1248×1248 → 1/1, 1872×1248 → 3/2.
  *
  * Se usa en la galería de contenido y donde haya que reservar el hueco de la
  * imagen ANTES de que cargue (placeholder, error, miniaturas, etc.).

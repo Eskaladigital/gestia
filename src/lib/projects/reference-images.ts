@@ -118,6 +118,21 @@ export async function normalizeReferenceImageBuffer(input: Buffer): Promise<Buff
     .toBuffer();
 }
 
+/** Descarga una referencia y la devuelve normalizada (PNG sRGB, ≤2048px). */
+async function downloadNormalizedReferenceBuffer(image: ProjectReferenceImage): Promise<Buffer> {
+  const response = await fetch(image.image_url);
+  if (!response.ok) {
+    throw new Error(`No se pudo descargar la referencia ${image.original_filename}: HTTP ${response.status}`);
+  }
+
+  const rawBuffer = Buffer.from(await response.arrayBuffer());
+  if (rawBuffer.length < 100) {
+    throw new Error(`La referencia ${image.original_filename} llegó vacía (${rawBuffer.length} bytes)`);
+  }
+
+  return normalizeReferenceImageBuffer(rawBuffer);
+}
+
 /**
  * Descarga las referencias y las devuelve como archivos aptos para `images.edit`.
  *
@@ -130,24 +145,29 @@ export async function downloadReferenceImagesAsFiles(
   const files = [];
 
   for (let i = 0; i < referenceImages.length; i++) {
-    const image = referenceImages[i];
-    const response = await fetch(image.image_url);
-    if (!response.ok) {
-      throw new Error(`No se pudo descargar la referencia ${image.original_filename}: HTTP ${response.status}`);
-    }
-
-    const rawBuffer = Buffer.from(await response.arrayBuffer());
-    if (rawBuffer.length < 100) {
-      throw new Error(`La referencia ${image.original_filename} llegó vacía (${rawBuffer.length} bytes)`);
-    }
-
-    const normalized = await normalizeReferenceImageBuffer(rawBuffer);
+    const normalized = await downloadNormalizedReferenceBuffer(referenceImages[i]);
     const filename = `reference-${i + 1}.${NORMALIZED_REFERENCE_EXTENSION}`;
     const file = await toFile(normalized, filename, { type: NORMALIZED_REFERENCE_MIME });
     files.push(file);
   }
 
   return files;
+}
+
+/**
+ * Descarga las referencias y las devuelve como data URLs base64, aptas para
+ * pasarlas como `input_image` a la Responses API (tool `image_generation`).
+ * Misma normalización sharp que `downloadReferenceImagesAsFiles`.
+ */
+export async function downloadReferenceImagesAsDataUrls(
+  referenceImages: ProjectReferenceImage[]
+): Promise<string[]> {
+  const urls: string[] = [];
+  for (const image of referenceImages) {
+    const normalized = await downloadNormalizedReferenceBuffer(image);
+    urls.push(`data:${NORMALIZED_REFERENCE_MIME};base64,${normalized.toString('base64')}`);
+  }
+  return urls;
 }
 
 /**

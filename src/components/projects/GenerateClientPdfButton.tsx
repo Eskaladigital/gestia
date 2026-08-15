@@ -106,6 +106,9 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       const autoTable = autoTableModule.default;
 
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      // Interlineado global (jspdf-autotable no admite lineHeight por celda:
+      // usa el lineHeightFactor del documento jsPDF).
+      doc.setLineHeightFactor(1.45);
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
       const margin = 22;
@@ -122,12 +125,13 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       const LIGHT_BG: [number, number, number] = [248, 250, 252];
       const BORDER: [number, number, number] = [226, 232, 240];
 
-      const BODY_SIZE = 10;
-      const BODY_LEAD = 5.8;
+      const BODY_SIZE = 9.5;
+      const BODY_LEAD = 6.0;
       const SMALL_SIZE = 8.5;
-      const SMALL_LEAD = 5.1;
-      const PARA_GAP = 3.4;
-      const BLOCK_GAP = 7;
+      const SMALL_LEAD = 5.4;
+      const PARA_GAP = 5;
+      const BLOCK_GAP = 9;
+      const SECTION_GAP = 14;
 
       const dateStr = new Date().toLocaleDateString('es-ES', {
         year: 'numeric',
@@ -157,10 +161,10 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
           if (!line) {
-            y += lead * 0.35;
+            y += lead * 0.5;
             continue;
           }
-          checkPage(lead + 0.8);
+          checkPage(lead + 1);
           const justify = Boolean(opts?.justify) && lines.length > 1 && i < lines.length - 1 && !/^\s*[-*]\s/.test(line);
           if (justify) {
             doc.text(line, x, y, { align: 'justify', maxWidth: width });
@@ -190,16 +194,16 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
             for (const raw of rawLines) {
               if (/^[-*]\s+/.test(raw)) {
                 const item = raw.replace(/^[-*]\s+/, '').trim();
-                const wrapped = doc.splitTextToSize(item, width - 5) as string[];
-                checkPage(lead + 0.8);
+                const wrapped = doc.splitTextToSize(item, width - 6) as string[];
+                checkPage(lead + 1);
                 doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-                doc.circle(x + 1.1, y - 1.1, 0.7, 'F');
-                drawLines(wrapped, x + 5, width - 5, { size, lead, justify: false, color: opts?.color });
-                y += 1.4;
+                doc.circle(x + 1.2, y - 1.2, 0.8, 'F');
+                drawLines(wrapped, x + 6, width - 6, { size, lead, justify: false, color: opts?.color });
+                y += 2.5;
               } else {
                 const wrapped = doc.splitTextToSize(raw, width) as string[];
                 drawLines(wrapped, x, width, { size, lead, justify: false, color: opts?.color, font: 'bold' });
-                y += 1.6;
+                y += 2.5;
               }
             }
           } else {
@@ -217,17 +221,17 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       }
 
       function sectionTitle(title: string) {
-        checkPage(22);
-        y += 8;
+        checkPage(26);
+        y += SECTION_GAP;
         doc.setDrawColor(BRAND[0], BRAND[1], BRAND[2]);
-        doc.setLineWidth(1.6);
-        doc.line(margin, y - 4, margin, y + 3);
+        doc.setLineWidth(1.8);
+        doc.line(margin, y - 3, margin, y + 5);
 
-        doc.setFontSize(12);
+        doc.setFontSize(13);
         doc.setTextColor(BRAND[0], BRAND[1], BRAND[2]);
         doc.setFont('helvetica', 'bold');
-        doc.text(title, margin + 5, y + 1.5);
-        y += 11;
+        doc.text(title, margin + 5.5, y + 2.5);
+        y += 14;
       }
 
       function labelValue(label: string, value: string | null | undefined, style: 'normal' | 'card' = 'normal') {
@@ -236,21 +240,18 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         if (!clean) return;
 
         const boxed = style === 'card';
-        const padX = boxed ? 5 : 0;
+        const padX = boxed ? 6 : 0;
         const textW = contentW - padX * 2;
 
-        checkPage(18);
-        if (boxed) {
-          doc.setFillColor(LIGHT_BG[0], LIGHT_BG[1], LIGHT_BG[2]);
-          doc.rect(margin, y, 2.2, 11, 'F');
-        }
+        checkPage(20);
 
         doc.setFontSize(7.5);
         doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
         doc.setFont('helvetica', 'bold');
         doc.text(label.toUpperCase(), margin + padX, y);
-        y += 5.4;
+        y += 6.5;
 
+        const yBeforeBody = y;
         drawParagraphs(clean, {
           x: margin + padX,
           width: textW,
@@ -259,6 +260,13 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           justify: true,
           color: DARK,
         });
+
+        if (boxed) {
+          const barH = Math.max(y - yBeforeBody + 3, 6);
+          doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
+          doc.rect(margin, yBeforeBody - 4, 2, barH + 2, 'F');
+        }
+
         y += BLOCK_GAP;
       }
 
@@ -274,15 +282,15 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
       doc.text('INFORME ESTRATEGICO Y CALENDARIO', margin, y);
-      y += 16;
+      y += 20;
 
       doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-      doc.setFontSize(30);
+      doc.setFontSize(28);
       const titleLines = doc.splitTextToSize(sanitizeText(data.project.name), contentW) as string[];
-      drawLines(titleLines, margin, contentW, { size: 30, lead: 13.5, justify: false, color: DARK, font: 'bold' });
-      y += 8;
+      drawLines(titleLines, margin, contentW, { size: 28, lead: 13, justify: false, color: DARK, font: 'bold' });
+      y += 12;
 
-      doc.setFontSize(13);
+      doc.setFontSize(12);
       doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
       doc.setFont('helvetica', 'normal');
       doc.text('Estrategia integral de Redes Sociales', margin, y);
@@ -329,7 +337,7 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           ['Experimentación', sanitizeText(data.project.experimentation) || '-'],
         ],
         theme: 'plain',
-        styles: { fontSize: 9, textColor: DARK, cellPadding: { top: 3.2, right: 4, bottom: 3.2, left: 3 }, valign: 'middle', lineHeight: 1.35 },
+        styles: { fontSize: 9, textColor: DARK, cellPadding: { top: 4, right: 5, bottom: 4, left: 4 }, valign: 'middle' },
         headStyles: { textColor: GRAY, fontStyle: 'bold', fontSize: 7.5 },
         columnStyles: { 0: { fontStyle: 'bold', cellWidth: 58 } },
       });
@@ -340,25 +348,25 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
       const toneKeys = ['tone_formality', 'tone_proximity', 'tone_emotion', 'tone_humor', 'tone_disruption'] as const;
       for (const tk of toneKeys) {
         const val = data.project[tk] ?? 50;
-        checkPage(14);
-        doc.setFontSize(8.5);
+        checkPage(16);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(DARK[0], DARK[1], DARK[2]);
         doc.text(TONE_LABELS[tk], margin, y);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
-        doc.text(`${val}%`, margin + 38, y);
+        doc.text(`${val}%`, margin + 40, y);
 
         doc.setFillColor(LIGHT_BG[0], LIGHT_BG[1], LIGHT_BG[2]);
-        doc.roundedRect(margin + 54, y - 2.6, 100, 3.6, 1.6, 1.6, 'F');
+        doc.roundedRect(margin + 54, y - 2.8, 100, 4, 1.8, 1.8, 'F');
 
         if (val > 0) {
           doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-          doc.roundedRect(margin + 54, y - 2.6, (val / 100) * 100, 3.6, 1.6, 1.6, 'F');
+          doc.roundedRect(margin + 54, y - 2.8, (val / 100) * 100, 4, 1.8, 1.8, 'F');
         }
-        y += 11;
+        y += 13;
       }
-      y += 4;
+      y += 5;
 
       // ========== DISTRIBUCIÓN SEMANAL ==========
       const dist = data.project.weekly_format_distribution;
@@ -386,7 +394,7 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
             margin: { left: margin, right: margin },
             body: bodyDist,
             theme: 'grid',
-            styles: { fontSize: 9, textColor: DARK, cellPadding: { top: 3.4, right: 4, bottom: 3.4, left: 4 }, lineColor: BORDER, lineWidth: 0.1, valign: 'middle', lineHeight: 1.35 },
+            styles: { fontSize: 9, textColor: DARK, cellPadding: { top: 4, right: 5, bottom: 4, left: 5 }, lineColor: BORDER, lineWidth: 0.1, valign: 'middle' },
             columnStyles: { 0: { fontStyle: 'bold', fillColor: LIGHT_BG } },
           });
           y = (doc as any).lastAutoTable.finalY + 12;
@@ -401,23 +409,23 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           sectionTitle('Estilo de Contenido (pesos)');
           for (const [key, val] of entries) {
             const label = CONTENT_TYPE_LABELS[key] || key;
-            checkPage(14);
-            doc.setFontSize(8.5);
+            checkPage(16);
+            doc.setFontSize(9);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(DARK[0], DARK[1], DARK[2]);
             doc.text(label, margin, y);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
-            doc.text(`${val}%`, margin + 38, y);
+            doc.text(`${val}%`, margin + 40, y);
             doc.setFillColor(LIGHT_BG[0], LIGHT_BG[1], LIGHT_BG[2]);
-            doc.roundedRect(margin + 54, y - 2.6, 100, 3.6, 1.6, 1.6, 'F');
+            doc.roundedRect(margin + 54, y - 2.8, 100, 4, 1.8, 1.8, 'F');
             if (val > 0) {
               doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-              doc.roundedRect(margin + 54, y - 2.6, (val / 100) * 100, 3.6, 1.6, 1.6, 'F');
+              doc.roundedRect(margin + 54, y - 2.8, (val / 100) * 100, 4, 1.8, 1.8, 'F');
             }
-            y += 11;
+            y += 13;
           }
-          y += 4;
+          y += 5;
         }
       }
 
@@ -584,22 +592,22 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           y += 6;
           
           for (const p of pillars) {
-            checkPage(22);
+            checkPage(24);
             doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-            doc.rect(margin, y, 2.2, 8, 'F');
+            doc.rect(margin, y, 2.2, 9, 'F');
             const pTitle = `${sanitizeText(p.name)}${p.percentage ? `  (${p.percentage}%)` : ''}`;
             doc.setFontSize(11);
             doc.setTextColor(BRAND[0], BRAND[1], BRAND[2]);
             doc.setFont('helvetica', 'bold');
-            doc.text(pTitle, margin + 6, y + 5);
-            y += 10;
+            doc.text(pTitle, margin + 6, y + 6);
+            y += 12;
 
             const pDesc = sanitizeText(p.description) || '';
             if (pDesc) {
               drawParagraphs(pDesc, { size: BODY_SIZE, lead: BODY_LEAD, justify: true });
             }
             if (Array.isArray(p.example_topics) && p.example_topics.length) {
-              y += 1.5;
+              y += 3;
               drawParagraphs(`Temas: ${p.example_topics.map((t: string) => sanitizeText(t)).join(', ')}`, {
                 size: SMALL_SIZE,
                 lead: SMALL_LEAD,
@@ -607,7 +615,7 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
                 color: GRAY,
               });
             }
-            y += BLOCK_GAP;
+            y += BLOCK_GAP + 2;
           }
         }
       }
@@ -667,20 +675,20 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         if (Array.isArray(tl) && tl.length > 0) {
           sectionTitle('Líneas Temáticas');
           for (const line of tl as Record<string, unknown>[]) {
-            checkPage(22);
+            checkPage(24);
             const lTitle = sanitizeText(line.theme as string) || 'Linea';
             doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-            doc.rect(margin, y, 2.2, 8, 'F');
+            doc.rect(margin, y, 2.2, 9, 'F');
             doc.setFontSize(11);
             doc.setTextColor(BRAND[0], BRAND[1], BRAND[2]);
             doc.setFont('helvetica', 'bold');
-            doc.text(lTitle, margin + 6, y + 5);
-            y += 10;
+            doc.text(lTitle, margin + 6, y + 6);
+            y += 12;
 
             const lDesc = sanitizeText(line.description as string) || '';
             if (lDesc) drawParagraphs(lDesc, { justify: true });
             if (line.frequency) {
-              y += 1.2;
+              y += 2;
               drawParagraphs(`Frecuencia: ${sanitizeText(line.frequency as string)}`, {
                 size: SMALL_SIZE,
                 lead: SMALL_LEAD,
@@ -689,7 +697,7 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
               });
             }
             if (Array.isArray(line.example_topics) && line.example_topics.length) {
-              y += 1.2;
+              y += 2;
               drawParagraphs(`Temas: ${(line.example_topics as string[]).map((t) => sanitizeText(t)).join(', ')}`, {
                 size: SMALL_SIZE,
                 lead: SMALL_LEAD,
@@ -697,7 +705,7 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
                 color: GRAY,
               });
             }
-            y += BLOCK_GAP;
+            y += BLOCK_GAP + 2;
           }
         }
       }
@@ -718,7 +726,7 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           head: [['Competidor', 'Web', 'Motivo / Observaciones']],
           body: compBody,
           theme: 'grid',
-          styles: { fontSize: 9, textColor: DARK, cellPadding: { top: 3.6, right: 3.5, bottom: 3.6, left: 3.5 }, lineColor: BORDER, lineWidth: 0.1, valign: 'top', lineHeight: 1.4 },
+          styles: { fontSize: 9, textColor: DARK, cellPadding: { top: 4, right: 4, bottom: 4, left: 4 }, lineColor: BORDER, lineWidth: 0.1, valign: 'top' },
           headStyles: { fillColor: LIGHT_BG, textColor: DARK, fontStyle: 'bold' },
           columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 1: { textColor: BRAND, cellWidth: 45 } },
         });
@@ -805,13 +813,12 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
             body: tableData,
             theme: 'grid',
             styles: {
-              fontSize: 8,
-              cellPadding: { top: 3.2, right: 2.8, bottom: 3.2, left: 2.8 },
+              fontSize: 8.5,
+              cellPadding: { top: 3.8, right: 3, bottom: 3.8, left: 3 },
               textColor: DARK,
               lineColor: BORDER,
               lineWidth: 0.1,
               valign: 'top',
-              lineHeight: 1.4,
             },
             headStyles: {
               fillColor: LIGHT_BG,
@@ -838,18 +845,20 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
         const drawPostField = (lbl: string, value: string | null | undefined, opts?: { justify?: boolean }) => {
           const clean = sanitizeText(value);
           if (!clean) return;
-          checkPage(16);
+          checkPage(18);
           doc.setFontSize(7.5);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
-          doc.text(lbl.toUpperCase(), margin, y);
-          y += 5.2;
+          doc.text(lbl.toUpperCase(), margin + 3, y);
+          y += 6;
           drawParagraphs(clean, {
+            x: margin + 3,
+            width: contentW - 6,
             size: BODY_SIZE,
             lead: BODY_LEAD,
             justify: opts?.justify !== false,
           });
-          y += 4.5;
+          y += 6;
         };
 
         for (const item of data.contentItems) {
@@ -858,16 +867,16 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           const fmt = FORMAT_LABELS[item.format] || item.format || '-';
           const ctype = CONTENT_TYPE_LABELS[item.content_type] || item.content_type;
 
-          checkPage(28);
-          y += 3;
+          checkPage(30);
+          y += 5;
           doc.setFillColor(BRAND[0], BRAND[1], BRAND[2]);
-          doc.roundedRect(margin, y, contentW, 9.5, 1.2, 1.2, 'F');
+          doc.roundedRect(margin, y, contentW, 10, 1.4, 1.4, 'F');
           doc.setFontSize(9);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(255, 255, 255);
           const head = `${dayLabel}   ·   ${fmt}   ·   ${ctype}`;
-          doc.text(head, margin + 4, y + 6.2);
-          y += 14;
+          doc.text(head, margin + 4, y + 6.5);
+          y += 16;
 
           drawPostField('Idea / enfoque', item.idea);
           drawPostField('Copy', item.copy);
@@ -892,11 +901,11 @@ export function GenerateClientPdfButton({ projectId, projectName }: Props) {
           drawPostField('Brief visual', item.visual_brief);
           drawPostField('Prompt IA', item.visual_prompt);
 
-          y += 3;
+          y += 5;
           doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
-          doc.setLineWidth(0.25);
-          doc.line(margin, y, pageW - margin, y);
-          y += 4;
+          doc.setLineWidth(0.3);
+          doc.line(margin + 8, y, pageW - margin - 8, y);
+          y += 7;
         }
       }
 

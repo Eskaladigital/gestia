@@ -40,7 +40,7 @@ const REFINER_MODEL = 'gpt-5.4-mini';
 const REFINER_TEMPERATURE = 0.18;
 const REFINER_MAX_TOKENS = 1200;
 const IMAGE_MODEL = 'gpt-image-2';
-const IMAGE_SIZE = '1536x1024';
+const IMAGE_SIZE = '1872x1248';
 const IMAGE_QUALITY = 'high';
 const MAX_REFERENCE_IMAGES = 4;
 

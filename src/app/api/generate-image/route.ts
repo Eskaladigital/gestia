@@ -7,12 +7,15 @@ import {
   DEFAULT_IMAGE_ORIENTATION,
   IMAGE_GENERATION_MODEL,
   IMAGE_GENERATION_QUALITY,
+  IMAGE_INPUT_FIDELITY,
+  IMAGE_ORCHESTRATOR_MODEL,
   IMAGE_PROMPT_REFINER_MODEL,
   resolveImageSize,
 } from '@/lib/ai/constants';
 import {
   assessProductFidelity,
   DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
+  downloadReferenceImagesAsDataUrls,
   downloadReferenceImagesAsFiles,
   isOpenAIReferenceImageRejection,
   listProjectReferenceImages,
@@ -26,9 +29,9 @@ import {
 } from '@/lib/projects/product-fidelity';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
-// enviarlas a OpenAI y tarda ~2-3 min con gpt-image-2 + referencias.
+// enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6 + gpt-image-2 + referencias.
 // - runtime nodejs: sharp no funciona en Edge.
-// - maxDuration 300: con 4 referencias la edición de imagen puede pasar
+// - maxDuration 300: con 4 referencias la generación orquestada puede pasar
 //   de 60s de Vercel Pro por defecto.
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -488,9 +491,56 @@ export async function POST(request: NextRequest) {
       (projectPhysicalConstraints ? `, physical_constraints: ${projectPhysicalConstraints.length} chars` : '')
     );
 
-    // Genera una imagen con (o sin) referencias. Si OpenAI rechaza las
-    // referencias, reintenta sin ellas para no bloquear la pieza.
-    async function generateImageB64(
+    // === VÍA PRINCIPAL: Responses API ===
+    // gpt-5.6 orquesta la generación: lee el prompt y las referencias con
+    // visión de alto detalle, optimiza las instrucciones con su conocimiento
+    // del mundo y llama al tool image_generation (gpt-image-2, calidad high).
+    // Es la vía que OpenAI recomienda para máxima calidad e instruction
+    // following; input_fidelity=high preserva rasgos de producto/marca.
+    async function generateViaResponses(
+      genPrompt: string,
+      refs: ProjectReferenceImage[]
+    ): Promise<string> {
+      const content: OpenAI.Responses.ResponseInputContent[] = [
+        { type: 'input_text', text: genPrompt },
+      ];
+      if (refs.length > 0) {
+        const dataUrls = await downloadReferenceImagesAsDataUrls(refs);
+        for (const url of dataUrls) {
+          content.push({ type: 'input_image', image_url: url, detail: 'high' });
+        }
+      }
+
+      const response = await openai.responses.create({
+        model: IMAGE_ORCHESTRATOR_MODEL,
+        input: [{ role: 'user', content }],
+        tools: [
+          {
+            type: 'image_generation',
+            model: IMAGE_GENERATION_MODEL,
+            quality: IMAGE_GENERATION_QUALITY,
+            size: imageSize,
+            output_format: 'png',
+            moderation: 'low',
+            ...(refs.length > 0 ? { input_fidelity: IMAGE_INPUT_FIDELITY } : {}),
+          },
+        ],
+        tool_choice: { type: 'image_generation' },
+      });
+
+      const call = response.output.find(item => item.type === 'image_generation_call');
+      const out = call && call.type === 'image_generation_call' ? call.result : null;
+      if (!out) {
+        throw new Error('La Responses API no devolvió imagen (image_generation_call sin resultado)');
+      }
+      return out;
+    }
+
+    // === FALLBACK: Images API directa ===
+    // Si la Responses API falla (modelo no disponible, cuota, etc.) usamos la
+    // vía clásica. Si OpenAI rechaza las referencias, reintenta sin ellas
+    // para no bloquear la pieza.
+    async function generateViaImagesApi(
       genPrompt: string,
       refs: ProjectReferenceImage[]
     ): Promise<string> {
@@ -504,6 +554,7 @@ export async function POST(request: NextRequest) {
             prompt: genPrompt,
             size: imageSize,
             quality: IMAGE_GENERATION_QUALITY,
+            input_fidelity: IMAGE_INPUT_FIDELITY,
           });
         } catch (editErr) {
           if (!isOpenAIReferenceImageRejection(editErr)) throw editErr;
@@ -531,6 +582,21 @@ export async function POST(request: NextRequest) {
       const out = resp.data?.[0]?.b64_json;
       if (!out) throw new Error('La API de OpenAI no devolvió imagen (b64_json vacío)');
       return out;
+    }
+
+    async function generateImageB64(
+      genPrompt: string,
+      refs: ProjectReferenceImage[]
+    ): Promise<string> {
+      try {
+        return await generateViaResponses(genPrompt, refs);
+      } catch (respErr) {
+        console.warn(
+          `[generate-image] ${visual_id}: Responses API falló (${(respErr as Error)?.message}). ` +
+          `Fallback a Images API.`
+        );
+        return await generateViaImagesApi(genPrompt, refs);
+      }
     }
 
     let b64 = await generateImageB64(prompt, selectedReferenceImages);
