@@ -261,12 +261,8 @@ export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
 export const IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.6-terra';
 export const IMAGE_ORCHESTRATOR_REASONING_EFFORT: ReasoningEffort = 'medium';
 
-/**
- * Fidelidad de las imágenes de entrada (referencias) en la generación.
- * 'high' hace que el modelo se esfuerce al máximo en respetar los rasgos
- * del producto/marca de las referencias (caras, logos, geometría).
- */
-export const IMAGE_INPUT_FIDELITY = 'high' as const;
+// Nota: gpt-image-2 procesa SIEMPRE las referencias en alta fidelidad y
+// rechaza el parámetro `input_fidelity` (era de gpt-image-1/1.5): no enviarlo.
 
 export const VIDEO_GENERATION_MODEL = 'veo-3.1-fast-generate-preview';
 export const VIDEO_GENERATION_DURATION_SECONDS = 8;

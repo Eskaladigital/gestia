@@ -228,7 +228,7 @@ Pipeline en **dos capas** (constantes en `src/lib/ai/constants.ts`):
 | Capa | Modelo / API | Rol |
 |------|----------------|-----|
 | **Orquestación** (vía principal) | `gpt-5.6-terra` (`reasoning: medium`) + **Responses API** + tool `image_generation` | Lee el prompt final y las referencias con visión (`detail: high`), optimiza instrucciones y dispara la generación. |
-| **Ejecución** | `gpt-image-2` (`quality: high`) | Renderiza la imagen. Con referencias: `input_fidelity: high`. |
+| **Ejecución** | `gpt-image-2` (`quality: high`) | Renderiza la imagen. Procesa las referencias en alta fidelidad automáticamente (no admite `input_fidelity`). |
 | **Fallback** | Images API (`images.edit` / `images.generate`) | Si la Responses API falla; mismo modelo, tamaño y calidad. Si OpenAI rechaza las refs, reintenta sin ellas. |
 
 **Antes de la API de imagen**, el prompt pasa por:
@@ -425,7 +425,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 | `POST /api/generate-strategy` | Estrategia de contenido |
 | `POST /api/generate-calendar` | Calendario (`calendar_mode`: append / replace, etc.) |
 | `POST /api/generate-visual-briefs` | Brief creativo + prompt generativo por ítem del calendario |
-| `POST /api/generate-image` | Imagen IA por visual: Responses API (`gpt-5.6-terra` → `gpt-image-2`, refs con `input_fidelity: high`), fallback Images API, `physical_constraints`, QA de fidelidad (reintento opcional vía `IMAGE_FIDELITY_AUTO_RETRY`). |
+| `POST /api/generate-image` | Imagen IA por visual: Responses API (`gpt-5.6-terra` → `gpt-image-2`, refs en alta fidelidad automática), fallback Images API, `physical_constraints`, QA de fidelidad (reintento opcional vía `IMAGE_FIDELITY_AUTO_RETRY`). |
 | `POST /api/generate-video` | Anima con Veo la imagen ya generada de un visual (`video_motion_prompt` → `video_url`); no regenera la imagen estática. |
 | `POST /api/save-visual-image-edit` | Multipart: guarda PNG editado + `image_edit_json` en `content_item_visuals` (bucket `visual-assets`); `clear=true` borra edición y vuelve a la imagen IA base. |
 | `POST /api/report-image-error` | Guarda en `content_item_visuals.user_feedback` un texto libre del usuario describiendo un error de la imagen; se usa al regenerar. |

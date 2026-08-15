@@ -7,7 +7,6 @@ import {
   DEFAULT_IMAGE_ORIENTATION,
   IMAGE_GENERATION_MODEL,
   IMAGE_GENERATION_QUALITY,
-  IMAGE_INPUT_FIDELITY,
   IMAGE_ORCHESTRATOR_MODEL,
   IMAGE_ORCHESTRATOR_REASONING_EFFORT,
   IMAGE_PROMPT_REFINER_MODEL,
@@ -497,7 +496,8 @@ export async function POST(request: NextRequest) {
     // visión de alto detalle, optimiza las instrucciones con su conocimiento
     // del mundo y llama al tool image_generation (gpt-image-2, calidad high).
     // Es la vía que OpenAI recomienda para máxima calidad e instruction
-    // following; input_fidelity=high preserva rasgos de producto/marca.
+    // following; gpt-image-2 procesa las referencias en alta fidelidad
+    // automáticamente (no admite el parámetro input_fidelity).
     async function generateViaResponses(
       genPrompt: string,
       refs: ProjectReferenceImage[]
@@ -524,7 +524,6 @@ export async function POST(request: NextRequest) {
             size: imageSize,
             output_format: 'png',
             moderation: 'low',
-            ...(refs.length > 0 ? { input_fidelity: IMAGE_INPUT_FIDELITY } : {}),
           },
         ],
         tool_choice: { type: 'image_generation' },
@@ -556,7 +555,6 @@ export async function POST(request: NextRequest) {
             prompt: genPrompt,
             size: imageSize,
             quality: IMAGE_GENERATION_QUALITY,
-            input_fidelity: IMAGE_INPUT_FIDELITY,
           });
         } catch (editErr) {
           if (!isOpenAIReferenceImageRejection(editErr)) throw editErr;

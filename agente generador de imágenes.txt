@@ -10,7 +10,7 @@ En este repositorio, el pipeline de imagenes del calendario esta integrado en Ne
 - Refinador de realismo (gpt-5.4-mini) + cola IMAGE_REALISM_TAIL
 - Generacion orquestada: Responses API (gpt-5.6-terra, reasoning medium + tool image_generation -> gpt-image-2)
 - Fallback a Images API (images.edit / images.generate) si falla Responses
-- input_fidelity: high cuando hay referencias de producto
+- gpt-image-2 procesa las referencias en alta fidelidad automatica (NO enviar input_fidelity: lo rechaza con 400)
 - Resolucion premium segun orientacion: 1248x1872 | 1248x1248 | 1872x1248
 - QA de fidelidad post-generacion (reintento solo con IMAGE_FIDELITY_AUTO_RETRY=true)
 - SDK OpenAI 7.x
@@ -64,7 +64,7 @@ visual_prompt (brief por slide, ya generado)
 -> buildFinalPrompt: refinador gpt-5.4-mini + reglas refs + user_feedback + physical_constraints + IMAGE_REALISM_TAIL + captions
 -> [VIA PRINCIPAL] Responses API:
      gpt-5.6-terra lee prompt + referencias (input_image, detail high)
-     -> tool image_generation (gpt-image-2, quality high, input_fidelity high si hay refs)
+     -> tool image_generation (gpt-image-2, quality high; alta fidelidad automatica con refs)
 -> [FALLBACK] Images API: images.edit (con refs) o images.generate (sin refs)
 -> assessProductFidelity (opcional reintento si IMAGE_FIDELITY_AUTO_RETRY=true)
 -> subir PNG a Supabase visual-assets
@@ -94,8 +94,8 @@ Parametros del tool / Images API:
   - cuadrado: 1248x1248
   - horizontal: 1872x1248
 - output_format: png (Responses)
-- input_fidelity: high (si hay referencias de producto)
 - moderation: low (Responses; menos falsos positivos en marca)
+- NO enviar input_fidelity a gpt-image-2 (alta fidelidad automatica; el parametro da 400)
 
 Selector de referencias por slide: gpt-4o-mini
 QA fidelidad post-imagen: gpt-4o-mini (informativo; reintento opcional)
@@ -538,8 +538,7 @@ El SDK Node (openai 7.x) equivalente:
       quality: "high",
       size: "1248x1872",
       output_format: "png",
-      moderation: "low",
-      input_fidelity: "high"
+      moderation: "low"
     }],
     tool_choice: { type: "image_generation" }
   })
@@ -588,7 +587,7 @@ PARAMETROS QUE HAN DADO BUEN RESULTADO
 GestIA RRSS (2026):
 - Refinador: gpt-5.4-mini, temp baja
 - Orquestacion: gpt-5.6-terra (reasoning medium) + Responses API + image_generation
-- Imagen: gpt-image-2, quality high, input_fidelity high con refs
+- Imagen: gpt-image-2, quality high (alta fidelidad de refs automatica)
 - Tamanos: 1248x1872 (vertical), 1248x1248 (cuadrado), 1872x1248 (horizontal)
 
 Retiru (historico):
@@ -739,7 +738,7 @@ function generateImageGestia(prompt, referenceImages, orientation):
           reasoning: { effort: "medium" },
           input: [{ role: "user", content: [text(promptFinal), ...images(refsAsDataUrls)] }],
           tools: [{ type: "image_generation", model: "gpt-image-2", quality: "high",
-                    size: resolveImageSize(orientation), input_fidelity: "high" }],
+                    size: resolveImageSize(orientation) }],
           tool_choice: { type: "image_generation" }
         })
       - return response.output image_generation_call.result (base64)
