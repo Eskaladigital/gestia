@@ -53,7 +53,8 @@ REGLAS ESTRICTAS:
 - NO cambies la escena, los sujetos, los objetos, la accion ni la idea del prompt original. La escena que describe el usuario es sagrada.
 - NO inventes elementos nuevos que no esten en el prompt original.
 - NO elimines sujetos, objetos ni acciones que el prompt mencione.
-- SI puedes: mejorar la descripcion de la luz para que suene a luz natural real, sustituir adjetivos vagos por materiales o texturas concretas, añadir detalles de camara (tipo de plano, profundidad de campo) si no los tiene, y rebajar cualquier frase que suene a "arte generativo" o "poster de IA".
+- Si la escena es CONCEPTUAL o SURREALISTA (animales fuera de contexto, escalas imposibles, objetos donde no deberian estar, juxtaposiciones absurdas), CONSERVALA EXACTAMENTE: no la normalices, no la sustituyas por una escena corriente ni suavices el elemento imposible. Tu trabajo es que parezca una FOTOGRAFIA REAL de esa escena imposible, con luz y texturas creibles.
+- SI puedes: mejorar la descripcion de la luz para que suene a luz natural real, sustituir adjetivos vagos por materiales o texturas concretas, añadir detalles de camara (tipo de plano, profundidad de campo) si no los tiene, y rebajar frases de ACABADO artificial (HDR, render, plastico, "poster de IA") sin tocar NUNCA el contenido conceptual de la escena.
 - Si el prompt menciona personas, mantenlas pero asegurate de que la descripcion las presente naturales y no posadas.
 - Si hay indicaciones de video (frame rate, travelling, motion blur), respetalas pero adaptalas para que funcionen como fotograma fijo: describe el instante congelado, no la secuencia.
 - Quita referencias a logotipos, marcas o texto visible que el modelo de imagen no puede renderizar bien.
@@ -70,6 +71,7 @@ const IMAGE_REALISM_TAIL = [
   'sujeto u objeto principal ocupando entre un tercio y dos tercios del encuadre, con fondo real visible que contextualice;',
   'siempre de dia, luminosa y clara, nunca nocturna ni sombria;',
   'si aparecen personas, secundarias, naturales y no posadas;',
+  'si la escena es conceptual o surrealista, manten el elemento imposible intacto y fotografialo con el mismo rigor documental que un encargo real;',
   'sin HDR agresivo, sin acabado plastico, sin render 3D, sin pintura digital, sin ilustracion, sin tipografia ni logotipos.',
 ].join(' ');
 

@@ -460,6 +460,7 @@ export async function POST(request: NextRequest) {
             }
 
             let normalizedPosts: ReturnType<typeof normalizeCalendarPosts> = [];
+            let bestPosts: ReturnType<typeof normalizeCalendarPosts> = [];
 
             for (let attempt = 0; attempt < 2; attempt++) {
               if (signal.aborted) { aborted = true; break; }
@@ -489,11 +490,26 @@ export async function POST(request: NextRequest) {
               }
 
               normalizedPosts = normalizeCalendarPosts(aiResponse.data.posts, expectedPosts);
+              if (normalizedPosts.length !== expectedPosts) {
+                const rawPosts = Array.isArray(aiResponse.data.posts) ? aiResponse.data.posts : [];
+                console.warn(
+                  `[generate-calendar] intento ${attempt + 1}: ${rawPosts.length} posts crudos → ` +
+                  `${normalizedPosts.length}/${expectedPosts} válidos · completion_tokens=${aiResponse.usage?.completion_tokens ?? '?'} · ` +
+                  `claves raíz=${Object.keys(aiResponse.data as object).join(',')}` +
+                  (rawPosts.length > 0
+                    ? ` · muestra post[0]=${JSON.stringify(rawPosts[0]).slice(0, 400)}`
+                    : '')
+                );
+              }
+              // El reintento a veces devuelve una respuesta "perezosa" con menos posts:
+              // nos quedamos siempre con el mejor intento, no con el último.
+              if (normalizedPosts.length > bestPosts.length) bestPosts = normalizedPosts;
               if (normalizedPosts.length === expectedPosts) break;
             }
 
             if (aborted) break;
 
+            normalizedPosts = bestPosts;
             const minAcceptable = Math.max(1, expectedPosts - Math.ceil(expectedPosts * 0.1));
             if (normalizedPosts.length < minAcceptable) {
               throw new Error(

@@ -48,6 +48,12 @@ export function isSellsPhysicalProductColumnError(error: { message?: string } | 
   return m.includes('sells_physical_product') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
 }
 
+/** PostgREST cuando la migración 031 (visual_creative_direction) no está aplicada. */
+export function isVisualCreativeDirectionColumnError(error: { message?: string } | null | undefined): boolean {
+  const m = (error?.message || '').toLowerCase();
+  return m.includes('visual_creative_direction') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
+}
+
 /** PostgREST cuando la migración 025 (physical_constraints) no está aplicada. */
 export function isPhysicalConstraintsColumnError(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) return false;

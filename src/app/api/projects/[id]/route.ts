@@ -10,6 +10,7 @@ import {
   isImageOrientationColumnError,
   isPhysicalConstraintsColumnError,
   isSellsPhysicalProductColumnError,
+  isVisualCreativeDirectionColumnError,
 } from '@/lib/supabase/project-queries';
 import type {
   ClientType,
@@ -17,6 +18,7 @@ import type {
   Complexity,
   ImageOrientation,
   PrimaryGoal,
+  VisualCreativeDirection,
   WeeklyFormatDistribution,
 } from '@/types';
 
@@ -25,6 +27,7 @@ const PRIMARY_GOALS: PrimaryGoal[] = ['ventas', 'leads', 'branding', 'viralidad'
 const COMMERCIAL_LEVELS: CommercialLevel[] = ['bajo', 'medio', 'alto'];
 const COMPLEXITY_LEVELS: Complexity[] = ['basico', 'medio', 'experto'];
 const IMAGE_ORIENTATIONS: ImageOrientation[] = ['vertical', 'cuadrado', 'horizontal'];
+const CREATIVE_DIRECTIONS: VisualCreativeDirection[] = ['literal', 'equilibrado', 'disruptivo'];
 
 type PatchBody = {
   client_type?: ClientType | null;
@@ -46,6 +49,8 @@ type PatchBody = {
   physical_constraints?: string | null;
   /** true = producto físico; false = servicio/agencia; null = auto (IA en estrategia) */
   sells_physical_product?: boolean | null;
+  /** Dirección creativa de imágenes IA: literal | equilibrado | disruptivo (null = literal) */
+  visual_creative_direction?: VisualCreativeDirection | null;
 };
 
 function clampIntTone(n: unknown): number | undefined {
@@ -212,6 +217,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
+    if (body.visual_creative_direction !== undefined) {
+      if (body.visual_creative_direction === null) {
+        update.visual_creative_direction = null;
+      } else if (CREATIVE_DIRECTIONS.includes(body.visual_creative_direction)) {
+        update.visual_creative_direction = body.visual_creative_direction;
+      } else {
+        return NextResponse.json(
+          { error: 'visual_creative_direction no válida (literal | equilibrado | disruptivo)' },
+          { status: 400 }
+        );
+      }
+    }
+
     if (body.physical_constraints !== undefined) {
       const service = createServiceSupabase();
       const referenceImages = await listProjectReferenceImages(service, id);
@@ -341,6 +359,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       warnings.push(
         'La orientación de imagen no se guardó (falta columna image_orientation — migración 022).'
+      );
+      payload = rest;
+      const retry = await supabase
+        .from('projects')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+      project = retry.data;
+      upErr = retry.error;
+    }
+
+    if (upErr && 'visual_creative_direction' in payload && isVisualCreativeDirectionColumnError(upErr)) {
+      const { visual_creative_direction: _drop, ...rest } = payload;
+      if (Object.keys(rest).length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Falta la columna visual_creative_direction. Ejecuta supabase/migrations/031_projects_visual_creative_direction.sql.',
+          },
+          { status: 503 }
+        );
+      }
+      warnings.push(
+        'La dirección creativa no se guardó (falta columna visual_creative_direction — migración 031).'
       );
       payload = rest;
       const retry = await supabase

@@ -26,6 +26,13 @@ export type UserRole = 'admin' | 'agency' | 'user';
 export type SubscriptionStatus = 'active' | 'cancelled' | 'expired' | 'trial';
 /** Orientación global de imágenes IA del proyecto (migración 022). */
 export type ImageOrientation = 'vertical' | 'cuadrado' | 'horizontal';
+/**
+ * Dirección creativa de las imágenes IA (migración 031):
+ * - literal     → escenas reales del negocio (comportamiento clásico).
+ * - equilibrado → mezcla de escenas reales y metáforas visuales.
+ * - disruptivo  → mayoría de imágenes conceptuales/surrealistas fotorrealistas.
+ */
+export type VisualCreativeDirection = 'literal' | 'equilibrado' | 'disruptivo';
 
 export type AIProvider = 'openai' | 'anthropic' | 'google';
 export type AgentKey = 'analyze_site' | 'analyze_competitors' | 'generate_strategy' | 'generate_calendar' | 'brand_recognition' | 'generate_visual_briefs' | 'visual_briefs_story' | 'visual_briefs_video' | 'visual_briefs_carousel' | 'visual_briefs_feed';
@@ -194,6 +201,11 @@ export interface Project {
    * null = aún no clasificado (p. ej. antes de generar estrategia).
    */
   sells_physical_product?: boolean | null;
+  /**
+   * Dirección creativa de las imágenes IA (migración 031).
+   * null = 'literal' (comportamiento clásico, sin metáforas visuales).
+   */
+  visual_creative_direction?: VisualCreativeDirection | null;
   status: ProjectStatus;
   onboarding_step: number;
   brand_colors: BrandColorEntry[];

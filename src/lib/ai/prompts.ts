@@ -4,7 +4,7 @@
 // Producto de Eskala Marketing Digital · https://www.eskaladigital.com/
 // ============================================================
 
-import type { Project, Competitor, ContentStyleWeights, WeeklyFormatDistribution } from '@/types';
+import type { Project, Competitor, ContentStyleWeights, VisualCreativeDirection, WeeklyFormatDistribution } from '@/types';
 import { getMonthName } from '@/lib/utils';
 import {
   buildReferenceGuidanceBlock,
@@ -294,6 +294,80 @@ export function buildPhysicalConstraintsBlock(project: Project): string {
     'Estas reglas las genera la app desde las fotos de producto; tienen prioridad sobre cualquier «Reglas IA» del cliente (piscina, atardecer, estilo viral, etc.). Esas ideas creativas solo pueden añadir escena o ambiente, NUNCA cambiar la forma del producto.',
     'Acabados, luz, color, hora, ángulo y tipo de plano son libres; la geometría espacial, las adyacencias entre zonas, la identidad de marca y los sujetos/objetos prohibidos NO. PROHIBIDO inventar adyacencias, distribuciones, logos, colores corporativos o sujetos que contradigan lo anterior.',
   ].join('\n');
+}
+
+/**
+ * Dirección creativa efectiva del proyecto.
+ * Si la columna explícita (migración 031) no está rellenada, se deriva del
+ * slider de Disrupción del tono (0 = disruptivo, 100 = conservador) para que
+ * el modo creativo funcione también en BD sin la migración aplicada.
+ */
+export function getVisualCreativeDirection(project: Project): VisualCreativeDirection {
+  if (project.visual_creative_direction) return project.visual_creative_direction;
+  const d = project.tone_disruption;
+  if (typeof d === 'number') {
+    if (d <= 20) return 'disruptivo';
+    if (d <= 40) return 'equilibrado';
+  }
+  return 'literal';
+}
+
+/** Lista de clichés de stock corporativo que matan un feed creativo. */
+const CORPORATE_STOCK_CLICHES =
+  'portátiles y pantallas con dashboards o gráficas, oficinas y salas de reuniones, apretones de manos, personas señalando pantallas o pizarras, escritorios con documentos y post-its, tazas de café junto al teclado, presentaciones con proyector, ejecutivos sonriendo a cámara';
+
+/**
+ * Bloque de dirección creativa para el CALENDARIO: gobierna cómo se conciben
+ * las escenas (`scene_summary`) de cada post. Devuelve '' en modo literal
+ * para no alterar el comportamiento clásico.
+ */
+export function buildCreativeDirectionCalendarBlock(project: Project): string {
+  const direction = getVisualCreativeDirection(project);
+  if (direction === 'literal') return '';
+
+  if (direction === 'disruptivo') {
+    return `
+═══════════════════════════════════════════
+DIRECCIÓN CREATIVA VISUAL: DISRUPTIVA (ley para TODOS los "scene_summary")
+═══════════════════════════════════════════
+Este proyecto NO quiere imágenes literales de su día a día: quiere un feed que pare el scroll con CONCEPTO. Piensa como una valla publicitaria premiada en Cannes, no como un banco de imágenes.
+
+- Al menos el 70% de las publicaciones deben construirse sobre una METÁFORA VISUAL del mensaje del post: una escena fotorrealista IMPOSIBLE o inesperada que traduzca la idea a imagen sin necesidad de texto. En los carruseles, la metáfora es el hilo conductor: el gancho la presenta y los slides la desarrollan (otros ángulos, detalles, consecuencias de esa escena imposible), sin abandonarla a mitad.
+- Recursos válidos (combínalos, no los repitas entre posts): animales fuera de contexto (un gorila esperando en la parada del bus, un flamenco entre un rebaño de ovejas grises), escalas alteradas (una persona diminuta ante un megáfono gigante), objetos en lugares imposibles (un escaparate precioso con la puerta tapiada de ladrillos, una puerta abierta en mitad del desierto), sustituciones absurdas, surrealismo cotidiano fotografiado como si fuera 100% real.
+- MÉTODO OBLIGATORIO: primero resume el mensaje del post en una frase; después elige la imagen imposible que cuenta ESA frase. Al final del scene_summary de cada post conceptual añade « || Metáfora: <mensaje> → <escena imposible elegida> ».
+- PROHIBIDO usar clichés de stock corporativo como escena (salvo que el post exija enseñar una interfaz o resultado real): ${CORPORATE_STOCK_CLICHES}.
+- Las escenas siguen siendo FOTORREALISTAS: fotografía real de una escena imposible, con luz y texturas creíbles. Nunca ilustración, render o collage.
+- El ~30% restante pueden ser escenas humanas reales, cercanas y con carácter (calle, comercio local, gente real en situaciones con tensión visual); nunca escenas de oficina genérica.
+- Las reglas de variedad entre slides y entre publicaciones siguen aplicando: cada metáfora del mes debe ser DISTINTA (animal distinto, recurso distinto, escenario distinto).`;
+  }
+
+  return `
+═══════════════════════════════════════════
+DIRECCIÓN CREATIVA VISUAL: EQUILIBRADA (aplícala a los "scene_summary")
+═══════════════════════════════════════════
+- Aproximadamente 1 de cada 3 publicaciones debe construirse sobre una METÁFORA VISUAL del mensaje: una escena fotorrealista inesperada o imposible que traduzca la idea a imagen (animales fuera de contexto, escalas alteradas, objetos en lugares imposibles). Al final del scene_summary de esos posts añade « || Metáfora: <mensaje> → <escena elegida> ».
+- El resto de publicaciones usan escenas reales del negocio o de sus clientes, pero con carácter: evita los clichés de stock corporativo (${CORPORATE_STOCK_CLICHES}) salvo que el post exija enseñar una interfaz o resultado real.
+- Todo sigue siendo FOTORREALISTA: fotografía real, nunca ilustración ni render.`;
+}
+
+/**
+ * Bloque de dirección creativa para los BRIEFS VISUALES: protege y amplifica
+ * las escenas conceptuales al redactar el visual_prompt. '' en modo literal.
+ */
+export function buildCreativeDirectionBriefBlock(project: Project): string {
+  const direction = getVisualCreativeDirection(project);
+  if (direction === 'literal') return '';
+
+  const shared = `## DIRECCIÓN CREATIVA VISUAL: ${direction === 'disruptivo' ? 'DISRUPTIVA' : 'EQUILIBRADA'}
+- Si la ficha o escena del calendario describe una METÁFORA VISUAL o una escena imposible (animal fuera de contexto, escala alterada, objeto donde no debería estar), RESPÉTALA Y AMPLIFÍCALA: no la racionalices, no la conviertas en una escena corporativa "segura", no elimines ni suavices el elemento imposible. El elemento surreal es el protagonista absoluto del encuadre.
+- Descríbela como FOTOGRAFÍA REAL de esa escena imposible: luz físicamente creíble, texturas y materiales reales, óptica fotográfica concreta. El rigor fotográfico es lo que hace creíble el concepto.
+- La imagen debe parar el scroll: un solo punto focal potente y una idea que se entienda en 1 segundo sin texto.`;
+
+  if (direction === 'disruptivo') {
+    return `${shared}
+- Si la escena que te llega del calendario es un cliché de stock corporativo (${CORPORATE_STOCK_CLICHES}), REINVÉNTALA como metáfora visual del mismo mensaje: conserva el formato, el papel narrativo del slide y el aspect ratio, pero sustituye la escena por una imagen conceptual fotorrealista coherente con el resto del post.`;
+  }
+  return shared;
 }
 
 // ============================================================
@@ -691,6 +765,11 @@ Cada post DEBE incluir un campo "production_specs" con detalles técnicos de pro
 - PUBLICACIÓN: { "media_type": "imagen", "scene_summary": "..." }
   - scene_summary: qué muestra la imagen del feed
 
+VARIEDAD DE EXPERIENCIAS DEL MES (aplica a TODOS los formatos y scene_summary):
+- El mes debe mostrar un ABANICO AMPLIO de experiencias, escenarios y protagonistas alrededor del producto/servicio, no la misma escena tipo repetida con pequeños cambios. Reparte entre los posts: distintos PROTAGONISTAS (pareja, familia con niños, grupo de amigos, persona sola, personas mayores, mascota…), distintos ESCENARIOS (naturaleza, costa, pueblo, CIUDAD y turismo cultural, interiores con vida, destinos lejanos si el producto lo permite…) y distintos PLANES o MOMENTOS (gastronomía, mercado, monumento, evento, ruta, trabajo real, descanso…), siempre coherentes con el negocio.
+- PROHIBIDO que más de 2 posts del mes compartan la misma combinación de protagonista + escenario (p. ej. "pareja en entorno natural" o "persona en interior"). Si al planificar detectas la repetición, cambia el protagonista o el escenario de uno de ellos.
+- Piensa el mes como un catálogo de vidas y situaciones posibles alrededor de la marca, no como variaciones de un único plan.
+${buildCreativeDirectionCalendarBlock(project)}
 FORMATO DE RESPUESTA JSON:
 {
   "month": "${month} ${year}",
@@ -1313,6 +1392,7 @@ export function buildSingleVisualPrompt(
 
   const brandBlock = `## IDENTIDAD DE MARCA\n${buildBrandContext(project)}`;
   const contextBlock = `## CONTEXTO DEL NEGOCIO\n${buildProjectContext(project, { includeAiRules: true })}`;
+  const creativeDirectionBlock = buildCreativeDirectionBriefBlock(project);
   const physicalConstraintsBlock = buildPhysicalConstraintsBlock(project);
   const physicalPriorityInstruction = physicalConstraintsBlock
     ? `\n- Las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES del inicio de este mensaje tienen PRIORIDAD ABSOLUTA sobre cualquier otra instrucción si entran en conflicto: no inventes geometría, adyacencias, logos ni sujetos prohibidos. Reformula la escena para cumplirlas sin perder el objetivo del slide.`
@@ -1422,7 +1502,7 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
     agentKey,
   };
 }
