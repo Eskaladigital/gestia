@@ -324,6 +324,15 @@ export function aspectClassForOrientation(
   return 'aspect-[2/3]';
 }
 
+/** Valor CSS de aspect-ratio (no depende de que Tailwind genere la clase). */
+export function aspectRatioForOrientation(
+  orientation: ImageOrientation | string | null | undefined
+): string {
+  if (orientation === 'cuadrado') return '1 / 1';
+  if (orientation === 'horizontal') return '3 / 2';
+  return '2 / 3';
+}
+
 export const IMAGE_ORIENTATION_LABELS: Record<ImageOrientation, { label: string; ratio: string; hint: string; icon: string }> = {
   vertical: {
     label: 'Vertical',

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Copy, Check, Download, ExternalLink, X } from 'lucide-react';
 import { cn, projectDashboardBasePath } from '@/lib/utils';
-import { aspectClassForOrientation } from '@/lib/ai/constants';
+import { aspectClassForOrientation, aspectRatioForOrientation } from '@/lib/ai/constants';
 import type { ImageGenerationStatus, ImageOrientation } from '@/types';
 
 const FORMAT_LABEL: Record<string, string> = {
@@ -252,34 +252,36 @@ export function AdminContentClient({
                 key={visual.id}
                 type="button"
                 onClick={() => setSelectedId(visual.id)}
-                className="group relative block w-full bg-white border-2 border-surface-900 text-left overflow-hidden shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                className="group relative flex w-full flex-col bg-white border-2 border-surface-900 text-left overflow-hidden shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
               >
-                {/* Área de imagen con altura fija por aspect-ratio: idéntica haya foto, placeholder o error */}
-                <div
-                  className={cn(
-                    'relative w-full bg-surface-100 overflow-hidden',
-                    aspectClassForOrientation(visual.orientation),
-                  )}
-                >
-                  {visual.displayUrl ? (
-                    <img
-                      src={visual.displayUrl}
-                      alt={visual.label || visual.projectName}
-                      className={cn(
-                        'absolute inset-0 w-full h-full object-cover',
-                        visual.flipHorizontal && '-scale-x-100',
-                      )}
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.style.visibility = 'hidden';
-                      }}
-                    />
-                  ) : (
-                    <span className="absolute inset-0 flex items-center justify-center px-2 text-[10px] font-bold uppercase tracking-wider text-surface-400 text-center">
-                      {STATUS_LABEL[visual.imageStatus]}
-                    </span>
-                  )}
-                </div>
+                {/* Imagen en flujo (no absolute): el <button> de Chrome colapsa el aspect-ratio si el hijo no tiene altura intrínseca */}
+                {visual.displayUrl ? (
+                  <img
+                    src={visual.displayUrl}
+                    alt={visual.label || visual.projectName}
+                    className={cn(
+                      'w-full object-cover bg-surface-100',
+                      aspectClassForOrientation(visual.orientation),
+                      visual.flipHorizontal && '-scale-x-100',
+                    )}
+                    style={{ aspectRatio: aspectRatioForOrientation(visual.orientation) }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = 'hidden';
+                    }}
+                  />
+                ) : (
+                  <span
+                    className={cn(
+                      'flex w-full items-center justify-center bg-surface-100 px-2 text-[10px] font-bold uppercase tracking-wider text-surface-400 text-center',
+                      aspectClassForOrientation(visual.orientation),
+                    )}
+                    style={{ aspectRatio: aspectRatioForOrientation(visual.orientation) }}
+                  >
+                    {STATUS_LABEL[visual.imageStatus]}
+                  </span>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between gap-1">
                   <span className="text-[9px] font-bold uppercase tracking-wider bg-surface-900/85 text-white px-1.5 py-0.5 line-clamp-1">
@@ -332,6 +334,7 @@ export function AdminContentClient({
                     'max-w-full max-h-[48vh] lg:max-h-[88vh] object-contain',
                     selected.flipHorizontal && '-scale-x-100',
                   )}
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <p className="text-white/70 text-sm font-medium px-6 text-center">
