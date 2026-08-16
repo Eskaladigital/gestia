@@ -10,7 +10,7 @@ import {
   IMAGE_ORCHESTRATOR_MODEL,
   IMAGE_ORCHESTRATOR_REASONING_EFFORT,
   IMAGE_PROMPT_REFINER_MODEL,
-  resolveImageSize,
+  resolveImageSizeForFormat,
 } from '@/lib/ai/constants';
 import {
   assessProductFidelity,
@@ -327,14 +327,14 @@ export async function POST(request: NextRequest) {
   const VISUAL_SELECT_WITH_ORIENTATION = `
       *,
       content_items!inner(
-        id, project_id,
+        id, project_id, format,
         projects!inner( id, user_id, image_orientation )
       )
     `;
   const VISUAL_SELECT_LEGACY = `
       *,
       content_items!inner(
-        id, project_id,
+        id, project_id, format,
         projects!inner( id, user_id )
       )
     `;
@@ -371,7 +371,10 @@ export async function POST(request: NextRequest) {
 
   const projectOrientation: ImageOrientation =
     (project.image_orientation as ImageOrientation | undefined) || DEFAULT_IMAGE_ORIENTATION;
-  const imageSize = resolveImageSize(projectOrientation);
+  // Tamaño según orientación Y formato: feed/carrusel 4:5 (rango válido de
+  // Instagram: 4:5 a 1,91:1), story/reel 9:16 fullscreen.
+  const contentFormat: string | null = (visual as any).content_items?.format ?? null;
+  const imageSize = resolveImageSizeForFormat(projectOrientation, contentFormat);
 
   if (!visual.visual_prompt || visual.visual_prompt.trim().length < MIN_PROMPT_LENGTH) {
     return NextResponse.json(

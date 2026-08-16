@@ -273,16 +273,20 @@ export const VIDEO_GENERATION_ESTIMATED_COST_USD = 1.2;
  * arbitrarias (múltiplos de 16, ratio ≤ 3:1, ≤ 2560x1440 px totales sin ser
  * "experimental"), tanto en `images.generate`/`images.edit` como en el tool
  * `image_generation` de la Responses API. Usamos ~1.5x la resolución clásica
- * (1024) manteniendo los ratios 2:3, 1:1 y 3:2: más nitidez tras el reescalado
- * de Instagram (que sirve a 1080px) sin disparar coste ni latencia.
+ * (1024) con ratios nativos de Instagram (4:5, 1:1, 3:2 y 9:16): más nitidez
+ * tras el reescalado de Instagram (que sirve a 1080px) sin disparar coste ni
+ * latencia. Los tamaños 2:3 (1248x1872) quedan como legacy: Instagram feed los
+ * rechaza (solo admite de 4:5 a 1,91:1).
  */
 export type OpenAIImageSize =
   | '1248x1248'
   | '1248x1872'
-  | '1872x1248';
+  | '1872x1248'
+  | '1280x1600'
+  | '1152x2048';
 
-/** Tamaño legacy / fallback. Usa `resolveImageSize(orientation)` para nuevas llamadas. */
-export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1248x1872';
+/** Tamaño legacy / fallback. Usa `resolveImageSizeForFormat(orientation, format)` para nuevas llamadas. */
+export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1280x1600';
 export const IMAGE_GENERATION_QUALITY = 'high';
 export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.25;
 
@@ -291,21 +295,44 @@ export const DEFAULT_IMAGE_ORIENTATION: ImageOrientation = 'vertical';
 
 /**
  * Tamaños según orientación (resolución premium de gpt-image-2).
- * - vertical   → 2:3 (móvil, Stories, Reels, TikTok)
+ * - vertical   → 4:5 (retrato de feed Instagram; el máximo vertical que acepta el feed)
  * - cuadrado   → 1:1 (feed clásico Instagram, LinkedIn)
- * - horizontal → 3:2 (web, blog, LinkedIn artículo)
+ * - horizontal → 3:2 (web, blog, LinkedIn artículo; dentro del rango 4:5–1,91:1 del feed)
+ *
+ * IMPORTANTE: Instagram feed solo admite entre 4:5 y 1,91:1. El antiguo 2:3
+ * (1248x1872) era rechazado al publicar. Stories/Reels van aparte con 9:16
+ * vía `resolveImageSizeForFormat`.
  */
 export const IMAGE_SIZE_BY_ORIENTATION: Record<ImageOrientation, OpenAIImageSize> = {
-  vertical: '1248x1872',
+  vertical: '1280x1600',
   cuadrado: '1248x1248',
   horizontal: '1872x1248',
 };
+
+/** 9:16 exacto en múltiplos de 16 — Stories, Reels y TikTok fullscreen. */
+export const IMAGE_SIZE_STORY_FULLSCREEN: OpenAIImageSize = '1152x2048';
 
 export function resolveImageSize(orientation: ImageOrientation | string | null | undefined): OpenAIImageSize {
   if (orientation === 'vertical' || orientation === 'cuadrado' || orientation === 'horizontal') {
     return IMAGE_SIZE_BY_ORIENTATION[orientation];
   }
   return IMAGE_SIZE_BY_ORIENTATION[DEFAULT_IMAGE_ORIENTATION];
+}
+
+/**
+ * Tamaño real de generación según orientación del proyecto Y formato del post,
+ * en línea con los prompts visuales (story/reel → 9:16, publicación/carrusel → 4:5).
+ * Con orientación cuadrada u horizontal el formato no altera el tamaño.
+ */
+export function resolveImageSizeForFormat(
+  orientation: ImageOrientation | string | null | undefined,
+  format: string | null | undefined,
+): OpenAIImageSize {
+  if (orientation === 'cuadrado' || orientation === 'horizontal') {
+    return IMAGE_SIZE_BY_ORIENTATION[orientation];
+  }
+  if (format === 'story' || format === 'reel') return IMAGE_SIZE_STORY_FULLSCREEN;
+  return resolveImageSize(orientation);
 }
 
 /**
@@ -336,8 +363,8 @@ export function aspectRatioForOrientation(
 export const IMAGE_ORIENTATION_LABELS: Record<ImageOrientation, { label: string; ratio: string; hint: string; icon: string }> = {
   vertical: {
     label: 'Vertical',
-    ratio: '9:16',
-    hint: 'Instagram Stories, Reels, TikTok, móvil',
+    ratio: '4:5 · 9:16',
+    hint: 'Feed/carrusel 4:5 · Stories/Reels 9:16',
     icon: '📱',
   },
   cuadrado: {
