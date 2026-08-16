@@ -244,7 +244,7 @@ export function AdminContentClient({
           </p>
         </div>
       ) : (
-        <div className={cn('grid gap-2', GRID[density])}>
+        <div className={cn('grid gap-2 items-start', GRID[density])}>
           {filtered.map((visual) => {
             const fmtLabel = visual.format ? FORMAT_LABEL[visual.format] : null;
             return (
@@ -252,31 +252,34 @@ export function AdminContentClient({
                 key={visual.id}
                 type="button"
                 onClick={() => setSelectedId(visual.id)}
-                className="group relative bg-white border-2 border-surface-900 text-left overflow-hidden shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                className="group relative block w-full bg-white border-2 border-surface-900 text-left overflow-hidden shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
               >
-                {visual.displayUrl ? (
-                  <img
-                    src={visual.displayUrl}
-                    alt={visual.label || visual.projectName}
-                    className={cn(
-                      'w-full object-cover bg-surface-100',
-                      aspectClassForOrientation(visual.orientation),
-                      visual.flipHorizontal && '-scale-x-100',
-                    )}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div
-                    className={cn(
-                      'w-full bg-surface-100 flex items-center justify-center px-2',
-                      aspectClassForOrientation(visual.orientation),
-                    )}
-                  >
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-surface-400 text-center">
+                {/* Área de imagen con altura fija por aspect-ratio: idéntica haya foto, placeholder o error */}
+                <div
+                  className={cn(
+                    'relative w-full bg-surface-100 overflow-hidden',
+                    aspectClassForOrientation(visual.orientation),
+                  )}
+                >
+                  {visual.displayUrl ? (
+                    <img
+                      src={visual.displayUrl}
+                      alt={visual.label || visual.projectName}
+                      className={cn(
+                        'absolute inset-0 w-full h-full object-cover',
+                        visual.flipHorizontal && '-scale-x-100',
+                      )}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.visibility = 'hidden';
+                      }}
+                    />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center px-2 text-[10px] font-bold uppercase tracking-wider text-surface-400 text-center">
                       {STATUS_LABEL[visual.imageStatus]}
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between gap-1">
                   <span className="text-[9px] font-bold uppercase tracking-wider bg-surface-900/85 text-white px-1.5 py-0.5 line-clamp-1">
