@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 const items = [
   { label: 'Panel', href: '/administrator/dashboard' },
   { label: 'Proyectos', href: '/administrator/projects' },
+  { label: 'Contenido', href: '/administrator/content' },
   { label: 'Usuarios', href: '/administrator/users' },
   { label: 'Config IA', href: '/settings/ai' },
 ] as const;

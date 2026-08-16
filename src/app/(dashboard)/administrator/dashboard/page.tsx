@@ -45,7 +45,7 @@ export default async function AdministratorDashboardPage() {
   const stats = [
     { label: 'Proyectos activos', value: projectCount ?? 0, href: '/administrator/projects', tag: 'Projects' },
     { label: 'Usuarios', value: userCount ?? 0, href: '/administrator/users', tag: 'Users' },
-    { label: 'Posts generados', value: contentCount ?? 0, href: '#', tag: 'Content' },
+    { label: 'Posts generados', value: contentCount ?? 0, href: '/administrator/content', tag: 'Content' },
     { label: 'Planes activos', value: plans?.length ?? 0, href: '/administrator/users', tag: 'Plans' },
     { label: 'Suscripciones', value: activeSubCount, href: '/administrator/users', tag: 'Subs' },
     { label: 'Proveedores IA', value: connectedProviders, href: '/settings/ai', tag: 'AI' },
@@ -168,6 +168,12 @@ export default async function AdministratorDashboardPage() {
               Ver todos los proyectos
             </Link>
             {' — '}propietario, estado y enlace a la ficha
+          </li>
+          <li>
+            <Link href="/administrator/content" className="text-red-700 font-bold hover:underline">
+              Muro de contenido
+            </Link>
+            {' — '}todas las fotos IA generadas en los proyectos
           </li>
           <li>
             <Link href="/administrator/users" className="text-red-700 font-bold hover:underline">
