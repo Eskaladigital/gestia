@@ -71,7 +71,7 @@ const VISUALS_SELECT = `
 
 const VISUALS_PAGE_SIZE = 500;
 
-/** PostgREST limita filas por petición; paginamos hasta traer todo el historial. */
+/** Solo imágenes ya generadas con URL (el muro no muestra pendientes ni en cola). */
 async function fetchAllContentVisuals(
   service: ReturnType<typeof createServiceSupabase>,
 ): Promise<{ rows: VisualRow[]; error: Error | null }> {
@@ -82,6 +82,8 @@ async function fetchAllContentVisuals(
     const { data, error } = await service
       .from('content_item_visuals')
       .select(VISUALS_SELECT)
+      .eq('image_status', 'ready')
+      .or('image_url.not.is.null,edited_image_url.not.is.null')
       .order('created_at', { ascending: false })
       .range(from, from + VISUALS_PAGE_SIZE - 1);
 
@@ -100,7 +102,11 @@ export default async function AdministratorContentPage() {
 
   const [{ rows, error }, { count }] = await Promise.all([
     fetchAllContentVisuals(service),
-    service.from('content_item_visuals').select('id', { count: 'exact', head: true }),
+    service
+      .from('content_item_visuals')
+      .select('id', { count: 'exact', head: true })
+      .eq('image_status', 'ready')
+      .or('image_url.not.is.null,edited_image_url.not.is.null'),
   ]);
 
   if (error && process.env.NODE_ENV === 'development') {
@@ -137,9 +143,7 @@ export default async function AdministratorContentPage() {
         idea: item.idea ?? '',
       } satisfies AdminContentVisual;
     })
-    .filter((row): row is AdminContentVisual => row !== null);
-
-  const readyCount = visuals.filter((v) => v.displayUrl && v.imageStatus === 'ready').length;
+    .filter((row): row is AdminContentVisual => row !== null && !!row.displayUrl);
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -148,7 +152,7 @@ export default async function AdministratorContentPage() {
           Contenido
         </h1>
         <p className="text-surface-500 mt-2 text-sm font-medium">
-          Muro de todas las imágenes IA de la plataforma · {readyCount} listas · {visuals.length} visuals
+          Muro de imágenes IA ya generadas · {visuals.length} en total
           {count != null && count > visuals.length ? ` (cargadas ${visuals.length} de ${count})` : ''}
         </p>
       </div>

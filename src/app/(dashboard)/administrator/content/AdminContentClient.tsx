@@ -38,7 +38,6 @@ export type AdminContentVisual = {
   idea: string;
 };
 
-type StatusFilter = 'all' | 'ready' | 'generating' | 'pending' | 'error';
 type GridDensity = 'large' | 'medium' | 'small';
 
 const GRID: Record<GridDensity, string> = {
@@ -80,7 +79,6 @@ export function AdminContentClient({
 }) {
   const [search, setSearch] = useState('');
   const [projectId, setProjectId] = useState('all');
-  const [status, setStatus] = useState<StatusFilter>('all');
   const [density, setDensity] = useState<GridDensity>('medium');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -102,8 +100,6 @@ export function AdminContentClient({
     const q = search.trim().toLowerCase();
     return visuals.filter((v) => {
       if (projectId !== 'all' && v.projectId !== projectId) return false;
-      if (status !== 'all' && v.imageStatus !== status) return false;
-      if (status === 'ready' && !v.displayUrl) return false;
       if (!q) return true;
       return (
         v.projectName.toLowerCase().includes(q) ||
@@ -113,7 +109,7 @@ export function AdminContentClient({
         (v.format ?? '').toLowerCase().includes(q)
       );
     });
-  }, [visuals, projectId, status, search]);
+  }, [visuals, projectId, search]);
 
   const selected = useMemo(
     () => filtered.find((v) => v.id === selectedId) ?? visuals.find((v) => v.id === selectedId) ?? null,
@@ -145,20 +141,6 @@ export function AdminContentClient({
       /* ignore */
     }
   }
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<StatusFilter, number> = {
-      all: visuals.length,
-      ready: 0,
-      generating: 0,
-      pending: 0,
-      error: 0,
-    };
-    for (const v of visuals) {
-      counts[v.imageStatus] += 1;
-    }
-    return counts;
-  }, [visuals]);
 
   return (
     <>
@@ -193,23 +175,6 @@ export function AdminContentClient({
               ))}
             </select>
           </label>
-          <div className="flex flex-wrap gap-1.5">
-            {(['all', 'ready', 'generating', 'pending', 'error'] as const).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setStatus(key)}
-                className={cn(
-                  'px-3 py-2 text-[10px] font-bold uppercase tracking-wider border-2 transition-colors',
-                  status === key
-                    ? 'bg-red-600 text-white border-red-600'
-                    : 'border-surface-900 text-surface-700 hover:bg-red-50',
-                )}
-              >
-                {key === 'all' ? 'Todas' : STATUS_LABEL[key]} {statusCounts[key]}
-              </button>
-            ))}
-          </div>
           <div className="flex gap-1.5">
             {(['large', 'medium', 'small'] as const).map((key) => (
               <button
@@ -230,8 +195,8 @@ export function AdminContentClient({
           </div>
         </div>
         <p className="mt-3 text-xs text-surface-500 font-medium">
-          {filtered.length} en el muro
-          {totalCount > visuals.length ? ` · historial en base de datos: ${totalCount} (cargadas ${visuals.length})` : ` · ${visuals.length} en total`}
+          {filtered.length} imágenes generadas
+          {totalCount > visuals.length ? ` · cargadas ${visuals.length} de ${totalCount}` : ''}
         </p>
       </div>
 
@@ -239,8 +204,8 @@ export function AdminContentClient({
         <div className="bg-white border-2 border-dashed border-surface-900 p-12 text-center">
           <p className="text-sm text-surface-500 font-medium">
             {visuals.length === 0
-              ? 'Aún no hay visuals generados en la plataforma.'
-              : 'Ninguna imagen coincide con los filtros.'}
+              ? 'Aún no hay imágenes generadas en la plataforma.'
+              : 'Ninguna imagen coincide con la búsqueda o el proyecto seleccionado.'}
           </p>
         </div>
       ) : (
