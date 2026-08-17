@@ -40,44 +40,66 @@ function unwrap<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
+const VISUALS_SELECT = `
+  id,
+  content_item_id,
+  visual_index,
+  label,
+  visual_prompt,
+  image_url,
+  edited_image_url,
+  image_status,
+  image_error,
+  image_flip_horizontal,
+  video_url,
+  video_status,
+  created_at,
+  content_items!inner (
+    id,
+    project_id,
+    scheduled_date,
+    format,
+    idea,
+    projects!inner (
+      id,
+      name,
+      deleted_at,
+      image_orientation
+    )
+  )
+`;
+
+const VISUALS_PAGE_SIZE = 500;
+
+/** PostgREST limita filas por petición; paginamos hasta traer todo el historial. */
+async function fetchAllContentVisuals(
+  service: ReturnType<typeof createServiceSupabase>,
+): Promise<{ rows: VisualRow[]; error: Error | null }> {
+  const rows: VisualRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await service
+      .from('content_item_visuals')
+      .select(VISUALS_SELECT)
+      .order('created_at', { ascending: false })
+      .range(from, from + VISUALS_PAGE_SIZE - 1);
+
+    if (error) return { rows, error: new Error(error.message) };
+    const batch = (data ?? []) as VisualRow[];
+    rows.push(...batch);
+    if (batch.length < VISUALS_PAGE_SIZE) break;
+    from += VISUALS_PAGE_SIZE;
+  }
+
+  return { rows, error: null };
+}
+
 export default async function AdministratorContentPage() {
   const service = createServiceSupabase();
 
-  const [{ data, error }, { count }] = await Promise.all([
-    service
-      .from('content_item_visuals')
-      .select(
-        `
-        id,
-        content_item_id,
-        visual_index,
-        label,
-        visual_prompt,
-        image_url,
-        edited_image_url,
-        image_status,
-        image_error,
-        image_flip_horizontal,
-        video_url,
-        video_status,
-        created_at,
-        content_items!inner (
-          id,
-          project_id,
-          scheduled_date,
-          format,
-          idea,
-          projects!inner (
-            id,
-            name,
-            deleted_at,
-            image_orientation
-          )
-        )
-      `,
-      )
-      .order('created_at', { ascending: false })
-      .limit(400),
+  const [{ rows, error }, { count }] = await Promise.all([
+    fetchAllContentVisuals(service),
     service.from('content_item_visuals').select('id', { count: 'exact', head: true }),
   ]);
 
@@ -85,7 +107,7 @@ export default async function AdministratorContentPage() {
     console.warn('[administrator/content]', error.message);
   }
 
-  const visuals: AdminContentVisual[] = ((data ?? []) as VisualRow[])
+  const visuals: AdminContentVisual[] = rows
     .map((row) => {
       const item = unwrap(row.content_items);
       const project = unwrap(item?.projects);
@@ -126,8 +148,8 @@ export default async function AdministratorContentPage() {
           Contenido
         </h1>
         <p className="text-surface-500 mt-2 text-sm font-medium">
-          Muro de todas las imágenes IA de la plataforma · {readyCount} listas
-          {(count ?? 0) > visuals.length ? ` · mostrando las ${visuals.length} más recientes de ${count}` : ` · ${visuals.length} visuals`}
+          Muro de todas las imágenes IA de la plataforma · {readyCount} listas · {visuals.length} visuals
+          {count != null && count > visuals.length ? ` (cargadas ${visuals.length} de ${count})` : ''}
         </p>
       </div>
       <AdminContentClient visuals={visuals} totalCount={count ?? visuals.length} />

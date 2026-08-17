@@ -80,7 +80,7 @@ export function AdminContentClient({
 }) {
   const [search, setSearch] = useState('');
   const [projectId, setProjectId] = useState('all');
-  const [status, setStatus] = useState<StatusFilter>('ready');
+  const [status, setStatus] = useState<StatusFilter>('all');
   const [density, setDensity] = useState<GridDensity>('medium');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -194,7 +194,7 @@ export function AdminContentClient({
             </select>
           </label>
           <div className="flex flex-wrap gap-1.5">
-            {(['ready', 'all', 'generating', 'pending', 'error'] as const).map((key) => (
+            {(['all', 'ready', 'generating', 'pending', 'error'] as const).map((key) => (
               <button
                 key={key}
                 type="button"
@@ -231,7 +231,7 @@ export function AdminContentClient({
         </div>
         <p className="mt-3 text-xs text-surface-500 font-medium">
           {filtered.length} en el muro
-          {totalCount > visuals.length ? ` · historial completo: ${totalCount}` : ''}
+          {totalCount > visuals.length ? ` · historial en base de datos: ${totalCount} (cargadas ${visuals.length})` : ` · ${visuals.length} en total`}
         </p>
       </div>
 
