@@ -51,6 +51,7 @@ REGLAS ESTRICTAS:
 - SI puedes: mejorar la descripcion de la luz para que suene a luz natural real, sustituir adjetivos vagos por materiales o texturas concretas, añadir detalles de camara (tipo de plano, profundidad de campo) si no los tiene, y rebajar frases de ACABADO artificial (HDR, render, plastico, "poster de IA") sin tocar NUNCA el contenido conceptual de la escena.
 - Si el prompt menciona personas, mantenlas pero asegurate de que la descripcion las presente naturales y no posadas.
 - Si hay indicaciones de video (frame rate, travelling, motion blur), respetalas pero adaptalas para que funcionen como fotograma fijo: describe el instante congelado, no la secuencia.
+- Si el prompt pide estetica UGC (contenido generado por usuarios, foto espontanea de movil), CONSERVA esa estetica y la mencion "estilo UGC": NO la profesionalices, no anadas lenguaje de camara profesional, shooting ni composicion editorial; manten el aspecto espontaneo, casero e imperfecto de una foto real de smartphone.
 - Quita referencias a logotipos, marcas o texto visible que el modelo de imagen no puede renderizar bien.
 
 FORMATO DE SALIDA:
@@ -67,6 +68,22 @@ const IMAGE_REALISM_TAIL = [
   'si aparecen personas, secundarias, naturales y no posadas;',
   'si la escena es conceptual o surrealista, manten el elemento imposible intacto y fotografialo con el mismo rigor documental que un encargo real;',
   'sin HDR agresivo, sin acabado plastico, sin render 3D, sin pintura digital, sin ilustracion, sin tipografia ni logotipos.',
+].join(' ');
+
+/** Detecta si el brief pide expresamente estetica UGC (se inyecta desde las ai_rules del proyecto). */
+const UGC_STYLE_REGEX = /\bUGC\b|contenido generado por (el |los )?usuari/i;
+
+/** Cola alternativa para modo UGC: foto de movil espontanea, no encargo fotografico profesional. */
+const IMAGE_UGC_TAIL = [
+  'Tomada como una foto real de smartphone hecha por un viajero normal, no por un fotografo:',
+  'camara de movil actual, encuadre espontaneo y ligeramente imperfecto (horizonte no perfectamente recto, sujeto no perfectamente centrado),',
+  'luz existente sin modificar (sol duro con sombras reales, interiores con luz mezclada, flash directo de movil si es de noche),',
+  'colores naturales de camara de movil, ligero ruido digital en las sombras, profundidad de campo amplia tipica de movil,',
+  'personas naturales capturadas en mitad de la accion, sin posar ni mirar a camara salvo en un selfie evidente;',
+  'respeta el TIPO DE PLANO, la ESCALA, la HORA y la CALIDAD DE LUZ que describe la escena;',
+  'nada de iluminacion de estudio, nada de composicion editorial perfecta, nada de aspecto de campana publicitaria o poster,',
+  'sin HDR agresivo, sin acabado plastico, sin render 3D, sin ilustracion, sin tipografia ni logotipos.',
+  'Debe parecer una foto autentica que un cliente real subiria a Instagram desde su movil.',
 ].join(' ');
 
 const MAX_PROMPT_LENGTH = 4000;
@@ -243,7 +260,12 @@ async function buildFinalPrompt(
     prompt = cleaned;
   }
 
-  if (!/fotograf[íi]a\s+hiperrealista/i.test(prompt)) {
+  const isUgc = UGC_STYLE_REGEX.test(cleaned) || UGC_STYLE_REGEX.test(prompt);
+  if (isUgc) {
+    if (!/foto(graf[íi]a)?\s/i.test(prompt)) {
+      prompt = `Foto espontanea de smartphone, estilo UGC, de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
+    }
+  } else if (!/fotograf[íi]a\s+hiperrealista/i.test(prompt)) {
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
   }
 
@@ -252,7 +274,7 @@ async function buildFinalPrompt(
 
   const physSource = productFidelityMode ? physicalConstraints : null;
   let phys = shrinkPhysicalSuffixForApi(physicalConstraintsSuffix(physSource));
-  const tail = `\n\n${IMAGE_REALISM_TAIL}`;
+  const tail = `\n\n${isUgc ? IMAGE_UGC_TAIL : IMAGE_REALISM_TAIL}`;
   let roomForCore = MAX_PROMPT_LENGTH - phys.length - tail.length;
   if (roomForCore < MIN_PROMPT_LENGTH) {
     const need = MIN_PROMPT_LENGTH - roomForCore + 80;
