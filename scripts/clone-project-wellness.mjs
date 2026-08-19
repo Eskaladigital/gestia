@@ -138,6 +138,7 @@ const BASE_OVERRIDES = {
   physical_constraints: null,
   physical_constraints_at: null,
   url: null,
+  image_aesthetic: 'lifestyle',
 };
 
 // --- Perfil "yoga" (SOLO yoga) --------------------------------------------
@@ -177,9 +178,9 @@ REPARTO DE PILARES (100%):
 
 REGLAS DE ESTILO Y VOZ:
 - Tono cercano, motivador y práctico, sin sermones ni lenguaje de oferta.
-- Imágenes de lifestyle real (luz natural, comida real, naturaleza, personas en su día a día). Presencia humana media.
-- PROHIBIDO parecer catálogo o escaparate. Promoción solo en CTA suave.
-- Variedad de planos, escenas y momentos del día; evita repetir siempre la misma composición.`;
+- PROHIBIDO parecer catálogo, escaparate o revista wellness. Promoción solo en CTA suave.
+- Variedad de planos, escenas y momentos del día; evita repetir siempre la misma composición.
+- PROHIBIDO en copy e imagen: técnica de yoga (asanas, esterilla, namaste), meditación/mindfulness como técnica, ayurveda, loto, incienso de spa.`;
 
 // --- Perfil "mindfulness" (SOLO mindfulness/meditación) -------------------
 

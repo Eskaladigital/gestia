@@ -78,8 +78,21 @@ const IMAGE_REALISM_TAIL = [
 
 const UGC_STYLE_REGEX = /\bUGC\b|contenido generado por (el |los )?usuari/i;
 
+const IMAGE_LIFESTYLE_TAIL = [
+  'Tomada como fotografia lifestyle profesional y calida, no como foto de smartphone ni como campana de spa:',
+  'camara full frame con optica 35-50mm, composicion intencionada pero natural,',
+  'luz natural bella (ventana suave, golden hour, interior calido bien expuesto), color rico y equilibrio realista,',
+  'hogares y calles vividos que apetece mirar: desorden honesto, nunca suciedad ni recorte casual de movil,',
+  'personas naturales, no posadas de catalogo; grano minimo de pelicula, no ruido digital de telefono;',
+  'respeta el TIPO DE PLANO, la ESCALA, la HORA y la CALIDAD DE LUZ que describe la escena;',
+  'nada de encuadre torcido de smartphone, nada de flash de movil, nada de plato sucio junto al monitor,',
+  'nada de yoga, esterilla, meditacion ni interior de spa de revista;',
+  'sin HDR agresivo, sin acabado plastico, sin render 3D, sin ilustracion, sin tipografia ni logotipos.',
+  'Debe parecer una foto de revista lenta que inspira, no el carrete de un martes cualquiera.',
+].join(' ');
+
 const IMAGE_UGC_TAIL = [
-  'Tomada como una foto real de smartphone hecha por un viajero normal, no por un fotografo:',
+  'Tomada como una foto real de smartphone hecha por una persona normal en su dia a dia, no por un fotografo:',
   'camara de movil actual, encuadre espontaneo y ligeramente imperfecto (horizonte no perfectamente recto, sujeto no perfectamente centrado),',
   'luz existente sin modificar (sol duro con sombras reales, interiores con luz mezclada, flash directo de movil si es de noche),',
   'colores naturales de camara de movil, ligero ruido digital en las sombras, profundidad de campo amplia tipica de movil,',
@@ -165,8 +178,22 @@ function appendReferenceHandlingInstructions(prompt, referenceCount) {
 Si hay imágenes de referencia del producto, úsalas para respetar forma, proporciones, acabados, colores y rasgos distintivos del producto real, pero NO copies necesariamente el mismo ángulo, la misma altura de cámara, la misma distancia ni el mismo encuadre de esas referencias. La composición final debe obedecer a la escena descrita en este prompt y mantener variedad de planos entre piezas del proyecto.`;
 }
 
-async function buildFinalPrompt(openai, rawPrompt, referenceCount = 0) {
+function resolveImageAesthetic(projectAesthetic, promptText) {
+  if (projectAesthetic === 'ugc' || projectAesthetic === 'lifestyle' || projectAesthetic === 'profesional') {
+    return projectAesthetic;
+  }
+  return UGC_STYLE_REGEX.test(promptText) ? 'ugc' : 'profesional';
+}
+
+function aestheticTail(aesthetic) {
+  if (aesthetic === 'ugc') return IMAGE_UGC_TAIL;
+  if (aesthetic === 'lifestyle') return IMAGE_LIFESTYLE_TAIL;
+  return IMAGE_REALISM_TAIL;
+}
+
+async function buildFinalPrompt(openai, rawPrompt, referenceCount = 0, projectAesthetic = null) {
   const cleaned = cleanPrompt(rawPrompt);
+  const aesthetic = resolveImageAesthetic(projectAesthetic, cleaned);
 
   let prompt;
   try {
@@ -185,16 +212,19 @@ async function buildFinalPrompt(openai, rawPrompt, referenceCount = 0) {
     prompt = cleaned;
   }
 
-  const isUgc = UGC_STYLE_REGEX.test(cleaned) || UGC_STYLE_REGEX.test(prompt);
-  if (isUgc) {
+  if (aesthetic === 'ugc') {
     if (!/foto(graf[íi]a)?\s/i.test(prompt)) {
       prompt = `Foto espontanea de smartphone, estilo UGC, de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
+    }
+  } else if (aesthetic === 'lifestyle') {
+    if (!/fotograf[íi]a\s/i.test(prompt)) {
+      prompt = `Fotografia lifestyle calida y profesional de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
     }
   } else if (!/fotograf[íi]a\s+hiperrealista/i.test(prompt)) {
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
   }
 
-  prompt = `${appendReferenceHandlingInstructions(prompt, referenceCount)}\n\n${isUgc ? IMAGE_UGC_TAIL : IMAGE_REALISM_TAIL}`;
+  prompt = `${appendReferenceHandlingInstructions(prompt, referenceCount)}\n\n${aestheticTail(aesthetic)}`;
 
   if (prompt.length > MAX_PROMPT_LENGTH) prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
   if (prompt.length < MIN_PROMPT_LENGTH) {
@@ -221,7 +251,7 @@ async function resolveProject(supabase, projectId, projectName) {
   if (projectId) {
     const { data, error } = await supabase
       .from('projects')
-      .select('id, name, user_id')
+      .select('id, name, user_id, image_aesthetic')
       .eq('id', projectId)
       .maybeSingle();
     if (error) throw new Error(`Error buscando proyecto por id: ${error.message}`);
@@ -231,7 +261,7 @@ async function resolveProject(supabase, projectId, projectName) {
 
   const { data, error } = await supabase
     .from('projects')
-    .select('id, name, user_id')
+    .select('id, name, user_id, image_aesthetic')
     .ilike('name', `%${projectName}%`)
     .order('created_at', { ascending: false });
 
@@ -479,10 +509,15 @@ async function saveError(supabase, visualId, message) {
   }
 }
 
-async function generateOneImage({ supabase, openai, projectId, visual, referenceImages, debug = false, dumpDir = null }) {
+async function generateOneImage({ supabase, openai, projectId, visual, referenceImages, debug = false, dumpDir = null, imageAesthetic = null }) {
   await markGenerating(supabase, visual.id);
 
-  const prompt = await buildFinalPrompt(openai, visual.visual_prompt, referenceImages.length);
+  const prompt = await buildFinalPrompt(
+    openai,
+    visual.visual_prompt,
+    referenceImages.length,
+    imageAesthetic
+  );
 
   if (debug) {
     console.log(`  · prompt length: ${prompt.length} chars`);
@@ -629,6 +664,7 @@ async function main() {
         referenceImages,
         debug,
         dumpDir,
+        imageAesthetic: project.image_aesthetic || null,
       });
       ok++;
       console.log(`  ✓ ${result.imageUrl}`);

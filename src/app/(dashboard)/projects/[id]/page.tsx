@@ -190,6 +190,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     sells_physical_product: project.sells_physical_product ?? null,
     image_orientation: project.image_orientation ?? null,
     visual_creative_direction: project.visual_creative_direction ?? null,
+    image_aesthetic: project.image_aesthetic ?? null,
     updated_at: project.updated_at,
   };
 

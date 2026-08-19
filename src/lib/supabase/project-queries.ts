@@ -1,5 +1,5 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
-import type { Project } from '@/types';
+import type { ImageAesthetic, Project } from '@/types';
 import type { ProjectPipelineAggregates, StrategyForPipeline } from '@/lib/projects/pipeline';
 
 function countRowsByProjectId(rows: { project_id: string }[] | null): Record<string, number> {
@@ -54,6 +54,12 @@ export function isVisualCreativeDirectionColumnError(error: { message?: string }
   return m.includes('visual_creative_direction') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
 }
 
+/** PostgREST cuando la migración 032 (image_aesthetic) no está aplicada. */
+export function isImageAestheticColumnError(error: { message?: string } | null | undefined): boolean {
+  const m = (error?.message || '').toLowerCase();
+  return m.includes('image_aesthetic') && (m.includes('schema cache') || m.includes('could not find') || m.includes('column'));
+}
+
 /** PostgREST cuando la migración 025 (physical_constraints) no está aplicada. */
 export function isPhysicalConstraintsColumnError(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) return false;
@@ -68,15 +74,49 @@ export async function fetchProjectImageGenerationMeta(
 ): Promise<{
   sellsPhysicalProduct: boolean | null;
   physicalConstraints: string | null;
+  imageAesthetic: ImageAesthetic;
 }> {
   let sellsPhysicalProduct: boolean | null = null;
   let physicalConstraints: string | null = null;
+  let imageAesthetic: ImageAesthetic = 'profesional';
 
   const { data, error } = await service
     .from('projects')
-    .select('sells_physical_product, physical_constraints')
+    .select('sells_physical_product, physical_constraints, image_aesthetic')
     .eq('id', projectId)
     .maybeSingle();
+
+  if (error && isImageAestheticColumnError(error)) {
+    const retry = await service
+      .from('projects')
+      .select('sells_physical_product, physical_constraints')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (retry.error && isSellsPhysicalProductColumnError(retry.error)) {
+      const retry2 = await service
+        .from('projects')
+        .select('physical_constraints')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (
+        retry2.data &&
+        typeof retry2.data.physical_constraints === 'string' &&
+        retry2.data.physical_constraints.trim()
+      ) {
+        physicalConstraints = retry2.data.physical_constraints.trim();
+      }
+      return { sellsPhysicalProduct: null, physicalConstraints, imageAesthetic };
+    }
+    if (retry.data) {
+      if (typeof retry.data.sells_physical_product === 'boolean') {
+        sellsPhysicalProduct = retry.data.sells_physical_product;
+      }
+      if (typeof retry.data.physical_constraints === 'string' && retry.data.physical_constraints.trim()) {
+        physicalConstraints = retry.data.physical_constraints.trim();
+      }
+    }
+    return { sellsPhysicalProduct, physicalConstraints, imageAesthetic };
+  }
 
   if (error && isSellsPhysicalProductColumnError(error)) {
     const retry = await service
@@ -91,12 +131,12 @@ export async function fetchProjectImageGenerationMeta(
     ) {
       physicalConstraints = retry.data.physical_constraints.trim();
     }
-    return { sellsPhysicalProduct: null, physicalConstraints };
+    return { sellsPhysicalProduct: null, physicalConstraints, imageAesthetic };
   }
 
   if (error) {
     console.warn('[fetchProjectImageGenerationMeta]', error.message);
-    return { sellsPhysicalProduct: null, physicalConstraints: null };
+    return { sellsPhysicalProduct: null, physicalConstraints: null, imageAesthetic };
   }
 
   if (data) {
@@ -106,9 +146,13 @@ export async function fetchProjectImageGenerationMeta(
     if (typeof data.physical_constraints === 'string' && data.physical_constraints.trim()) {
       physicalConstraints = data.physical_constraints.trim();
     }
+    const raw = data.image_aesthetic;
+    if (raw === 'ugc' || raw === 'lifestyle' || raw === 'profesional') {
+      imageAesthetic = raw;
+    }
   }
 
-  return { sellsPhysicalProduct, physicalConstraints };
+  return { sellsPhysicalProduct, physicalConstraints, imageAesthetic };
 }
 
 export async function fetchUserProjectsList(client: SupabaseClient, userId: string) {

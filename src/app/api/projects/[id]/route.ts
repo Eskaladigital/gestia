@@ -11,11 +11,13 @@ import {
   isPhysicalConstraintsColumnError,
   isSellsPhysicalProductColumnError,
   isVisualCreativeDirectionColumnError,
+  isImageAestheticColumnError,
 } from '@/lib/supabase/project-queries';
 import type {
   ClientType,
   CommercialLevel,
   Complexity,
+  ImageAesthetic,
   ImageOrientation,
   PrimaryGoal,
   VisualCreativeDirection,
@@ -28,6 +30,7 @@ const COMMERCIAL_LEVELS: CommercialLevel[] = ['bajo', 'medio', 'alto'];
 const COMPLEXITY_LEVELS: Complexity[] = ['basico', 'medio', 'experto'];
 const IMAGE_ORIENTATIONS: ImageOrientation[] = ['vertical', 'cuadrado', 'horizontal'];
 const CREATIVE_DIRECTIONS: VisualCreativeDirection[] = ['literal', 'equilibrado', 'disruptivo'];
+const IMAGE_AESTHETICS: ImageAesthetic[] = ['profesional', 'lifestyle', 'ugc'];
 
 type PatchBody = {
   client_type?: ClientType | null;
@@ -51,6 +54,8 @@ type PatchBody = {
   sells_physical_product?: boolean | null;
   /** Dirección creativa de imágenes IA: literal | equilibrado | disruptivo (null = literal) */
   visual_creative_direction?: VisualCreativeDirection | null;
+  /** Estética fotográfica: profesional | lifestyle | ugc (null = profesional) */
+  image_aesthetic?: ImageAesthetic | null;
 };
 
 function clampIntTone(n: unknown): number | undefined {
@@ -230,6 +235,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
+    if (body.image_aesthetic !== undefined) {
+      if (body.image_aesthetic === null) {
+        update.image_aesthetic = null;
+      } else if (IMAGE_AESTHETICS.includes(body.image_aesthetic)) {
+        update.image_aesthetic = body.image_aesthetic;
+      } else {
+        return NextResponse.json(
+          { error: 'image_aesthetic no válida (profesional | lifestyle | ugc)' },
+          { status: 400 }
+        );
+      }
+    }
+
     if (body.physical_constraints !== undefined) {
       const service = createServiceSupabase();
       const referenceImages = await listProjectReferenceImages(service, id);
@@ -384,6 +402,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       warnings.push(
         'La dirección creativa no se guardó (falta columna visual_creative_direction — migración 031).'
+      );
+      payload = rest;
+      const retry = await supabase
+        .from('projects')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+      project = retry.data;
+      upErr = retry.error;
+    }
+
+    if (upErr && 'image_aesthetic' in payload && isImageAestheticColumnError(upErr)) {
+      const { image_aesthetic: _drop, ...rest } = payload;
+      if (Object.keys(rest).length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Falta la columna image_aesthetic. Ejecuta supabase/migrations/032_projects_image_aesthetic.sql.',
+          },
+          { status: 503 }
+        );
+      }
+      warnings.push(
+        'La estética de imagen no se guardó (falta columna image_aesthetic — migración 032).'
       );
       payload = rest;
       const retry = await supabase

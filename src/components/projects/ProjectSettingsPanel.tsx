@@ -16,6 +16,7 @@ import type {
   Complexity,
   ImageOrientation,
   PrimaryGoal,
+  ImageAesthetic,
   VisualCreativeDirection,
   WeeklyFormatDistribution,
 } from '@/types';
@@ -39,6 +40,7 @@ export type ProjectSettingsInitial = {
   physical_constraints: string | null | undefined;
   sells_physical_product?: boolean | null;
   visual_creative_direction?: VisualCreativeDirection | null;
+  image_aesthetic?: ImageAesthetic | null;
   updated_at: string;
 };
 
@@ -81,6 +83,32 @@ const CREATIVE_DIRECTION_OPTIONS: Array<{
     label: 'Disruptiva',
     icon: '🦍',
     hint: 'Mayoría de metáforas visuales fotorrealistas (escenas imposibles). Prohíbe clichés de stock corporativo.',
+  },
+];
+
+const IMAGE_AESTHETIC_OPTIONS: Array<{
+  value: ImageAesthetic;
+  label: string;
+  icon: string;
+  hint: string;
+}> = [
+  {
+    value: 'profesional',
+    label: 'Profesional',
+    icon: '📷',
+    hint: 'Reportaje fotográfico cuidado. Cámara y luz de encargo, no de móvil.',
+  },
+  {
+    value: 'lifestyle',
+    label: 'Lifestyle',
+    icon: '🌿',
+    hint: 'Vida real bella y cálida: inspira. Ni recorte de smartphone ni catálogo de spa.',
+  },
+  {
+    value: 'ugc',
+    label: 'UGC',
+    icon: '📱',
+    hint: 'Foto de móvil, como la haría un cliente. Encaja en viaje o comunidad; no en marcas que necesitan deseo.',
   },
 ];
 
@@ -167,6 +195,9 @@ export function ProjectSettingsPanel({
   const [creativeDirection, setCreativeDirection] = useState<VisualCreativeDirection>(
     initial.visual_creative_direction || 'literal'
   );
+  const [imageAesthetic, setImageAesthetic] = useState<ImageAesthetic>(
+    initial.image_aesthetic || 'profesional'
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -191,6 +222,7 @@ export function ProjectSettingsPanel({
     setProductNature(productNatureFromSells(initial.sells_physical_product));
     setImageOrientation(initial.image_orientation || DEFAULT_IMAGE_ORIENTATION);
     setCreativeDirection(initial.visual_creative_direction || 'literal');
+    setImageAesthetic(initial.image_aesthetic || 'profesional');
   }, [initial.updated_at]);
 
   const totalWeekly = dist.story + dist.carrusel + dist.publicacion + dist.reel;
@@ -244,6 +276,7 @@ export function ProjectSettingsPanel({
           image_orientation: imageOrientation,
           sells_physical_product: sellsFromProductNature(productNature),
           visual_creative_direction: creativeDirection,
+          image_aesthetic: imageAesthetic,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -275,6 +308,7 @@ export function ProjectSettingsPanel({
     productNature,
     imageOrientation,
     creativeDirection,
+    imageAesthetic,
     distOk,
     projectId,
     router,
@@ -618,6 +652,40 @@ export function ProjectSettingsPanel({
               </div>
               <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-3">
                 {IMAGE_ORIENTATION_LABELS[imageOrientation].hint}
+              </p>
+            </div>
+
+            {/* Section: Estética fotográfica */}
+            <div className="border-2 border-surface-900 p-4">
+              <p className="text-[10px] font-bold text-surface-900 uppercase tracking-[0.2em] mb-1 pb-2 border-b-2 border-surface-200">
+                Estética de las fotos
+              </p>
+              <p className="text-[11px] text-surface-500 leading-relaxed mb-3">
+                Cómo se fotografían las escenas. Independiente de si son literales o metafóricas.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                {IMAGE_AESTHETIC_OPTIONS.map(opt => {
+                  const selected = imageAesthetic === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setImageAesthetic(opt.value)}
+                      className={`flex flex-col items-center gap-1.5 p-3 border-2 text-center transition-all duration-150 ${
+                        selected
+                          ? 'border-surface-900 bg-surface-900 text-white shadow-brutal-sm'
+                          : 'border-surface-300 hover:border-surface-900 bg-white text-surface-900'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <span className="text-lg">{opt.icon}</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-surface-400 font-bold uppercase tracking-wider mt-3">
+                {IMAGE_AESTHETIC_OPTIONS.find(o => o.value === imageAesthetic)?.hint}
               </p>
             </div>
 

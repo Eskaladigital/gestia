@@ -33,6 +33,14 @@ export type ImageOrientation = 'vertical' | 'cuadrado' | 'horizontal';
  * - disruptivo  → mayoría de imágenes conceptuales/surrealistas fotorrealistas.
  */
 export type VisualCreativeDirection = 'literal' | 'equilibrado' | 'disruptivo';
+/**
+ * Estética fotográfica de las imágenes IA (migración 032), independiente
+ * de si la escena es literal o metafórica:
+ * - profesional → reportaje fotográfico cuidado (default).
+ * - lifestyle   → vida real bella y cálida (ni móvil ni catálogo).
+ * - ugc         → foto de smartphone, como la haría un cliente.
+ */
+export type ImageAesthetic = 'profesional' | 'lifestyle' | 'ugc';
 
 export type AIProvider = 'openai' | 'anthropic' | 'google';
 export type AgentKey = 'analyze_site' | 'analyze_competitors' | 'generate_strategy' | 'generate_calendar' | 'brand_recognition' | 'generate_visual_briefs' | 'visual_briefs_story' | 'visual_briefs_video' | 'visual_briefs_carousel' | 'visual_briefs_feed';
@@ -206,6 +214,11 @@ export interface Project {
    * null = 'literal' (comportamiento clásico, sin metáforas visuales).
    */
   visual_creative_direction?: VisualCreativeDirection | null;
+  /**
+   * Estética fotográfica (migración 032).
+   * null = 'profesional' (comportamiento clásico).
+   */
+  image_aesthetic?: ImageAesthetic | null;
   status: ProjectStatus;
   onboarding_step: number;
   brand_colors: BrandColorEntry[];

@@ -22,7 +22,7 @@ import {
   selectRelevantReferenceImages,
 } from '@/lib/projects/reference-images';
 import type { ProductFidelityResult } from '@/lib/projects/reference-images';
-import type { ImageOrientation, Project, ProjectReferenceImage } from '@/types';
+import type { ImageAesthetic, ImageOrientation, Project, ProjectReferenceImage } from '@/types';
 import {
   effectiveReferenceRoleForPipeline,
   projectUsesProductImageFidelity,
@@ -51,7 +51,9 @@ REGLAS ESTRICTAS:
 - SI puedes: mejorar la descripcion de la luz para que suene a luz natural real, sustituir adjetivos vagos por materiales o texturas concretas, añadir detalles de camara (tipo de plano, profundidad de campo) si no los tiene, y rebajar frases de ACABADO artificial (HDR, render, plastico, "poster de IA") sin tocar NUNCA el contenido conceptual de la escena.
 - Si el prompt menciona personas, mantenlas pero asegurate de que la descripcion las presente naturales y no posadas.
 - Si hay indicaciones de video (frame rate, travelling, motion blur), respetalas pero adaptalas para que funcionen como fotograma fijo: describe el instante congelado, no la secuencia.
-- Si el prompt pide estetica UGC (contenido generado por usuarios, foto espontanea de movil), CONSERVA esa estetica y la mencion "estilo UGC": NO la profesionalices, no anadas lenguaje de camara profesional, shooting ni composicion editorial; manten el aspecto espontaneo, casero e imperfecto de una foto real de smartphone.
+- Si el mensaje del usuario indica ESTETICA UGC OBLIGATORIA, CONSERVA esa estetica y la mencion "estilo UGC": NO la profesionalices; manten el aspecto espontaneo de smartphone.
+- Si el mensaje indica ESTETICA LIFESTYLE OBLIGATORIA, NO conserves UGC ni foto de movil: reescribe esa parte a fotografia lifestyle calida de la MISMA escena (luz bella, composicion intencionada). No conviertas la escena en catalogo de spa.
+- Si no hay estetica obligatoria y el prompt pide UGC, conservalo.
 - Quita referencias a logotipos, marcas o texto visible que el modelo de imagen no puede renderizar bien.
 
 FORMATO DE SALIDA:
@@ -70,12 +72,25 @@ const IMAGE_REALISM_TAIL = [
   'sin HDR agresivo, sin acabado plastico, sin render 3D, sin pintura digital, sin ilustracion, sin tipografia ni logotipos.',
 ].join(' ');
 
-/** Detecta si el brief pide expresamente estetica UGC (se inyecta desde las ai_rules del proyecto). */
+/** Fallback si el proyecto aún no tiene image_aesthetic (briefs antiguos). */
 const UGC_STYLE_REGEX = /\bUGC\b|contenido generado por (el |los )?usuari/i;
+
+const IMAGE_LIFESTYLE_TAIL = [
+  'Tomada como fotografia lifestyle profesional y calida, no como foto de smartphone ni como campana de spa:',
+  'camara full frame con optica 35-50mm, composicion intencionada pero natural,',
+  'luz natural bella (ventana suave, golden hour, interior calido bien expuesto), color rico y equilibrio realista,',
+  'hogares y calles vividos que apetece mirar: desorden honesto, nunca suciedad ni recorte casual de movil,',
+  'personas naturales, no posadas de catalogo; grano minimo de pelicula, no ruido digital de telefono;',
+  'respeta el TIPO DE PLANO, la ESCALA, la HORA y la CALIDAD DE LUZ que describe la escena;',
+  'nada de encuadre torcido de smartphone, nada de flash de movil, nada de plato sucio junto al monitor,',
+  'nada de yoga, esterilla, meditacion ni interior de spa de revista;',
+  'sin HDR agresivo, sin acabado plastico, sin render 3D, sin ilustracion, sin tipografia ni logotipos.',
+  'Debe parecer una foto de revista lenta que inspira, no el carrete de un martes cualquiera.',
+].join(' ');
 
 /** Cola alternativa para modo UGC: foto de movil espontanea, no encargo fotografico profesional. */
 const IMAGE_UGC_TAIL = [
-  'Tomada como una foto real de smartphone hecha por un viajero normal, no por un fotografo:',
+  'Tomada como una foto real de smartphone hecha por una persona normal en su dia a dia, no por un fotografo:',
   'camara de movil actual, encuadre espontaneo y ligeramente imperfecto (horizonte no perfectamente recto, sujeto no perfectamente centrado),',
   'luz existente sin modificar (sol duro con sombras reales, interiores con luz mezclada, flash directo de movil si es de noche),',
   'colores naturales de camara de movil, ligero ruido digital en las sombras, profundidad de campo amplia tipica de movil,',
@@ -231,6 +246,30 @@ function shrinkPhysicalSuffixForApi(suffix: string): string {
   return `${suffix.slice(0, MAX_PHYSICAL_IN_IMAGE_PROMPT - 40)}… [reglas recortadas; se regeneran desde fotos de producto]`;
 }
 
+function resolveImageAesthetic(
+  projectAesthetic: ImageAesthetic | null | undefined,
+  promptText: string
+): ImageAesthetic {
+  if (projectAesthetic === 'ugc' || projectAesthetic === 'lifestyle' || projectAesthetic === 'profesional') {
+    return projectAesthetic;
+  }
+  return UGC_STYLE_REGEX.test(promptText) ? 'ugc' : 'profesional';
+}
+
+function aestheticTail(aesthetic: ImageAesthetic): string {
+  if (aesthetic === 'ugc') return IMAGE_UGC_TAIL;
+  if (aesthetic === 'lifestyle') return IMAGE_LIFESTYLE_TAIL;
+  return IMAGE_REALISM_TAIL;
+}
+
+function aestheticRefinerPrefix(aesthetic: ImageAesthetic): string {
+  if (aesthetic === 'ugc') return 'ESTETICA UGC OBLIGATORIA. ';
+  if (aesthetic === 'lifestyle') {
+    return 'ESTETICA LIFESTYLE OBLIGATORIA: si el prompt pide UGC o foto de movil, reescribe solo el look (misma escena) a fotografia lifestyle calida. ';
+  }
+  return '';
+}
+
 async function buildFinalPrompt(
   openai: OpenAI,
   rawPrompt: string,
@@ -238,8 +277,10 @@ async function buildFinalPrompt(
   userFeedback: string | null = null,
   physicalConstraints: string | null = null,
   productFidelityMode = true,
+  imageAesthetic: ImageAesthetic | null = null,
 ): Promise<string> {
   const cleaned = cleanPrompt(rawPrompt);
+  const aesthetic = resolveImageAesthetic(imageAesthetic, cleaned);
 
   let prompt: string;
   try {
@@ -249,7 +290,7 @@ async function buildFinalPrompt(
         { role: 'system', content: REALISM_REFINER_SYSTEM },
         {
           role: 'user',
-          content: appendReferenceHandlingInstructions(cleaned, referenceCount, productFidelityMode),
+          content: `${aestheticRefinerPrefix(aesthetic)}${appendReferenceHandlingInstructions(cleaned, referenceCount, productFidelityMode)}`,
         },
       ],
       temperature: REFINER_TEMPERATURE,
@@ -260,10 +301,13 @@ async function buildFinalPrompt(
     prompt = cleaned;
   }
 
-  const isUgc = UGC_STYLE_REGEX.test(cleaned) || UGC_STYLE_REGEX.test(prompt);
-  if (isUgc) {
+  if (aesthetic === 'ugc') {
     if (!/foto(graf[íi]a)?\s/i.test(prompt)) {
       prompt = `Foto espontanea de smartphone, estilo UGC, de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
+    }
+  } else if (aesthetic === 'lifestyle') {
+    if (!/fotograf[íi]a\s/i.test(prompt)) {
+      prompt = `Fotografia lifestyle calida y profesional de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
     }
   } else if (!/fotograf[íi]a\s+hiperrealista/i.test(prompt)) {
     prompt = `Fotografia hiperrealista y cinematografica de ${prompt.charAt(0).toLowerCase()}${prompt.slice(1)}`;
@@ -274,7 +318,7 @@ async function buildFinalPrompt(
 
   const physSource = productFidelityMode ? physicalConstraints : null;
   let phys = shrinkPhysicalSuffixForApi(physicalConstraintsSuffix(physSource));
-  const tail = `\n\n${isUgc ? IMAGE_UGC_TAIL : IMAGE_REALISM_TAIL}`;
+  const tail = `\n\n${aestheticTail(aesthetic)}`;
   let roomForCore = MAX_PROMPT_LENGTH - phys.length - tail.length;
   if (roomForCore < MIN_PROMPT_LENGTH) {
     const need = MIN_PROMPT_LENGTH - roomForCore + 80;
@@ -388,8 +432,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado para este proyecto' }, { status: 403 });
   }
 
-  const { sellsPhysicalProduct, physicalConstraints: projectPhysicalConstraintsFromDb } =
-    await fetchProjectImageGenerationMeta(service, project.id);
+  const {
+    sellsPhysicalProduct,
+    physicalConstraints: projectPhysicalConstraintsFromDb,
+    imageAesthetic,
+  } = await fetchProjectImageGenerationMeta(service, project.id);
 
   const projectOrientation: ImageOrientation =
     (project.image_orientation as ImageOrientation | undefined) || DEFAULT_IMAGE_ORIENTATION;
@@ -492,7 +539,8 @@ export async function POST(request: NextRequest) {
       selectedReferenceImages.length,
       userFeedback,
       projectPhysicalConstraints,
-      useProductFidelity
+      useProductFidelity,
+      imageAesthetic
     );
     if (selectedReferenceImages.length > 0) {
       prompt = applyReferenceCaptionsToPrompt(
@@ -512,7 +560,7 @@ export async function POST(request: NextRequest) {
       `[generate-image] visual ${visual_id}, prompt: ${prompt.length} chars, refs ` +
       `seleccionadas/totales: ${selectedReferenceImages.length}/${allReferenceImages.length}, ` +
       `fidelidad_producto: ${useProductFidelity}, refs_producto: ${productReferenceImages.length}, ` +
-      `orientation: ${projectOrientation} (${imageSize})` +
+      `orientation: ${projectOrientation} (${imageSize}), aesthetic: ${imageAesthetic}` +
       (selectorReasoning ? `, selector: "${selectorReasoning}"` : '') +
       (userFeedback ? `, user_feedback: ${userFeedback.length} chars` : '') +
       (projectPhysicalConstraints ? `, physical_constraints: ${projectPhysicalConstraints.length} chars` : '')

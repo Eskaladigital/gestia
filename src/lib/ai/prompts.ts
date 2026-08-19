@@ -4,7 +4,7 @@
 // Producto de Eskala Marketing Digital · https://www.eskaladigital.com/
 // ============================================================
 
-import type { Project, Competitor, ContentStyleWeights, VisualCreativeDirection, WeeklyFormatDistribution } from '@/types';
+import type { ImageAesthetic, Project, Competitor, ContentStyleWeights, VisualCreativeDirection, WeeklyFormatDistribution } from '@/types';
 import { getMonthName } from '@/lib/utils';
 import {
   buildReferenceGuidanceBlock,
@@ -310,6 +310,61 @@ export function getVisualCreativeDirection(project: Project): VisualCreativeDire
     if (d <= 40) return 'equilibrado';
   }
   return 'literal';
+}
+
+/** Estética fotográfica efectiva. null / desconocido = profesional (default clásico). */
+export function getImageAesthetic(project: Project): ImageAesthetic {
+  const v = project.image_aesthetic;
+  if (v === 'ugc' || v === 'lifestyle' || v === 'profesional') return v;
+  return 'profesional';
+}
+
+/**
+ * Bloque de estética fotográfica para el CALENDARIO (scene_summary).
+ * '' en profesional para no alterar el comportamiento clásico.
+ */
+export function buildImageAestheticCalendarBlock(project: Project): string {
+  const aesthetic = getImageAesthetic(project);
+  if (aesthetic === 'profesional') return '';
+
+  if (aesthetic === 'ugc') {
+    return `
+═══════════════════════════════════════════
+ESTÉTICA FOTOGRÁFICA: UGC (ley para TODOS los "scene_summary")
+═══════════════════════════════════════════
+- Cada escena debe concebirse como una FOTO DE SMARTPHONE hecha por una persona normal, no por un fotógrafo.
+- Encuadre espontáneo e imperfecto, luz existente sin modificar, gente en mitad de la acción.
+- Al final de cada scene_summary añade « || Estética UGC: foto espontánea de smartphone, estilo UGC, contenido generado por usuarios ».`;
+  }
+
+  return `
+═══════════════════════════════════════════
+ESTÉTICA FOTOGRÁFICA: LIFESTYLE CÁLIDO (ley para TODOS los "scene_summary")
+═══════════════════════════════════════════
+- Las escenas son VIDA REAL, pero BELLA: luz natural buena, casas y calles vividas que apetece mirar. El feed debe inspirar, no parecer el carrete de un martes cualquiera.
+- PROHIBIDO el look UGC de móvil (encuadre torcido, flash, grano de teléfono, plato sucio junto al monitor, recorte casual).
+- PROHIBIDO el catálogo de spa/yoga/revista wellness perfecta (esterillas, loto, incienso, interiores de hotel).
+- Busca el punto medio: desorden honesto y humano, pero con atmósfera, calor y un poco de deseo.`;
+}
+
+/**
+ * Bloque de estética para los BRIEFS VISUALES (sección Estilo:).
+ * '' en profesional.
+ */
+export function buildImageAestheticBriefBlock(project: Project): string {
+  const aesthetic = getImageAesthetic(project);
+  if (aesthetic === 'profesional') return '';
+
+  if (aesthetic === 'ugc') {
+    return `## ESTÉTICA FOTOGRÁFICA: UGC
+- En la sección "Estilo:" escribe SIEMPRE, literalmente: "estilo UGC: foto espontánea tomada con un smartphone por la propia persona, no por un fotógrafo".
+- Encuadre imperfecto, luz de móvil, gente sin posar. NO profesionalices ni conviertas la escena en campaña.`;
+  }
+
+  return `## ESTÉTICA FOTOGRÁFICA: LIFESTYLE CÁLIDO
+- En la sección "Estilo:" escribe que es fotografía lifestyle profesional y cálida: luz natural bella, composición intencionada, hogares y calles vividos que inspiran.
+- Si la ficha del calendario pide UGC, foto de móvil o encuadre torcido, REESCRÍBELO: misma escena y mismos sujetos, pero con luz cuidada y encuadre de fotógrafo de lifestyle, no de smartphone.
+- PROHIBIDO: recorte de móvil, flash, grano digital de teléfono, mesa sucia tipo "dump", catálogo de spa, yoga, esterilla o meditación.`;
 }
 
 /** Lista de clichés de stock corporativo que matan un feed creativo. */
@@ -770,6 +825,7 @@ VARIEDAD DE EXPERIENCIAS DEL MES (aplica a TODOS los formatos y scene_summary):
 - PROHIBIDO que más de 2 posts del mes compartan la misma combinación de protagonista + escenario (p. ej. "pareja en entorno natural" o "persona en interior"). Si al planificar detectas la repetición, cambia el protagonista o el escenario de uno de ellos.
 - Piensa el mes como un catálogo de vidas y situaciones posibles alrededor de la marca, no como variaciones de un único plan.
 ${buildCreativeDirectionCalendarBlock(project)}
+${buildImageAestheticCalendarBlock(project)}
 FORMATO DE RESPUESTA JSON:
 {
   "month": "${month} ${year}",
@@ -1415,6 +1471,7 @@ export function buildSingleVisualPrompt(
   const brandBlock = `## IDENTIDAD DE MARCA\n${buildBrandContext(project)}`;
   const contextBlock = `## CONTEXTO DEL NEGOCIO\n${buildProjectContext(project, { includeAiRules: true })}`;
   const creativeDirectionBlock = buildCreativeDirectionBriefBlock(project);
+  const imageAestheticBlock = buildImageAestheticBriefBlock(project);
   const physicalConstraintsBlock = buildPhysicalConstraintsBlock(project);
   const physicalPriorityInstruction = physicalConstraintsBlock
     ? `\n- Las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES del inicio de este mensaje tienen PRIORIDAD ABSOLUTA sobre cualquier otra instrucción si entran en conflicto: no inventes geometría, adyacencias, logos ni sujetos prohibidos. Reformula la escena para cumplirlas sin perder el objetivo del slide.`
@@ -1524,7 +1581,7 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}${imageAestheticBlock ? `\n\n${imageAestheticBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
     agentKey,
   };
 }
