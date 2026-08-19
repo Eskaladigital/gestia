@@ -39,11 +39,18 @@ export type AdminContentVisual = {
 };
 
 type GridDensity = 'large' | 'medium' | 'small';
+type SortMode = 'recent' | 'oldest' | 'project';
 
 const GRID: Record<GridDensity, string> = {
   large: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
   medium: 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
   small: 'grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8',
+};
+
+const SORT_LABEL: Record<SortMode, string> = {
+  recent: 'Más reciente',
+  oldest: 'Más antiguo',
+  project: 'Por proyecto',
 };
 
 const STATUS_LABEL: Record<ImageGenerationStatus, string> = {
@@ -79,6 +86,7 @@ export function AdminContentClient({
 }) {
   const [search, setSearch] = useState('');
   const [projectId, setProjectId] = useState('all');
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [density, setDensity] = useState<GridDensity>('medium');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -98,7 +106,7 @@ export function AdminContentClient({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return visuals.filter((v) => {
+    const list = visuals.filter((v) => {
       if (projectId !== 'all' && v.projectId !== projectId) return false;
       if (!q) return true;
       return (
@@ -109,7 +117,17 @@ export function AdminContentClient({
         (v.format ?? '').toLowerCase().includes(q)
       );
     });
-  }, [visuals, projectId, search]);
+
+    return list.sort((a, b) => {
+      if (sortMode === 'project') {
+        const byName = a.projectName.localeCompare(b.projectName, 'es');
+        if (byName !== 0) return byName;
+        return b.createdAt.localeCompare(a.createdAt);
+      }
+      const byDate = a.createdAt.localeCompare(b.createdAt);
+      return sortMode === 'recent' ? -byDate : byDate;
+    });
+  }, [visuals, projectId, search, sortMode]);
 
   const selected = useMemo(
     () => filtered.find((v) => v.id === selectedId) ?? visuals.find((v) => v.id === selectedId) ?? null,
@@ -158,7 +176,7 @@ export function AdminContentClient({
               className="w-full border-2 border-surface-900 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-red-500"
             />
           </label>
-          <label className="lg:w-64">
+          <label className="lg:w-56">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-surface-500 mb-1">
               Proyecto
             </span>
@@ -171,6 +189,22 @@ export function AdminContentClient({
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({p.count})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="lg:w-44">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-surface-500 mb-1">
+              Ordenar
+            </span>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="w-full border-2 border-surface-900 px-3 py-2 text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-red-500"
+            >
+              {(Object.keys(SORT_LABEL) as SortMode[]).map((key) => (
+                <option key={key} value={key}>
+                  {SORT_LABEL[key]}
                 </option>
               ))}
             </select>
