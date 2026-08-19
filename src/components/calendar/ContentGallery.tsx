@@ -55,6 +55,30 @@ export function buildImageFilename(
   return `${project} ${date} ${fmt} ${idx}${suffix}.png`;
 }
 
+/** Caption publicable: copy + CTA + hashtags (mismo texto que «Copiar texto»). */
+export function buildPostCaptionText(item: Pick<ContentItem, 'copy' | 'cta' | 'hashtags'>): string {
+  const captionBody = [item.copy?.trim(), item.cta?.trim()]
+    .filter(Boolean)
+    .join('\n\n');
+  const hashtagsText =
+    item.hashtags && item.hashtags.length > 0
+      ? item.hashtags.map(h => (h.startsWith('#') ? h : `#${h}`)).join(' ')
+      : '';
+  return [captionBody, hashtagsText].filter(Boolean).join('\n\n');
+}
+
+/** Nombre del .txt por publicación: "Wellness Spa 20250413 CARRUSEL.txt" */
+export function buildPostCaptionFilename(
+  projectName: string,
+  scheduledDate: string,
+  format: string | null,
+): string {
+  const project = sanitizeFilenamePart(projectName) || 'Proyecto';
+  const date = scheduledDate.slice(0, 10).replace(/-/g, '');
+  const fmt = (format || 'POST').toUpperCase();
+  return `${project} ${date} ${fmt}.txt`;
+}
+
 const WEEK_COLORS = [
   { bg: 'bg-blue-50/60', header: 'bg-blue-100 text-blue-900', accent: 'border-blue-500' },
   { bg: 'bg-amber-50/60', header: 'bg-amber-100 text-amber-900', accent: 'border-amber-500' },
@@ -614,11 +638,32 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
         return;
       }
 
-      // En escritorio: un único ZIP con todas las imágenes.
+      // En escritorio: un único ZIP con todas las imágenes + un .txt por publicación.
       const zip = new JSZip();
       for (const { blob, filename } of collected) {
         zip.file(filename, blob);
       }
+
+      const captionItemIds = new Set(allReady.map(v => v.content_item_id));
+      const usedCaptionNames = new Set<string>();
+      for (const itemId of captionItemIds) {
+        const item = itemsById[itemId];
+        if (!item) continue;
+        const caption = buildPostCaptionText(item);
+        if (!caption) continue;
+
+        let captionFilename = buildPostCaptionFilename(
+          projectName,
+          item.scheduled_date,
+          item.format,
+        );
+        while (usedCaptionNames.has(captionFilename) || usedNames.has(captionFilename)) {
+          captionFilename = captionFilename.replace(/\.txt$/, ' (copia).txt');
+        }
+        usedCaptionNames.add(captionFilename);
+        zip.file(captionFilename, caption);
+      }
+
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
@@ -867,7 +912,7 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
                   item.hashtags && item.hashtags.length > 0
                     ? item.hashtags.map(h => (h.startsWith('#') ? h : `#${h}`)).join(' ')
                     : '';
-                const fullCaption = [captionBody, hashtagsText].filter(Boolean).join('\n\n');
+                const fullCaption = buildPostCaptionText(item);
                 const hasCaption = fullCaption.length > 0;
                 const captionKey = `caption-${item.id}`;
                 const captionExpanded = expandedPrompts.has(captionKey);

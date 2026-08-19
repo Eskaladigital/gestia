@@ -164,7 +164,7 @@ export function AdminContentClient({
     <>
       <div className="bg-white border-2 border-surface-900 shadow-brutal-sm p-4 mb-6">
         <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
-          <label className="flex-1 min-w-0">
+          <label className="flex-1 min-w-0 lg:min-w-[12rem]">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-surface-500 mb-1">
               Buscar
             </span>
@@ -176,7 +176,7 @@ export function AdminContentClient({
               className="w-full border-2 border-surface-900 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-red-500"
             />
           </label>
-          <label className="lg:w-56">
+          <label className="w-full lg:w-80 xl:w-96 shrink-0">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-surface-500 mb-1">
               Proyecto
             </span>
@@ -193,7 +193,7 @@ export function AdminContentClient({
               ))}
             </select>
           </label>
-          <label className="lg:w-44">
+          <label className="w-full lg:w-40 shrink-0">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-surface-500 mb-1">
               Ordenar
             </span>
