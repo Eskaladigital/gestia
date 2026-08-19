@@ -32,6 +32,7 @@ type VisualRow = {
   video_url: string | null;
   video_status: string | null;
   created_at: string;
+  updated_at: string;
   content_items: NestedContentItem | NestedContentItem[] | null;
 };
 
@@ -54,6 +55,7 @@ const VISUALS_SELECT = `
   video_url,
   video_status,
   created_at,
+  updated_at,
   content_items!inner (
     id,
     project_id,
@@ -71,6 +73,9 @@ const VISUALS_SELECT = `
 
 const VISUALS_PAGE_SIZE = 500;
 
+/** Evita respuesta cacheada: el muro debe reflejar generaciones recién terminadas. */
+export const dynamic = 'force-dynamic';
+
 /** Solo imágenes ya generadas con URL (el muro no muestra pendientes ni en cola). */
 async function fetchAllContentVisuals(
   service: ReturnType<typeof createServiceSupabase>,
@@ -84,7 +89,8 @@ async function fetchAllContentVisuals(
       .select(VISUALS_SELECT)
       .eq('image_status', 'ready')
       .or('image_url.not.is.null,edited_image_url.not.is.null')
-      .order('created_at', { ascending: false })
+      // updated_at = último momento en que la imagen quedó lista / se regeneró
+      .order('updated_at', { ascending: false })
       .range(from, from + VISUALS_PAGE_SIZE - 1);
 
     if (error) return { rows, error: new Error(error.message) };
@@ -132,7 +138,7 @@ export default async function AdministratorContentPage() {
         flipHorizontal: row.image_flip_horizontal === true && !row.edited_image_url,
         videoUrl: row.video_url,
         videoStatus: row.video_status,
-        createdAt: row.created_at,
+        createdAt: row.updated_at || row.created_at,
         contentItemId: row.content_item_id,
         projectId: project.id,
         projectName: project.name,
