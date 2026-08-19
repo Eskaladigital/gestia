@@ -36,14 +36,29 @@ function coerceFormat(raw: string): string | null {
     story: 'story',
     stories: 'story',
     historia: 'story',
+    historias: 'story',
+    instagram_story: 'story',
+    instagram_stories: 'story',
     carrusel: 'carrusel',
     carousel: 'carrusel',
+    carrousel: 'carrusel',
+    album: 'carrusel',
+    carousel_album: 'carrusel',
     publicacion: 'publicacion',
+    publication: 'publicacion',
     post: 'publicacion',
     feed: 'publicacion',
+    feed_post: 'publicacion',
+    single: 'publicacion',
     imagen: 'publicacion',
+    foto: 'publicacion',
+    image: 'publicacion',
+    photo: 'publicacion',
     reel: 'reel',
     reels: 'reel',
+    video: 'reel',
+    short: 'reel',
+    shorts: 'reel',
     'video_corto': 'reel',
     videocorto: 'reel',
   };
@@ -55,19 +70,31 @@ function coerceContentType(raw: string): string | null {
   const k = stripAccents(raw.trim()).replace(/\s+/g, '_');
   const map: Record<string, string> = {
     educativo: 'educativo',
+    educativa: 'educativo',
     educacion: 'educativo',
     educational: 'educativo',
+    education: 'educativo',
+    tip: 'educativo',
+    tips: 'educativo',
+    consejo: 'educativo',
     inspiracional: 'inspiracional',
     inspirational: 'inspiracional',
+    motivacional: 'inspiracional',
+    motivation: 'inspiracional',
     comercial: 'comercial',
     commercial: 'comercial',
     ventas: 'comercial',
+    venta: 'comercial',
     entretenimiento: 'entretenimiento',
     entertainment: 'entretenimiento',
+    humor: 'entretenimiento',
     personal: 'personal',
+    comunidad: 'personal',
     corporativo: 'corporativo',
     corporate: 'corporativo',
     empresa: 'corporativo',
+    branding: 'corporativo',
+    marca: 'corporativo',
   };
   const v = map[k] ?? null;
   return v && ALLOWED_CONTENT_TYPES.has(v) ? v : null;
@@ -151,7 +178,25 @@ function normalizeProductionSpecs(raw: any, format: string): Record<string, unkn
   return Object.keys(specs).length > 0 ? specs : null;
 }
 
-function normalizeCalendarPosts(raw: CalendarGeneration['posts'] | undefined, expectedCount: number) {
+type NormalizedCalendarPost = {
+  scheduled_date: string;
+  content_type: string;
+  format: string;
+  idea: string;
+  copy: string;
+  cta: string;
+  post_goal: string;
+  hashtags: string[];
+  platforms: string[];
+  production_specs: Record<string, unknown> | null;
+};
+
+function ideaFromCopy(copy: string): string {
+  const first = copy.split(/[.!?\n]/)[0]?.trim() || copy.trim();
+  return first.slice(0, 140);
+}
+
+function normalizeCalendarPosts(raw: CalendarGeneration['posts'] | undefined, expectedCount: number): NormalizedCalendarPost[] {
   if (!Array.isArray(raw)) return [];
 
   return raw
@@ -160,20 +205,23 @@ function normalizeCalendarPosts(raw: CalendarGeneration['posts'] | undefined, ex
       const rawFormat = clipText(post?.format, 80);
       const content_type = coerceContentType(rawType) ?? '';
       const format = coerceFormat(rawFormat) ?? '';
+      const copy = clipText(post?.copy, 6000);
+      let idea = clipText(post?.idea, 280);
+      if (!idea && copy) idea = ideaFromCopy(copy);
       let cta = clipText(post?.cta, 280);
       let post_goal = clipText(post?.post_goal, 280);
-      if (!cta && clipText(post?.idea, 280) && clipText(post?.copy, 6000)) {
+      if (!cta && idea && copy) {
         cta = 'Más info en nuestro perfil o web.';
       }
-      if (!post_goal && clipText(post?.idea, 280)) {
+      if (!post_goal && idea) {
         post_goal = 'Refuerzo de marca y engagement.';
       }
       return {
         scheduled_date: clipText(post?.scheduled_date, 32),
         content_type,
         format,
-        idea: clipText(post?.idea, 280),
-        copy: clipText(post?.copy, 6000),
+        idea,
+        copy,
         cta,
         post_goal,
         hashtags: cleanStringArray(post?.hashtags, 5, 80, '#'),
@@ -191,6 +239,41 @@ function normalizeCalendarPosts(raw: CalendarGeneration['posts'] | undefined, ex
         ALLOWED_FORMATS.has(post.format)
     )
     .slice(0, expectedCount);
+}
+
+/** Hasta 4 posts de holgura, o un 10% si el cupo es más grande. 22/26 deja de ser error. */
+function minAcceptablePosts(expectedPosts: number): number {
+  const slack = Math.max(4, Math.ceil(expectedPosts * 0.1));
+  return Math.max(1, expectedPosts - slack);
+}
+
+function mergeValidPosts(batches: NormalizedCalendarPost[][], expectedCount: number): NormalizedCalendarPost[] {
+  const byDate = new Map<string, NormalizedCalendarPost>();
+  const extras: NormalizedCalendarPost[] = [];
+
+  for (const batch of batches) {
+    for (const post of batch) {
+      const date = post.scheduled_date;
+      const existing = date ? byDate.get(date) : undefined;
+      if (date && !existing) {
+        byDate.set(date, post);
+        continue;
+      }
+      if (date && existing && post.copy.length > existing.copy.length) {
+        byDate.set(date, post);
+        continue;
+      }
+      if (!extras.some(e => e.idea === post.idea)) extras.push(post);
+    }
+  }
+
+  const merged = [...byDate.values()];
+  for (const extra of extras) {
+    if (merged.length >= expectedCount) break;
+    if (merged.some(m => m.idea === extra.idea)) continue;
+    merged.push(extra);
+  }
+  return merged.slice(0, expectedCount);
 }
 
 function addCalendarMonths(year: number, month0: number, delta: number): { year: number; month0: number } {
@@ -459,8 +542,20 @@ export async function POST(request: NextRequest) {
               continue;
             }
 
-            let normalizedPosts: ReturnType<typeof normalizeCalendarPosts> = [];
-            let bestPosts: ReturnType<typeof normalizeCalendarPosts> = [];
+            const attemptBatches: NormalizedCalendarPost[][] = [];
+            let lastUsageCompletion = 0;
+
+            const addUsage = (usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined) => {
+              if (!usage) return;
+              lastUsageCompletion = usage.completion_tokens ?? 0;
+              totalUsage = totalUsage
+                ? {
+                    prompt_tokens: (totalUsage.prompt_tokens ?? 0) + (usage.prompt_tokens ?? 0),
+                    completion_tokens: (totalUsage.completion_tokens ?? 0) + (usage.completion_tokens ?? 0),
+                    total_tokens: (totalUsage.total_tokens ?? 0) + (usage.total_tokens ?? 0),
+                  }
+                : { ...usage };
+            };
 
             for (let attempt = 0; attempt < 2; attempt++) {
               if (signal.aborted) { aborted = true; break; }
@@ -474,43 +569,55 @@ export async function POST(request: NextRequest) {
                 agentKey: 'generate_calendar',
                 userId: user.id,
               });
-
-              if (aiResponse.usage) {
-                totalUsage = totalUsage
-                  ? {
-                      prompt_tokens: (totalUsage.prompt_tokens ?? 0) + (aiResponse.usage.prompt_tokens ?? 0),
-                      completion_tokens: (totalUsage.completion_tokens ?? 0) + (aiResponse.usage.completion_tokens ?? 0),
-                      total_tokens: (totalUsage.total_tokens ?? 0) + (aiResponse.usage.total_tokens ?? 0),
-                    }
-                  : { ...aiResponse.usage };
-              }
+              addUsage(aiResponse.usage);
 
               if (!aiResponse.data?.posts || !Array.isArray(aiResponse.data.posts)) {
                 throw new Error('La IA no devolvió un calendario válido (falta el array de publicaciones)');
               }
 
-              normalizedPosts = normalizeCalendarPosts(aiResponse.data.posts, expectedPosts);
-              if (normalizedPosts.length !== expectedPosts) {
+              const batch = normalizeCalendarPosts(aiResponse.data.posts, expectedPosts);
+              attemptBatches.push(batch);
+              if (batch.length !== expectedPosts) {
                 const rawPosts = Array.isArray(aiResponse.data.posts) ? aiResponse.data.posts : [];
                 console.warn(
                   `[generate-calendar] intento ${attempt + 1}: ${rawPosts.length} posts crudos → ` +
-                  `${normalizedPosts.length}/${expectedPosts} válidos · completion_tokens=${aiResponse.usage?.completion_tokens ?? '?'} · ` +
-                  `claves raíz=${Object.keys(aiResponse.data as object).join(',')}` +
-                  (rawPosts.length > 0
-                    ? ` · muestra post[0]=${JSON.stringify(rawPosts[0]).slice(0, 400)}`
-                    : '')
+                  `${batch.length}/${expectedPosts} válidos · completion_tokens=${lastUsageCompletion} · ` +
+                  `claves raíz=${Object.keys(aiResponse.data as object).join(',')}`
                 );
               }
-              // El reintento a veces devuelve una respuesta "perezosa" con menos posts:
-              // nos quedamos siempre con el mejor intento, no con el último.
-              if (normalizedPosts.length > bestPosts.length) bestPosts = normalizedPosts;
-              if (normalizedPosts.length === expectedPosts) break;
+              if (mergeValidPosts(attemptBatches, expectedPosts).length >= expectedPosts) break;
             }
 
             if (aborted) break;
 
-            normalizedPosts = bestPosts;
-            const minAcceptable = Math.max(1, expectedPosts - Math.ceil(expectedPosts * 0.1));
+            let normalizedPosts = mergeValidPosts(attemptBatches, expectedPosts);
+
+            // Si el mes está casi completo, pedimos solo los que faltan (un reintento entero suele salir peor).
+            const missingAfterMerge = expectedPosts - normalizedPosts.length;
+            if (!signal.aborted && missingAfterMerge > 0 && missingAfterMerge <= 8 && normalizedPosts.length > 0) {
+              const covered = normalizedPosts
+                .map(p => `- ${p.scheduled_date} · ${p.format} · ${p.idea}`)
+                .join('\n');
+              const fillHint = `\n\n---\nRELLENO OBLIGATORIO: Ya hay ${normalizedPosts.length} publicaciones válidas. Devuelve SOLO ${missingAfterMerge} posts NUEVOS (array "posts" con exactamente ${missingAfterMerge} elementos, total_posts=${missingAfterMerge}). No repitas estas ideas ni copies:\n${covered}\nUsa fechas del mes distintas cuando puedas. format y content_type solo con los valores canónicos en español.`;
+              try {
+                const fillRes = await callAI<CalendarGeneration>(system, userPrompt + fillHint, {
+                  agentKey: 'generate_calendar',
+                  userId: user.id,
+                });
+                addUsage(fillRes.usage);
+                if (Array.isArray(fillRes.data?.posts)) {
+                  const filled = normalizeCalendarPosts(fillRes.data.posts, missingAfterMerge);
+                  normalizedPosts = mergeValidPosts([normalizedPosts, filled], expectedPosts);
+                  console.warn(
+                    `[generate-calendar] relleno: +${filled.length} → ${normalizedPosts.length}/${expectedPosts}`
+                  );
+                }
+              } catch (fillErr) {
+                console.warn('[generate-calendar] relleno falló:', fillErr instanceof Error ? fillErr.message : fillErr);
+              }
+            }
+
+            const minAcceptable = minAcceptablePosts(expectedPosts);
             if (normalizedPosts.length < minAcceptable) {
               throw new Error(
                 `La IA devolvió ${normalizedPosts.length} publicaciones válidas tras reintento, pero se esperaban al menos ${minAcceptable} (cupo: ${expectedPosts}). Vuelve a generar.`

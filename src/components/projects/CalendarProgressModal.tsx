@@ -94,9 +94,11 @@ export function CalendarProgressModal({
   const [totalExpected, setTotalExpected] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const [runKey, setRunKey] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   const startTimeRef = useRef(Date.now());
+  const activeRunRef = useRef(0);
 
   useEffect(() => setMounted(true), []);
 
@@ -127,6 +129,19 @@ export function CalendarProgressModal({
   const handleCancel = useCallback(() => {
     cancelledRef.current = true;
     abortRef.current?.abort();
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    abortRef.current?.abort();
+    cancelledRef.current = false;
+    setErrorMsg('');
+    setResults(new Map());
+    setTotalInserted(0);
+    setCurrentMonthIdx(-1);
+    setElapsed(0);
+    startTimeRef.current = Date.now();
+    setPhase('connecting');
+    setRunKey(k => k + 1);
   }, []);
 
   const runOneMonth = useCallback(async (monthIndex: number, accInserted: number): Promise<{ hasMore: boolean; nextMonthIndex: number; inserted: number }> => {
@@ -234,20 +249,24 @@ export function CalendarProgressModal({
   }, [projectId, mode, durationMonths, month, year, startDate]);
 
   useEffect(() => {
+    const thisRun = runKey;
+    activeRunRef.current = thisRun;
     cancelledRef.current = false;
     startTimeRef.current = Date.now();
+    const stillThisRun = () => activeRunRef.current === thisRun;
 
     (async () => {
       try {
         setPhase('running');
 
         if (durationMonths <= 1) {
-          const { } = await runOneMonth(0, 0);
+          await runOneMonth(0, 0);
         } else {
           let monthIdx = 0;
           let accInserted = 0;
 
           while (true) {
+            if (!stillThisRun()) return;
             if (cancelledRef.current) { setPhase('cancelled'); return; }
 
             const { hasMore, nextMonthIndex, inserted } = await runOneMonth(monthIdx, accInserted);
@@ -258,8 +277,10 @@ export function CalendarProgressModal({
           }
         }
 
+        if (!stillThisRun()) return;
         setPhase(cancelledRef.current ? 'cancelled' : 'complete');
       } catch (err: any) {
+        if (!stillThisRun()) return;
         if (err.name === 'AbortError') {
           setPhase('cancelled');
         } else {
@@ -270,10 +291,9 @@ export function CalendarProgressModal({
     })();
 
     return () => {
-      cancelledRef.current = true;
       abortRef.current?.abort();
     };
-  }, [durationMonths, runOneMonth]);
+  }, [durationMonths, runOneMonth, runKey]);
 
   const isTerminal = phase === 'complete' || phase === 'cancelled' || phase === 'error';
   const progressPct = totalExpected > 0 ? Math.round((totalInserted / totalExpected) * 100) : 0;
@@ -447,8 +467,11 @@ export function CalendarProgressModal({
 
           {/* Error message */}
           {phase === 'error' && errorMsg && (
-            <div className="bg-red-50 border-2 border-surface-900 text-red-700 px-4 py-3 text-xs font-bold">
-              {errorMsg}
+            <div className="bg-red-50 border-2 border-surface-900 text-red-700 px-4 py-3 text-xs font-bold space-y-1">
+              <p>{errorMsg}</p>
+              <p className="font-medium text-red-600">
+                A veces la IA se queda un poco corta. Puedes reintentar aquí sin volver a configurar el mes.
+              </p>
             </div>
           )}
 
@@ -480,6 +503,15 @@ export function CalendarProgressModal({
           )}
           {isTerminal && (
             <>
+              {phase === 'error' && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="inline-flex items-center text-xs font-bold uppercase tracking-wider px-5 py-2.5 border-2 border-surface-900 text-white bg-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-150"
+                >
+                  Volver a intentar
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
