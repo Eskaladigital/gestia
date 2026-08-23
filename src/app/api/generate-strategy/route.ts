@@ -7,7 +7,7 @@ import {
   countProductReferenceImages,
   countStyleReferenceImages,
 } from '@/lib/projects/reference-images-shared';
-import { DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI, listProjectReferenceImages } from '@/lib/projects/reference-images';
+import { listProjectReferenceImages } from '@/lib/projects/reference-images';
 import { isSellsPhysicalProductColumnError } from '@/lib/supabase/project-queries';
 import type { StrategyGeneration } from '@/types';
 
@@ -178,11 +178,7 @@ export async function POST(request: NextRequest) {
       : 'No hay análisis competitivo disponible.';
 
     // Generar estrategia
-    const referenceImages = await listProjectReferenceImages(
-      supabase,
-      project_id,
-      DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
-    );
+    const referenceImages = await listProjectReferenceImages(supabase, project_id);
 
     const { system, user: userPrompt } = buildStrategyPrompt(project, businessAnalysis, competitorAnalysis, {
       sellsPhysicalProduct: project.sells_physical_product ?? null,

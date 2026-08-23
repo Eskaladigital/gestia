@@ -3,7 +3,6 @@ import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/serv
 import { fetchAccessibleProject } from '@/lib/auth/roles';
 import {
   buildProjectReferenceImageStoragePath,
-  DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   ensureProjectReferenceImagesBucket,
   isProjectReferenceImagesTableError,
   isProjectReferenceRole,
@@ -86,7 +85,6 @@ export async function POST(
 
     const existing = await listProjectReferenceImages(service, id);
     const existingByPath = new Map(existing.map(image => [image.storage_path, image]));
-    const currentPrimaryCount = existing.filter(image => image.is_primary).length;
     const maxSortOrder = existing.reduce((max, image) => Math.max(max, image.sort_order), -1);
 
     const normalizedNameFor = (originalName: string): string => {
@@ -106,7 +104,6 @@ export async function POST(
     }
 
     let nextSortOrder = maxSortOrder + 1;
-    let autoPrimaryAssigned = 0;
     const rows = [];
 
     for (const file of files) {
@@ -145,11 +142,6 @@ export async function POST(
         throw new Error(`No se pudo obtener la URL pública de "${file.name}"`);
       }
 
-      const shouldAutoPrimary =
-        !existingRow &&
-        currentPrimaryCount + autoPrimaryAssigned < DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI;
-      if (shouldAutoPrimary) autoPrimaryAssigned += 1;
-
       rows.push({
         project_id: id,
         storage_path: storagePath,
@@ -157,7 +149,7 @@ export async function POST(
         original_filename: file.name,
         mime_type: NORMALIZED_REFERENCE_MIME,
         file_size_bytes: uploadBuffer.length,
-        is_primary: existingRow?.is_primary ?? shouldAutoPrimary,
+        is_primary: existingRow?.is_primary ?? true,
         sort_order: existingRow?.sort_order ?? nextSortOrder++,
       });
     }
@@ -308,17 +300,7 @@ export async function PATCH(
     const update: Record<string, unknown> = {};
 
     if (isPrimaryProvided) {
-      const isPrimary = body.isPrimary as boolean;
-      if (isPrimary) {
-        const currentPrimaryCount = existing.filter(image => image.is_primary).length;
-        if (!target.is_primary && currentPrimaryCount >= DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI) {
-          return NextResponse.json(
-            { error: `Máximo ${DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI} imágenes principales.` },
-            { status: 400 }
-          );
-        }
-      }
-      update.is_primary = isPrimary;
+      update.is_primary = body.isPrimary as boolean;
     }
 
     if (captionProvided) {

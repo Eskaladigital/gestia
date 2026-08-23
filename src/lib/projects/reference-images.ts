@@ -232,13 +232,14 @@ CUANDO EL ROL ES "product", además rellena:
 Cuando el rol NO es product, deja product_identity y product_traits como cadena vacía y view como null.
 
 SIEMPRE rellena:
-- "caption": 1-2 frases en español, máx 320 caracteres, neutra y concreta (qué se ve, protagonista, color dominante, distribución si es interior). Sin adjetivos vacíos, sin listas.
+- "caption": 1-2 frases en español, máx 320 caracteres. Debe incluir OBLIGATORIAMENTE: (1) qué hay, con el detalle distintivo o metafórico si existe; (2) LUZ: hora y calidad (mediodía claro, golden hour, contraluz, nublado, noche); (3) paleta o contraste (alta clave / sombrío / saturado). Sin adjetivos vacíos ("creatividad", "dinamismo"), sin listas.
+- PROHIBIDO aplanar una metáfora: si hay iconos, texto, objetos imposibles o un gesto claro, nómbralos. No escribas "una naranja" si la naranja tiene un espejo y teléfonos luminosos.
 - "confidence": número 0..1 con tu seguridad sobre el rol elegido.
 
 FORMATO DE SALIDA: SOLO un JSON válido, sin texto adicional, con esta forma exacta:
 { "role": "...", "confidence": 0.0, "caption": "...", "product_identity": "...", "product_traits": "...", "view": null }`;
 
-const REFERENCE_ANALYSIS_USER = `Analiza esta imagen y devuelve el JSON que indica el sistema. Decide el rol mirando quién es el protagonista real del encuadre. Si el protagonista es el producto que vende el cliente, marca "product" y rellena identidad, rasgos y vista. Sé concreto y no inventes nada que no se vea.`;
+const REFERENCE_ANALYSIS_USER = `Analiza esta imagen y devuelve el JSON que indica el sistema. Decide el rol mirando quién es el protagonista real del encuadre. Si el protagonista es el producto que vende el cliente, marca "product" y rellena identidad, rasgos y vista. Si es moodboard (style/place/scene), describe también la luz y el contraste: eso es lo que se reutilizará al generar. Sé concreto y no inventes nada que no se vea.`;
 
 export interface ReferenceAnalysis {
   caption: string | null;
@@ -293,7 +294,7 @@ function referenceAnalysisSystemExtra(projectContext?: {
   }
   if (projectContext.sellsPhysicalProduct === false) {
     lines.push(
-      'CONTEXTO CRÍTICO: este cliente NO vende un producto físico reproducible (agencia, consultoría, servicio, moodboard). Usa rol "style" para imágenes de inspiración o metáfora. NO uses "product" para objetos creativos (máquinas, esculturas, animales, escenas surrealistas) salvo que sea el packaging o bien real que el negocio vende.'
+      'CONTEXTO CRÍTICO: este cliente NO vende un producto físico reproducible (agencia, consultoría, servicio, moodboard). Usa rol "style" para imágenes de inspiración o metáfora. NO uses "product" para objetos creativos (máquinas, esculturas, animales, escenas surrealistas) salvo que sea el packaging o bien real que el negocio vende. El caption debe servir para copiar LUZ y ACTITUD visual, no solo el objeto.'
     );
   } else if (projectContext.sellsPhysicalProduct === true) {
     lines.push(

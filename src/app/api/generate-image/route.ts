@@ -14,12 +14,10 @@ import {
 } from '@/lib/ai/constants';
 import {
   assessProductFidelity,
-  DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   downloadReferenceImagesAsDataUrls,
   downloadReferenceImagesAsFiles,
   isOpenAIReferenceImageRejection,
   listProjectReferenceImages,
-  selectRelevantReferenceImages,
 } from '@/lib/projects/reference-images';
 import type { ProductFidelityResult } from '@/lib/projects/reference-images';
 import type { ImageAesthetic, ImageOrientation, Project, ProjectReferenceImage } from '@/types';
@@ -31,7 +29,7 @@ import {
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
 // enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6-terra + gpt-image-2 + referencias.
 // - runtime nodejs: sharp no funciona en Edge.
-// - maxDuration 300: con 4 referencias la generación orquestada puede pasar
+// - maxDuration 300: con varias referencias la generación orquestada puede pasar
 //   de 60s de Vercel Pro por defecto.
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -482,54 +480,10 @@ export async function POST(request: NextRequest) {
         ? (visual as any).user_feedback.trim()
         : null;
 
-    const refsWithCaption = allReferenceImages.filter(
-      image => image.caption && image.caption_status === 'ready'
-    );
-    let selectedReferenceImages = allReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
-    let selectorReasoning = '';
-    if (refsWithCaption.length > 0) {
-      const selection = await selectRelevantReferenceImages({
-        apiKey,
-        visualPrompt: visual.visual_prompt,
-        catalog: refsWithCaption.map(image => ({
-          id: image.id,
-          caption: image.caption || '',
-          role: effectiveReferenceRoleForPipeline(image.reference_role, sellsPhysicalProduct),
-          view: image.reference_view ?? null,
-        })),
-        maxResults: DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
-        sellsPhysicalProduct,
-      });
-      if (selection) {
-        selectorReasoning = selection.reasoning;
-        if (selection.selectedIds.length > 0) {
-          const order = new Map(selection.selectedIds.map((id, idx) => [id, idx]));
-          selectedReferenceImages = allReferenceImages
-            .filter(image => order.has(image.id))
-            .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-        } else {
-          // El selector no ve referencias útiles (p. ej. una cita sobre color).
-          selectedReferenceImages = [];
-        }
-      }
-    }
-
-    if (useProductFidelity && productReferenceImages.length > 0) {
-      const alreadyHasProduct = selectedReferenceImages.some(
-        image => image.reference_role === 'product'
-      );
-      if (!alreadyHasProduct) {
-        const anchor =
-          productReferenceImages.find(image => image.is_primary) || productReferenceImages[0];
-        selectedReferenceImages = [anchor, ...selectedReferenceImages];
-        selectorReasoning = selectorReasoning
-          ? `${selectorReasoning} (+ancla de producto)`
-          : 'ancla de producto garantizada';
-      }
-    }
-
-    // Nunca pasamos más referencias de las que admite la edición.
-    selectedReferenceImages = selectedReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
+    const selectedReferenceImages = allReferenceImages;
+    const selectorReasoning = selectedReferenceImages.length
+      ? `todas las referencias subidas (${selectedReferenceImages.length})`
+      : '';
 
     const projectPhysicalConstraints = useProductFidelity ? projectPhysicalConstraintsFromDb : null;
 
@@ -707,7 +661,7 @@ export async function POST(request: NextRequest) {
           ? fidelity.violations.map(v => `- ${v}`).join('\n')
           : '- El producto generado no coincide con el producto real de las referencias.';
         const retryPrompt = applyUserFeedbackToPrompt(prompt, violationsText, true);
-        const retryRefs = productReferenceImages.slice(0, DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI);
+        const retryRefs = productReferenceImages;
         try {
           const b64Retry = await generateImageB64(
             retryPrompt,

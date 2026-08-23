@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import type { ProjectReferenceImage, ProjectReferenceRole } from '@/types';
 import {
   countReferenceImagesNeedingReanalysis,
-  DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI,
   MAX_PROJECT_REFERENCE_IMAGES,
   PROJECT_REFERENCE_ROLE_CHOICES,
   PROJECT_REFERENCE_ROLE_LABELS,
@@ -150,25 +149,6 @@ export function ProjectReferenceImagesCard({
     }
   }
 
-  async function togglePrimary(imageId: string, isPrimary: boolean) {
-    setBusyId(imageId);
-    setMessage(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/reference-images`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageId, isPrimary }),
-      });
-      if (!res.ok) throw new Error(await readApiError(res));
-      setMessage({ type: 'ok', text: 'Referencias principales actualizadas.' });
-      router.refresh();
-    } catch (error: unknown) {
-      setMessage({ type: 'err', text: error instanceof Error ? error.message : 'Error actualizando la referencia' });
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function saveCaption(imageId: string, caption: string) {
     setCaptionBusyId(imageId);
     setMessage(null);
@@ -274,7 +254,6 @@ export function ProjectReferenceImagesCard({
     }
   }
 
-  const primaryCount = initialImages.filter(image => image.is_primary).length;
   const canUploadMore = initialImages.length < MAX_PROJECT_REFERENCE_IMAGES;
   const needsAnalysisCount = countReferenceImagesNeedingReanalysis(initialImages);
   const pendingCaptionCount = needsAnalysisCount;
@@ -397,12 +376,13 @@ export function ProjectReferenceImagesCard({
             <strong>reglas físicas inviolables</strong> (visibles en Ajustes, solo lectura). Los deseos creativos del
             cliente van en <strong>Reglas IA</strong> y no cambian la forma del producto.
           </p>
+          <p className="text-xs text-surface-600 mt-2 font-medium leading-relaxed">
+            La IA mira <strong>todas las fotos que subas</strong> (hasta {MAX_PROJECT_REFERENCE_IMAGES}). No hay
+            que marcar principales: si está en el proyecto, cuenta.
+          </p>
           <div className="flex flex-wrap gap-2 mt-3 text-[10px] font-bold uppercase tracking-wider">
             <span className="border-2 border-surface-900 px-2 py-1 bg-white">
               {initialImages.length}/{MAX_PROJECT_REFERENCE_IMAGES} referencias
-            </span>
-            <span className="border-2 border-surface-900 px-2 py-1 bg-white">
-              {primaryCount}/{DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI} principales
             </span>
             {autoAnalyzing ? (
               <span className="border-2 border-amber-500 px-2 py-1 bg-amber-500/20 text-amber-900">
@@ -444,9 +424,6 @@ export function ProjectReferenceImagesCard({
                 <div className="p-3 space-y-3 border-t-2 border-surface-900">
                   <div>
                     <p className="text-xs font-bold text-surface-900 truncate">{image.original_filename}</p>
-                    <p className="text-[10px] text-surface-500 uppercase tracking-wider font-bold mt-1">
-                      {image.is_primary ? 'Principal para IA' : 'Secundaria'}
-                    </p>
                   </div>
 
                   {/* Tipo de imagen (rol): la IA lo detecta al subir; el usuario puede corregirlo. */}
@@ -595,14 +572,6 @@ export function ProjectReferenceImagesCard({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant={image.is_primary ? 'success' : 'secondary'}
-                      size="sm"
-                      onClick={() => void togglePrimary(image.id, !image.is_primary)}
-                      loading={busyId === image.id}
-                    >
-                      {image.is_primary ? 'Quitar principal' : 'Marcar principal'}
-                    </Button>
                     <Button
                       variant="danger"
                       size="sm"

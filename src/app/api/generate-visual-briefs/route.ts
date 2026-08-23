@@ -7,7 +7,7 @@ import {
   countStyleReferenceImages,
   type ReferenceGuidanceInput,
 } from '@/lib/projects/reference-images-shared';
-import { DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI, listProjectReferenceImages } from '@/lib/projects/reference-images';
+import { listProjectReferenceImages } from '@/lib/projects/reference-images';
 import type { SingleVisualAIResponse, ContentItem } from '@/types';
 
 export const maxDuration = 300;
@@ -247,11 +247,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
     }
 
-    const referenceImages = await listProjectReferenceImages(
-      supabase,
-      project_id,
-      DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI
-    );
+    const referenceImages = await listProjectReferenceImages(supabase, project_id);
     const referenceImageUrls = referenceImages.map(image => image.image_url);
     const referenceGuidance: ReferenceGuidanceInput = {
       sellsPhysicalProduct: project.sells_physical_product ?? null,

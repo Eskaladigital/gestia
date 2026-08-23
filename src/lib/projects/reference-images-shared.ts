@@ -15,7 +15,8 @@ import type { ProjectReferenceImage, ProjectReferenceRole } from '@/types';
 
 export const PROJECT_REFERENCE_IMAGES_BUCKET = 'project-reference-images';
 export const MAX_PROJECT_REFERENCE_IMAGES = 10;
-export const DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI = 4;
+/** Tope de fotos que la IA ve: todas las subidas (el máximo del proyecto). */
+export const DEFAULT_PROJECT_REFERENCE_IMAGES_FOR_AI = MAX_PROJECT_REFERENCE_IMAGES;
 
 /** Roles válidos de una imagen de referencia (migración 028). */
 export const PROJECT_REFERENCE_ROLES: ProjectReferenceRole[] = [
