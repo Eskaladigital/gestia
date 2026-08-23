@@ -69,7 +69,8 @@ IMÁGENES:
 - El cactus es columnar (costillas verticales, areolas, porte de candelabro o columna simple). Nunca un cactus bola, nunca saguaro del far west como si fuera Trichocereus.
 - Presencia humana baja: manos de viverista con plantón, no modelos, no "yoga junto al cactus", no ritual.
 - Paleta de marca: negro #1a1a1a, crudo #f5f2eb, naranja #c4652a, verde oliva #3d5a3d, terracota #b85c38. Logo cactus amarillo sobre oscuro; no recolorarlo ni inventar otro isotipo.
-- Variedad visual: ficha de producto, detalle de costilla, vista de invernadero/bancada, packing, implantación paisajística xerófita europea (jardín mediterráneo, no Arizona de película).`;
+- Variedad visual: ficha de producto, detalle de costilla, vista de invernadero/bancada, packing, implantación paisajística xerófita europea (jardín mediterráneo, no Arizona de película).
+- EL FEED ES LA UNIDAD: el muro no puede ser un tapiz de "guante + columna + umbráculo". Reparte tipos de escena entre posts consecutivos (detalle de costilla, lote en bancada, packing/pasaporte, implantación mediterránea, oficio sin el mismo gesto). PROHIBIDO dos teselas seguidas con el mismo gesto icónico (mano/guante sosteniendo una columna). Fidelidad a las refs = morfología real, no el mismo fotograma.`;
 
 const TRICHOLAND_PHYSICAL_CONSTRAINTS = `PRODUCTO: cactus columnares del género Trichocereus (sin. Echinopsis para muchos autores), cultivados en vivero en Murcia. Tallo cilíndrico vertical con costillas longitudinales, areolas y espinas según taxón; epidermis verde, glauca o verde-azulada. NO son cactus globosos, NO son Opuntia/chumbera, NO son saguaros Carnegiea, NO son ágaves ni yucas.
 
@@ -261,6 +262,7 @@ function hasFlag(name) {
 async function main() {
   loadEnvLocal();
   const confirm = hasFlag('confirm');
+  const aiRulesOnly = hasFlag('ai-rules-only');
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !key) {
@@ -341,7 +343,7 @@ async function main() {
     console.log(`  - ${e.id} | ${e.name} | ${e.status}`);
   }
 
-  if (!confirm) {
+  if (!confirm && !aiRulesOnly) {
     console.log('\n(dry-run) Config que se aplicaría:');
     console.log(
       JSON.stringify(
@@ -361,6 +363,20 @@ async function main() {
   }
 
   let projectId = existing?.[0]?.id;
+  if (aiRulesOnly) {
+    if (!projectId) {
+      console.error('No hay proyecto Tricholand que actualizar.');
+      process.exit(1);
+    }
+    const { error } = await sb.from('projects').update({ ai_rules: TRICHOLAND_AI_RULES }).eq('id', projectId);
+    if (error) {
+      console.error('Error update ai_rules:', error.message);
+      process.exit(1);
+    }
+    console.log(`\n✓ ai_rules actualizadas en ${projectId} (${TRICHOLAND_AI_RULES.length} chars)`);
+    return;
+  }
+
   if (projectId) {
     console.log(`\nActualizando proyecto existente ${projectId}…`);
     const { error } = await sb.from('projects').update(payload).eq('id', projectId);

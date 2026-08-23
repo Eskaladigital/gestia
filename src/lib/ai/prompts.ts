@@ -296,6 +296,109 @@ export function buildPhysicalConstraintsBlock(project: Project): string {
   ].join('\n');
 }
 
+function clipPromptText(text: unknown, max: number): string {
+  const s = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  if (!s) return '';
+  return s.length > max ? `${s.slice(0, max).trim()}…` : s;
+}
+
+/**
+ * Ley sistémica: el perfil se lee como retícula, no como fotos sueltas.
+ * Aplica a B2B, lifestyle, servicios y producto. La variedad sale de TIPO DE
+ * ESCENA (plano, lugar, gesto, escala), no de inventar vidas ajenas.
+ */
+export const FEED_AS_UNIT_LAW = `═══════════════════════════════════════════
+EL FEED ES LA UNIDAD (ley para TODOS los proyectos)
+═══════════════════════════════════════════
+Cuando alguien abre el perfil, no ve un post: ve una RETÍCULA. Diseña cada pieza como tesela de ese muro, no como foto suelta. Si un recorte de 9 teselas parece la misma foto repetida, has fracasado.
+
+TIPOS DE ESCENA (reparte entre posts consecutivos; usa solo los que existan de verdad en este negocio):
+- detalle — macro, textura, herramienta, etiqueta, documento
+- lote / conjunto — volumen, repetición, lineal, mesa, palé, grupo
+- oficio / proceso — manos trabajando, packing, servicio, backstage
+- destino / uso — el producto o servicio YA en su contexto de llegada
+- documento / dato — pasaporte, packing list, pantalla, cifra, plano
+- humano / gremio — persona real del oficio o del cliente (si el proyecto lo permite)
+- producto-héroe — el plano "de catálogo"; como mucho 1 de cada 3 teselas de feed
+- entorno vacío — lugar sin el producto protagonista
+
+REGLAS DURAS:
+- Dos posts consecutivos del muro NO pueden compartir el mismo tipo de escena ni la misma combinación sujeto + lugar + gesto icónico.
+- Fidelidad a referencias ≠ copiar el mismo fotograma. Las refs anclan CÓMO ES el producto o el lugar; el ENCUADRE, la escala y el gesto deben cambiar.
+- Si el negocio es B2B o de un solo producto, la variedad sale de plano / lugar / gesto / escala, NO de inventar parejas, playas o vidas ajenas.
+- Si el negocio es lifestyle, reparte protagonistas y escenarios; no uses una sola plantilla (p. ej. "pareja en naturaleza") para todo el mes.
+- El muro debe poder leerse en 3 segundos: que se distingan las piezas, no un tapiz del mismo color / mismo objeto / mismo gesto.`;
+
+export type FeedNeighborDigest = {
+  previous?: { date: string; format: string | null; idea: string; scene: string };
+  next?: { date: string; format: string | null; idea: string; scene: string };
+  monthMap: string;
+};
+
+export type FeedNeighborSource = {
+  id: string;
+  scheduled_date: string;
+  format: string | null;
+  idea: string;
+  production_specs?: { scene_summary?: string } | null;
+};
+
+function sceneFromNeighbor(post: FeedNeighborSource): string {
+  const scene = post.production_specs?.scene_summary?.trim();
+  if (scene) return clipPromptText(scene, 220);
+  return clipPromptText(post.idea || '', 160);
+}
+
+/** Mapa del muro + teselas anterior/siguiente para no repetir escena. */
+export function buildFeedNeighborDigest(
+  orderedPosts: FeedNeighborSource[],
+  currentId: string
+): FeedNeighborDigest {
+  const idx = orderedPosts.findIndex(p => p.id === currentId);
+  const prev = idx > 0 ? orderedPosts[idx - 1] : undefined;
+  const next = idx >= 0 && idx < orderedPosts.length - 1 ? orderedPosts[idx + 1] : undefined;
+  const current = idx >= 0 ? orderedPosts[idx] : undefined;
+  const monthPrefix = current?.scheduled_date?.slice(0, 7);
+  const windowPosts = monthPrefix
+    ? orderedPosts.filter(p => (p.scheduled_date || '').startsWith(monthPrefix))
+    : orderedPosts.slice(Math.max(0, idx - 6), Math.max(0, idx) + 7);
+  const monthMap = windowPosts
+    .map((p, i) => {
+      const mark = p.id === currentId ? ' ← ESTA TESELA' : '';
+      return `${i + 1}. ${p.scheduled_date} · ${p.format || 'publicacion'} · ${clipPromptText(p.idea, 80)} · escena: ${sceneFromNeighbor(p)}${mark}`;
+    })
+    .join('\n');
+
+  return {
+    previous: prev
+      ? { date: prev.scheduled_date, format: prev.format, idea: prev.idea, scene: sceneFromNeighbor(prev) }
+      : undefined,
+    next: next
+      ? { date: next.scheduled_date, format: next.format, idea: next.idea, scene: sceneFromNeighbor(next) }
+      : undefined,
+    monthMap,
+  };
+}
+
+export function buildFeedNeighborsBlock(digest?: FeedNeighborDigest | null): string {
+  if (!digest?.monthMap) return '';
+  const prevLine = digest.previous
+    ? `- Tesela ANTERIOR (${digest.previous.date}, ${digest.previous.format || 'publicacion'}): ${clipPromptText(digest.previous.idea, 90)} — ${digest.previous.scene}`
+    : '- Tesela ANTERIOR: no hay (esta es la primera del tramo).';
+  const nextLine = digest.next
+    ? `- Tesela SIGUIENTE (${digest.next.date}, ${digest.next.format || 'publicacion'}): ${clipPromptText(digest.next.idea, 90)} — ${digest.next.scene}`
+    : '- Tesela SIGUIENTE: no hay (esta es la última del tramo).';
+
+  return `## MURO / FEED (esta imagen es UNA tesela)
+${prevLine}
+${nextLine}
+
+### Mapa compacto del tramo (no copies ninguna escena vecina)
+${digest.monthMap}
+
+PROHIBIDO que esta tesela se confunda con la anterior o la siguiente: cambia al menos DOS de estos ejes (tipo de escena, sujeto, lugar, gesto, escala de plano, luz). Fidelidad de producto ≠ mismo fotograma.`;
+}
+
 /**
  * Dirección creativa efectiva del proyecto.
  * Si la columna explícita (migración 031) no está rellenada, se deriva del
@@ -615,6 +718,7 @@ Una cuenta de Instagram se sigue por el INTERÉS DE LA AUDIENCIA, no como catál
   · Expertise / formación / salud / bienestar: lidera con ENSEÑANZA real y aplicable que el seguidor pueda usar hoy.
 - El contenido de venta o promoción directa debe ser MINORÍA (orientativo: como mucho ~15-20% de los pilares), salvo que las REGLAS IA del cliente o su objetivo principal indiquen explícitamente lo contrario.
 - Diseña los pilares para que el feed NO parezca un folleto: evita repetir el mismo ángulo comercial o el mismo tipo de pieza una y otra vez; busca variedad de enfoques que sostengan el interés durante meses.
+- EL FEED ES LA UNIDAD: un pilar no puede traducirse en "la misma foto del producto una y otra vez". Cada pilar debe sugerir TIPOS DE ESCENA distintos (detalle, oficio, destino, documento, conjunto, producto-héroe…). Cuando alguien abre el perfil, debe leerse un muro con ritmo, no un catálogo.
 
 ═══════════════════════════════════════════
 REGLAS DE PRIORIDAD (orden descendente)
@@ -802,7 +906,7 @@ Cada post DEBE incluir un campo "production_specs" con detalles técnicos de pro
     · Al menos UN slide debe ser un detalle, flat lay o cenital sin el producto/sujeto principal protagonizando (un objeto secundario, una mano, un mapa, comida, una textura, un cuaderno abierto, una vista del lugar, una herramienta, un rincón).
     · Al menos UN slide debe ser interior (si tiene sentido en el tema) y al menos UN slide debe ser exterior (si tiene sentido); si el tema es 100% indoor o 100% outdoor, varía entonces escala y momento del día.
     · Cuando el tema gire alrededor de un producto/lugar muy "fotogénico repetible" (camper, autocaravana, coche, hotel, tienda, plato estrella, destino), está PROHIBIDO que más de UN slide sea el clásico plano de tres cuartos del producto en entorno abierto. El resto deben ser planos claramente distintos entre sí: detalle, interior, escena humana, entorno sin producto, cenital, POV, primer plano, etc.
-  - VARIEDAD ENTRE PUBLICACIONES DEL MES (anti-catálogo de feed): el conjunto del calendario NO debe parecer un catálogo del mismo producto repetido. En publicaciones consecutivas varía el enfoque visual (plano principal, sujeto, escena, momento del día); reparte protagonismo entre experiencia/personas/lugar y producto, en coherencia con el principio editorial anti-catálogo de la estrategia. No conviertas el feed en la misma foto del producto en distintos fondos.
+  - VARIEDAD ENTRE PUBLICACIONES DEL MES (el feed es la unidad): el conjunto del calendario NO debe parecer un catálogo del mismo producto repetido. En publicaciones consecutivas cambia el TIPO DE ESCENA (detalle / lote / oficio / destino / documento / humano / producto-héroe / entorno). No conviertas el feed en la misma foto del producto en distintos fondos. Fidelidad a referencias ≠ copiar el mismo fotograma.
   - Estructura recomendada (adáptala al tema):
     · Slide 1 = gancho visual con un plano poco esperado (no el típico de catálogo).
     · Slides intermedios = desarrollo narrativo con al menos 1 detalle, 1 escena humana o ambiental y 1 cambio de escala respecto al gancho.
@@ -820,10 +924,13 @@ Cada post DEBE incluir un campo "production_specs" con detalles técnicos de pro
 - PUBLICACIÓN: { "media_type": "imagen", "scene_summary": "..." }
   - scene_summary: qué muestra la imagen del feed
 
-VARIEDAD DE EXPERIENCIAS DEL MES (aplica a TODOS los formatos y scene_summary):
-- El mes debe mostrar un ABANICO AMPLIO de experiencias, escenarios y protagonistas alrededor del producto/servicio, no la misma escena tipo repetida con pequeños cambios. Reparte entre los posts: distintos PROTAGONISTAS (pareja, familia con niños, grupo de amigos, persona sola, personas mayores, mascota…), distintos ESCENARIOS (naturaleza, costa, pueblo, CIUDAD y turismo cultural, interiores con vida, destinos lejanos si el producto lo permite…) y distintos PLANES o MOMENTOS (gastronomía, mercado, monumento, evento, ruta, trabajo real, descanso…), siempre coherentes con el negocio.
-- PROHIBIDO que más de 2 posts del mes compartan la misma combinación de protagonista + escenario (p. ej. "pareja en entorno natural" o "persona en interior"). Si al planificar detectas la repetición, cambia el protagonista o el escenario de uno de ellos.
-- Piensa el mes como un catálogo de vidas y situaciones posibles alrededor de la marca, no como variaciones de un único plan.
+${FEED_AS_UNIT_LAW}
+
+VARIEDAD DEL MES (aplica a TODOS los formatos y scene_summary):
+- Antes de cerrar el mes, recorre mentalmente la RETÍCULA: dos posts seguidos no pueden ser el mismo tipo de escena ni el mismo gesto icónico.
+- Adapta la variedad al negocio REAL. Lifestyle / producto aspiracional: reparte protagonistas y escenarios (no uses "pareja en naturaleza" como plantilla). B2B / un solo producto / oficio: reparte plano, lugar, gesto y escala (detalle, lote, proceso, documento, destino). Nunca inventes vidas ajenas para fingir variedad.
+- PROHIBIDO que más de 2 posts del mes compartan la misma combinación sujeto + lugar + gesto. Si al planificar detectas la repetición, cambia el tipo de escena de uno de ellos.
+- El "producto-héroe" (plano de catálogo) es minoría: como mucho 1 de cada 3 teselas de feed.
 ${buildCreativeDirectionCalendarBlock(project)}
 ${buildImageAestheticCalendarBlock(project)}
 FORMATO DE RESPUESTA JSON:
@@ -1060,6 +1167,8 @@ export function buildVisualBriefsPrompt(
 
 PRINCIPIO FUNDAMENTAL: Cada brief debe describir EXACTAMENTE qué se ve en cada imagen o escena. NO describas "el concepto" ni "la estética" en abstracto. Describe OBJETOS, PERSONAS, ACCIONES, COMPOSICIÓN y TEXTO LITERAL que aparece en pantalla.
 
+${FEED_AS_UNIT_LAW}
+
 ═══════════════════════════════════════════
 ENTREGABLE POR CADA PUBLICACIÓN
 ═══════════════════════════════════════════
@@ -1113,14 +1222,15 @@ OBLIGATORIO en TODO brief:
 - Si hay personas: describir qué hacen (no "una persona disfrutando" sino "mujer de ~30 años sentada en la puerta trasera de la camper, piernas colgando, sosteniendo una taza de café, mirando al mar")
 - Si hay texto overlay: incluir el TEXTO LITERAL, la POSICIÓN en la imagen (arriba, centro, tercio inferior), la TIPOGRAFÍA y el COLOR
 - Respetar la identidad de marca: colores, fuentes, estilo visual
-- Cada brief debe ser DIFERENTE al anterior — variar escenas, encuadres, momentos del día, localizaciones, composiciones
+- Cada brief es una tesela del muro: DIFERENTE al anterior y al siguiente en tipo de escena, encuadre, gesto y/o localización. Fidelidad de producto ≠ mismo fotograma.
 
 PROHIBIDO:
 - Descripciones vagas tipo "imagen evocadora" o "visual atractivo"
 - Decir "usar colores de marca" sin especificar CUÁLES y DÓNDE
 - Briefs genéricos que podrían servir para cualquier marca
 - Prompts de IA genéricos tipo "foto de alta calidad de una autocaravana"
-- Repetir el mismo estilo visual en posts consecutivos
+- Repetir el mismo tipo de escena, el mismo gesto icónico o el mismo estilo visual en posts consecutivos
+- Convertir el feed en un tapiz de la misma foto (mismo sujeto + mismo lugar + mismo gesto) con recortes distintos
 - Aplicar por inercia una estética "editorial", "premium", "sobria" o "de revista": el estilo lo dictan las reglas del proyecto y la identidad de marca, y solo puede ser editorial/premium si el proyecto lo pide explícitamente
 
 REGLAS PARA EL VISUAL_PROMPT (IA generativa):
@@ -1164,7 +1274,7 @@ INSTRUCCIONES FINALES:
 - RECUERDA: para CARRUSELES, detalla CADA SLIDE por separado con las 6 secciones (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo). El visual_prompt DEBE tener un prompt separado por cada slide.
 - RECUERDA: para REELS/VÍDEOS, describe el fotograma clave más representativo con las 6 secciones.
 - RECUERDA: los visual_prompt deben ser MUY LARGOS y DETALLADOS (mínimo 150 palabras por imagen), con estilo, sujeto, composición, iluminación, texturas y aspect ratio.
-- Cada prompt debe ser ÚNICO y no repetir escenas ni composiciones del anterior.
+- Cada prompt es una tesela del muro: ÚNICO respecto al anterior y al siguiente (cambia tipo de escena, gesto o escala). No conviertas el lote en la misma foto repetida.
 - Usa los colores de marca CONCRETOS (con hex) y las fuentes reales de la marca.`,
   };
 }
@@ -1193,6 +1303,8 @@ export interface SingleVisualInput {
    * "asignados" y NO los repita.
    */
   siblingShotCards?: string[];
+  /** Teselas vecinas del muro (posts anterior/siguiente + mapa del tramo). */
+  feedNeighbors?: FeedNeighborDigest | null;
 }
 
 const ASPECT_RATIOS: Record<string, string> = {
@@ -1275,6 +1387,8 @@ REGLAS ESTRICTAS:
 
 ${PROJECT_AESTHETIC_GUARD}
 
+${FEED_AS_UNIT_LAW}
+
 ${JSON_FOOTER}`;
 }
 
@@ -1317,6 +1431,8 @@ REGLAS ESTRICTAS:
 - Incluir --ar ${ar} al final de la sección Composición
 
 ${PROJECT_AESTHETIC_GUARD}
+
+${FEED_AS_UNIT_LAW}
 
 ${JSON_FOOTER}`;
 }
@@ -1394,6 +1510,8 @@ REGLAS ESTRICTAS:
 
 ${PROJECT_AESTHETIC_GUARD}
 
+${FEED_AS_UNIT_LAW}
+
 ${JSON_FOOTER}`;
 }
 
@@ -1430,8 +1548,11 @@ REGLAS ESTRICTAS:
 - Ser HIPER-ESPECÍFICO: no "un jardín bonito" sino "jardín de estilo mediterráneo con grava blanca de mármol triturado, lavanda en flor con abejas posadas, y un olivo centenario de tronco retorcido y corteza gris plateada"
 - Incluir --ar ${ar} al final de la sección Composición
 - Cada detalle debe contribuir a que un generador de imágenes produzca EXACTAMENTE esta escena
+- Esta imagen es UNA tesela del muro: no copies el gesto, el plano ni el lugar de las teselas vecinas
 
 ${PROJECT_AESTHETIC_GUARD}
+
+${FEED_AS_UNIT_LAW}
 
 ${JSON_FOOTER}`;
 }
@@ -1458,6 +1579,7 @@ export function buildSingleVisualPrompt(
     previousSlideContext,
     nextSlideContext,
     siblingShotCards,
+    feedNeighbors,
   } = input;
   const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
   const agentKey = resolveVisualAgent(post.format, post.production_specs?.media_type);
@@ -1498,7 +1620,7 @@ export function buildSingleVisualPrompt(
 - Este fotograma representa UN MOMENTO CONCRETO de esta escena del vídeo`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en este fotograma/escena. No pienses en los demás.${physicalPriorityInstruction}
+- Concéntrate en ESTE fotograma de ESTE vídeo. Distínguelo de las teselas vecinas del muro: no copies su gesto, plano ni lugar.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 300 palabras, con las 7 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo, Movimiento).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y cinematográficos.
@@ -1546,7 +1668,7 @@ export function buildSingleVisualPrompt(
 - ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta Story según el calendario: ${slideContext}` : ''}`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en esta Story. No pienses en las demás.${physicalPriorityInstruction}
+- Concéntrate en ESTA Story. Distínguela de las teselas vecinas del muro: no copies su gesto, plano ni lugar.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas.
@@ -1561,7 +1683,7 @@ export function buildSingleVisualPrompt(
 - ${label} (${visualIndex + 1} de ${totalVisuals} del post)${slideContext ? `\n- Contexto de esta imagen según el calendario: ${slideContext}` : ''}`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate EXCLUSIVAMENTE en esta imagen. No pienses en las demás.${physicalPriorityInstruction}
+- Esta imagen es UNA tesela del muro. Concéntrate en ESTE encuadre, pero OBLÍGATE a que no se confunda con las teselas vecinas.${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y táctiles.
@@ -1581,7 +1703,10 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}${imageAestheticBlock ? `\n\n${imageAestheticBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
+    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}${imageAestheticBlock ? `\n\n${imageAestheticBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}${(() => {
+    const neighbors = buildFeedNeighborsBlock(feedNeighbors);
+    return neighbors ? `\n\n${neighbors}` : '';
+  })()}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
     agentKey,
   };
 }

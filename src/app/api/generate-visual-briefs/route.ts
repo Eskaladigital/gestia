@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { fetchAccessibleProject } from '@/lib/auth/roles';
-import { buildSingleVisualPrompt, decomposePostIntoVisuals, callAI, type VisualBriefInput } from '@/lib/ai';
+import { buildSingleVisualPrompt, buildFeedNeighborDigest, decomposePostIntoVisuals, callAI, type VisualBriefInput, type FeedNeighborSource } from '@/lib/ai';
 import {
   countProductReferenceImages,
   countStyleReferenceImages,
@@ -99,6 +99,7 @@ async function processOneVisual(
   referenceGuidance: ReferenceGuidanceInput,
   referenceImageUrls: string[],
   supabase: any,
+  feedNeighbors: ReturnType<typeof buildFeedNeighborDigest> | null,
 ): Promise<VisualResult | null> {
   const { system, user: userPrompt, agentKey } = buildSingleVisualPrompt(project, {
     post: job.post,
@@ -110,6 +111,7 @@ async function processOneVisual(
     previousSlideContext: job.previousSlideContext,
     nextSlideContext: job.nextSlideContext,
     siblingShotCards: job.siblingShotCards,
+    feedNeighbors,
   }, referenceGuidance);
 
   // Reintento automático: ante un fallo transitorio de la IA o un prompt vacío,
@@ -294,6 +296,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const dates = posts.map(p => p.scheduled_date).filter(Boolean).sort();
+    const firstMonth = dates[0]?.slice(0, 7);
+    const lastMonth = dates[dates.length - 1]?.slice(0, 7);
+    const from = firstMonth ? `${firstMonth}-01` : dates[0];
+    const to = lastMonth
+      ? (() => {
+          const [y, m] = lastMonth.split('-').map(Number);
+          const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+          return `${lastMonth}-${String(lastDay).padStart(2, '0')}`;
+        })()
+      : undefined;
+    let neighborSources: FeedNeighborSource[] = posts.map(p => ({
+      id: p.id,
+      scheduled_date: p.scheduled_date,
+      format: p.format,
+      idea: p.idea,
+      production_specs: p.production_specs,
+    }));
+    try {
+      let neighborQuery = supabase
+        .from('content_items')
+        .select('id, scheduled_date, format, idea, production_specs')
+        .eq('project_id', project_id)
+        .not('scheduled_date', 'is', null)
+        .order('scheduled_date', { ascending: true });
+      if (from) neighborQuery = neighborQuery.gte('scheduled_date', from);
+      if (to) neighborQuery = neighborQuery.lte('scheduled_date', to);
+      const { data: monthItems } = await neighborQuery;
+      if (monthItems && monthItems.length > 0) {
+        neighborSources = monthItems as FeedNeighborSource[];
+      }
+    } catch {
+      /* usamos el lote actual */
+    }
+
     const fullQueue = buildVisualQueue(posts);
     const offset = batch_offset ?? 0;
     const size = batch_size ?? BATCH_SIZE;
@@ -373,7 +410,10 @@ export async function POST(request: NextRequest) {
                 user.id,
                 referenceGuidance,
                 referenceImageUrls,
-                supabase
+                supabase,
+                neighborSources.length
+                  ? buildFeedNeighborDigest(neighborSources, job.contentItemId)
+                  : null
               );
             } catch (err) {
               console.error(`[generate-visual-briefs] Failed visual ${job.contentItemId}[${job.visualIndex}]:`, err);
@@ -388,11 +428,15 @@ export async function POST(request: NextRequest) {
               if (!postVisualResults.has(result.contentItemId)) {
                 postVisualResults.set(result.contentItemId, []);
               }
-              postVisualResults.get(result.contentItemId)!.push({
+              const arr = postVisualResults.get(result.contentItemId)!;
+              const existingIdx = arr.findIndex(r => r.index === result.visualIndex);
+              const next = {
                 index: result.visualIndex,
                 label: result.label,
                 prompt: result.prompt,
-              });
+              };
+              if (existingIdx >= 0) arr[existingIdx] = next;
+              else arr.push(next);
             }
 
             const newlyCompleted = await finalizeCompletedPosts(

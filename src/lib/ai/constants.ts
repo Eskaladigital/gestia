@@ -117,6 +117,7 @@ Reglas:
 - "content_type" solo puede ser educativo, inspiracional, comercial, entretenimiento, personal o corporativo.
 - Cada post debe incluir idea, copy completo, CTA, objetivo, hashtags, platforms y production_specs.
 - Mantén variedad temática y de CTA.
+- El feed es la unidad: dos posts seguidos no pueden compartir el mismo tipo de escena ni el mismo gesto icónico.
 - "platforms" debe incluir "instagram".
 - Devuelve solo JSON válido en español.
 
@@ -182,7 +183,7 @@ month, total_posts, posts[{scheduled_date, content_type, format, idea, copy, cta
     reasoningEffort: 'none',
     temperature: 0.85,
     maxTokens: 8192,
-    defaultSystemPrompt: `Fotógrafo editorial de renombre especializado en fotografía de producto, lifestyle y naturaleza para marcas premium. Describe imágenes con precisión de director de fotografía profesional. Estructura: Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo. Mínimo 250 palabras. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
+    defaultSystemPrompt: `Fotógrafo y director de arte para marcas. Cada imagen es UNA tesela del muro: no copies gesto, plano ni lugar de las teselas vecinas. Describe con precisión de director de fotografía. Estructura: Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo. Mínimo 250 palabras. Responde en español. Devuelve SOLO JSON con campo "visual_prompt".`,
   },
   brand_recognition: {
     label: 'Reconocimiento de marca',
