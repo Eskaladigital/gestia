@@ -28,6 +28,62 @@ async function readApiError(res: Response): Promise<string> {
   return text.trim() || `Error HTTP ${res.status}`;
 }
 
+// Vercel rechaza cuerpos > ~4,5 MB (FUNCTION_PAYLOAD_TOO_LARGE), así que
+// comprimimos en el navegador y subimos en lotes que no superen este margen.
+const MAX_UPLOAD_BATCH_BYTES = 3_500_000;
+// El servidor normaliza a 2048 px (MAX_REFERENCE_IMAGE_DIMENSION): reducir en
+// cliente a ese mismo tamaño no pierde calidad final y aligera la subida.
+const CLIENT_MAX_DIMENSION = 2048;
+
+/** Reduce y recomprime una imagen en el navegador. Si algo falla, devuelve el original. */
+async function compressImageFile(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, CLIENT_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    // Fondo blanco por si el PNG tiene transparencia (el server también aplana a blanco).
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.87)
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const stem = file.name.replace(/\.[^.]+$/, '');
+    return new File([blob], `${stem}.jpg`, { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+/** Agrupa archivos en lotes cuyo peso total no supere el límite por petición. */
+function splitIntoBatches(files: File[]): File[][] {
+  const batches: File[][] = [];
+  let current: File[] = [];
+  let currentBytes = 0;
+  for (const file of files) {
+    if (current.length > 0 && currentBytes + file.size > MAX_UPLOAD_BATCH_BYTES) {
+      batches.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(file);
+    currentBytes += file.size;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
 export function ProjectReferenceImagesCard({
   projectId,
   initialImages,
@@ -51,16 +107,40 @@ export function ProjectReferenceImagesCard({
     setMessage(null);
 
     try {
-      const formData = new FormData();
-      Array.from(files).forEach(file => formData.append('files', file));
+      const compressed = await Promise.all(Array.from(files).map(compressImageFile));
 
-      const res = await fetch(`/api/projects/${projectId}/reference-images`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error(await readApiError(res));
+      const tooBig = compressed.find(file => file.size > MAX_UPLOAD_BATCH_BYTES);
+      if (tooBig) {
+        throw new Error(
+          `"${tooBig.name}" sigue ocupando ${(tooBig.size / 1024 / 1024).toFixed(1)} MB tras comprimir; supera el límite por petición. Reduce esa imagen y vuelve a intentarlo.`
+        );
+      }
 
-      setMessage({ type: 'ok', text: 'Imágenes de referencia guardadas.' });
+      const batches = splitIntoBatches(compressed);
+      let uploaded = 0;
+      for (const [index, batch] of batches.entries()) {
+        if (batches.length > 1) {
+          setMessage({ type: 'ok', text: `Subiendo lote ${index + 1} de ${batches.length}…` });
+        }
+        const formData = new FormData();
+        batch.forEach(file => formData.append('files', file));
+
+        const res = await fetch(`/api/projects/${projectId}/reference-images`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) {
+          const detail = await readApiError(res);
+          throw new Error(
+            uploaded > 0
+              ? `Se guardaron ${uploaded} imágenes, pero falló el lote ${index + 1}: ${detail}`
+              : detail
+          );
+        }
+        uploaded += batch.length;
+      }
+
+      setMessage({ type: 'ok', text: `Imágenes de referencia guardadas (${uploaded}).` });
       router.refresh();
       if (inputRef.current) inputRef.current.value = '';
     } catch (error: unknown) {
