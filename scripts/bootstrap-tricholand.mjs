@@ -21,15 +21,17 @@ const PROJECT_NAME = 'Tricholand';
 const PROJECT_URL = 'https://www.tricholand.com/';
 
 const TRICHOLAND_AI_RULES = `LÍNEA EDITORIAL (PRIORITARIA — define DE QUÉ VA el contenido):
-- Tricholand NO es una cuenta de cactus para aficionados ni de "plantas mágicas". Es la cuenta de un VIVERO PRODUCTOR mayorista especializado en Trichocereus y cactáceas columnares. El protagonista es la producción profesional: bancadas, calibres, pasaporte UE, logística y un surtido que hace ganar dinero al garden center y al vivero cliente.
-- Audiencia exclusiva B2B: viveros, garden centers, distribuidores y paisajistas de Europa. Nunca hables como si el lector fuera un particular que quiere "un San Pedro para el salón". Si aparece el coleccionista, es como cliente final del lineal del cliente, no como comprador de Tricholand.
-- Pedido mínimo real: 750 unidades (se pueden mezclar variedades y tamaños). Presupuesto en menos de 24 h laborables. Pago por transferencia. No hay checkout de particular.
-- Reparto editorial deseado:
-  · ~40% OFICIO DE VIVERO / PRODUCCIÓN: Murcia, 2.500 m², 25K+ uds/año, semilla o esqueje hasta planta lista, densidades, aclimatación, calidad de enraizamiento, packing.
-  · ~25% CATÁLOGO ORNAMENTAL: variedades, calibres, argumentario de lineal (por qué Pachanoi rota, cuándo Terscheckii, stock limitado de Bridgesii).
-  · ~20% LOGÍSTICA Y DOCUMENTACIÓN UE: pasaporte de planta, UK, temperatura controlada, 7 días de preparación, 99% entrega OK, 18 países.
-  · ~15% CONVERSIÓN B2B: cultivo por encargo, reserva de campaña, "indícanos variedades, tamaños y cantidades".
-- Cada pieza debe servir a un comprador profesional: stock, margen, rotación, merma, normativa o implantación. Si solo "bonito cactus" sin criterio de trade, replantéala.
+- Tricholand NO es una cuenta de "plantas mágicas" ni una tienda de 1 unidad. Es un VIVERO PRODUCTOR de Trichocereus y cactáceas columnares. El protagonista NO es solo el packing ni el SKU: es la COLUMNA como planta ornamental (cómo crece, cómo se planta, cómo se ve en un jardín) y, cuando toca, el oficio de producirla.
+- El CTA comercial sigue siendo B2B (viveros, garden centers, distribuidores, paisajistas; mínimo 750 uds; presupuesto a info@tricholand.com). Eso NO significa que cada post sea una ficha de compra. El slider educativo del proyecto es alto: abre el espectro. Un post divulgativo o de paisajismo es válido aunque no mencione pedido, pasaporte ni calibre.
+- Pedido mínimo real: 750 unidades (se pueden mezclar variedades y tamaños). Presupuesto en menos de 24 h laborables. Pago por transferencia. No hay checkout de particular. No uses "compra el tuyo" ni "envío a casa" como CTA.
+- Reparto editorial deseado (OBLIGATORIO — si el mes no lo cumple, reescríbelo):
+  · ~25% OFICIO DE VIVERO: Murcia, 2.500 m², semilla/esqueje, densidades, aclimatación, calidad. NO más de un tercio del mes.
+  · ~15% CATÁLOGO / SURTIDO: variedades, siluetas, códigos TRI-, cuándo Pachanoi vs Terscheckii.
+  · ~25% PAISAJISMO Y DESTINO: cómo decorar e implantar columnares en jardín mediterráneo / xeropaisajismo europeo; composiciones, densidades de plantación, acompañantes (grava, olivo, arquitectura sencilla, lineal de garden). La planta YA plantada, no en maceta negra de vivero.
+  · ~20% DIVULGATIVO: diferencias entre especies, anatomía de la columna, luz, riego, suelo, clima, mitos vs realidad ornamental, Trichocereus vs Echinopsis. Enseña de verdad, no conviertas cada consejo en un checklist de comprador.
+  · ~15% OPERATIVA B2B (logística + conversión JUNTAS): pasaporte, packing, plazos, 750 uds, reserva de campaña. Es MINORÍA. Si el muro parece una agencia de aduanas, has fallado.
+- PROHIBIDO que más de la mitad de los posts del mes ocurran en umbráculo / bancada / caja / pasaporte / mesa de etiquetas. El vivero existe; no es el único set.
+- Un post puede ser solo bello o solo didáctico si aporta una idea concreta de planta, jardín o cultivo. No lo mates por "falta de argumento de trade".
 
 TERRITORIO Y POSICIONAMIENTO:
 - Especialistas en Trichocereus, no un vivero generalista de cactus y crasas. Eso diferencia frente a Elche/Mediflora (gran formato y catálogo amplio) y frente a tiendas coleccionistas (unidades sueltas).
@@ -65,12 +67,11 @@ VOZ:
 - CTA recurrentes: solicitar presupuesto, indicar variedades/tamaños/cantidades, cultivo por encargo, escribir a info@tricholand.com.
 
 IMÁGENES:
-- Estética profesional de vivero: luz natural mediterránea, columnas reales, bancadas, macetas de cultivo, pallets, etiquetas, pasaporte, polvo y verde-glauco del tallo. Reportaje, no stock genérico de desierto americano.
-- El cactus es columnar (costillas verticales, areolas, porte de candelabro o columna simple). Nunca un cactus bola, nunca saguaro del far west como si fuera Trichocereus.
-- Presencia humana baja: manos de viverista con plantón, no modelos, no "yoga junto al cactus", no ritual.
+- Dos territorios visuales OBLIGATORIOS en el mismo mes: (1) vivero / oficio y (2) DESTINO — jardín mediterráneo europeo, patio seco, grava, muro encalado, lineal de garden, columna YA plantada en suelo. Como mínimo 1 de cada 3 teselas de feed debe ocurrir FUERA del umbráculo.
+- El cactus es columnar (costillas verticales, areolas, porte de candelabro o columna simple). Nunca un cactus bola, nunca saguaro del far west como si fuera Trichocereus. Reportaje real, no stock de desierto americano ni Arizona de película.
+- Presencia humana baja: viverista o paisajista plantando, no modelos, no yoga, no ritual.
 - Paleta de marca: negro #1a1a1a, crudo #f5f2eb, naranja #c4652a, verde oliva #3d5a3d, terracota #b85c38. Logo cactus amarillo sobre oscuro; no recolorarlo ni inventar otro isotipo.
-- Variedad visual: ficha de producto, detalle de costilla, vista de invernadero/bancada, packing, implantación paisajística xerófita europea (jardín mediterráneo, no Arizona de película).
-- EL FEED ES LA UNIDAD: el muro no puede ser un tapiz de "guante + columna + umbráculo". Reparte tipos de escena entre posts consecutivos (detalle de costilla, lote en bancada, packing/pasaporte, implantación mediterránea, oficio sin el mismo gesto). PROHIBIDO dos teselas seguidas con el mismo gesto icónico (mano/guante sosteniendo una columna). Fidelidad a las refs = morfología real, no el mismo fotograma.`;
+- EL FEED ES LA UNIDAD: el muro no puede ser un tapiz de "guante + columna + umbráculo" ni un tapiz de cajas y pasaportes. Reparte tipos de escena (detalle, lote, oficio, DESTINO/jardín, documento, divulgación). PROHIBIDO dos teselas seguidas con el mismo gesto icónico. Fidelidad a las refs = morfología real, no el mismo fotograma de bancada.`;
 
 const TRICHOLAND_PHYSICAL_CONSTRAINTS = `PRODUCTO: cactus columnares del género Trichocereus (sin. Echinopsis para muchos autores), cultivados en vivero en Murcia. Tallo cilíndrico vertical con costillas longitudinales, areolas y espinas según taxón; epidermis verde, glauca o verde-azulada. NO son cactus globosos, NO son Opuntia/chumbera, NO son saguaros Carnegiea, NO son ágaves ni yucas.
 
@@ -83,7 +84,7 @@ Especies reales del catálogo (respetar morfología si se nombra la variedad):
 
 CONTEXTO FÍSICO DEL NEGOCIO:
 - Vivero de producción (2.500 m²): bancadas, macetas de cultivo (Ø típico de lineal C.12 y superiores), malla/invernadero mediterráneo, suelo de cultivo, cajas y pallets para mayorista.
-- Destino de las plantas: lineal de garden center europeo, vivero cliente o xeropaisajismo. Se puede mostrar implantación en jardín mediterráneo europeo (grava, sol, arquitectura sencilla). PROHIBIDO: desierto hollywoodiense, pirámides, altares, humo ceremonial, gente en trance.
+- Destino de las plantas (TERRITORIO VISUAL DE PRIMER ORDEN, no extra): jardín mediterráneo europeo, patio, grava, sol, arquitectura sencilla, lineal de garden center, xeropaisajismo. En estas escenas la columna va PLANTADA o expuesta como planta ornamental, no en maceta negra de cultivo. PROHIBIDO: desierto hollywoodiense, pirámides, altares, humo ceremonial, gente en trance.
 - Logística real: cajas ventiladas, etiquetas, pasaporte de planta UE, camión. No Amazon envelope ni maceta de decoración de IKEA como packaging de marca.
 
 IDENTIDAD:
@@ -92,6 +93,124 @@ IDENTIDAD:
 - PROHIBIDO inventar otros logos, banderas de "shaman shop", setas, o copy superpuesto tipo feria psicodélica.
 
 HUMANOS: secundarios o ausentes. Si aparecen, son viveristas o trade (ropa de trabajo, no recinto ceremonial). Ningún consumo, corte de tallo para "té" ni primer plano de cuchillo sobre pulpa.`;
+
+const TRICHOLAND_PILLARS = [
+  {
+    name: 'Oficio de columnares',
+    percentage: 25,
+    description:
+      'Producción propia en Murcia: bancadas, esqueje, aclimatación y criterio de calidad. Existe para mostrar autoridad de vivero, no para ocupar el muro entero.',
+    content_types: ['Reel de proceso', 'Carrusel técnico', 'Story de bancada'],
+    example_topics: [
+      'De esqueje a columna lista: qué cambia en 2.500 m² de Murcia',
+      'Densidad de bancada y homogeneidad de un lote',
+      'Qué se mira en un corte de columna antes de propagar',
+    ],
+  },
+  {
+    name: 'Surtido que se entiende',
+    percentage: 15,
+    description:
+      'Comparar siluetas y usos de T. pachanoi, peruvianus, bridgesii y terscheckii para que garden y paisajista elijan, sin convertir cada pieza en ficha SKU.',
+    content_types: ['Carrusel comparativo', 'Reel de lectura visual', 'Publicación de silueta'],
+    example_topics: [
+      'TRI-PAC vs TRI-PER: dos lecturas de columna',
+      'Cuándo un proyecto pide T. terscheckii y cuándo no',
+      'Bridgesii como complemento, no como base de reposición',
+    ],
+  },
+  {
+    name: 'Paisajismo con Trichocereus',
+    percentage: 25,
+    description:
+      'Cómo se plantan, se agrupan y se leen las columnas en un jardín mediterráneo o un lineal europeo. Este pilar abre el espectro: destino, decoración, composición. La planta ya está en el suelo o en exposición, no en la maceta negra del umbráculo.',
+    content_types: [
+      'Carrusel de composiciones',
+      'Publicación de jardín implantado',
+      'Reel de plantación',
+      'Story de detalle de grava y porte',
+    ],
+    example_topics: [
+      'Tres composiciones con columnares: patio, grava y muro encalado',
+      'Densidad de plantación: una columna solitaria vs un ritmo de tres',
+      'Cómo vestir un lineal de garden para que el columnar se lea de lejos',
+      'Acompañantes mediterráneos que no compiten con la vertical (oliva, grava, tapizantes secos)',
+    ],
+  },
+  {
+    name: 'Divulgación ornamental',
+    percentage: 20,
+    description:
+      'Enseñar de verdad: anatomía, clima, riego, luz, diferencias entre especies, mitos vs realidad. El lector sale sabiendo algo de la planta, no solo cómo pedir un presupuesto.',
+    content_types: ['Carrusel didáctico', 'Reel corto de un solo dato', 'Story de mito vs hecho'],
+    example_topics: [
+      'Costilla, areola y ápice: cómo leer una columna sin ser botánico',
+      'Trichocereus y Echinopsis: por qué ves los dos nombres en la misma planta',
+      'Sol, riego y suelo: lo que aguanta un columnar en clima mediterráneo',
+      'No es un cactus bola ni un saguaro de película: qué lo hace columnar',
+    ],
+  },
+  {
+    name: 'Operativa B2B',
+    percentage: 15,
+    description:
+      'Logística, pasaporte UE, plazos y cómo pedir presupuesto. Pilar de conversión: minoría del mes. Si aparece más de ~15%, el feed se vuelve aduana.',
+    content_types: ['Carrusel de expedición', 'Publicación de CTA', 'Story de consulta'],
+    example_topics: [
+      'Qué datos mandar a info@tricholand.com para un presupuesto útil',
+      '750 uds: cómo mezclar variedades y tamaños',
+      'Pasaporte UE y plazos reales de recepción',
+    ],
+  },
+];
+
+const TRICHOLAND_THEMES = [
+  {
+    theme: 'Jardín mediterráneo con columnas',
+    frequency: 'semanal',
+    description:
+      'Serie de destino: implantación, composición y decoración con Trichocereus en Europa. Cubre el hueco de un muro que solo mostraba vivero.',
+    example_topics: [
+      'Una columna junto a un muro encalado: escala y sombra',
+      'Ritmo de tres T. pachanoi sobre grava',
+      'Qué variedad para un patio seco y cuál para un proyecto más monumental',
+    ],
+  },
+  {
+    theme: 'Escuela de la columna',
+    frequency: 'semanal',
+    description:
+      'Divulgación corta y concreta: anatomía, cultivo, nombres botánicos, mitos. El educativo del proyecto vive aquí, no en checklists de comprador.',
+    example_topics: [
+      'Cómo se lee un ápice de Trichocereus',
+      'Riego después del trasplante: menos de lo que parece',
+      'San Pedro como nombre hortícola, no como gancho etnobotánico',
+    ],
+  },
+  {
+    theme: 'Parte de vivero Murcia',
+    frequency: 'quincenal',
+    description:
+      'Oficio real, a menor cadencia que antes: bancadas, esquejes, aclimatación. Documenta producción propia sin tapizar el mes.',
+    example_topics: [
+      'Qué se ve en una bancada antes de seleccionar lote',
+      'Por qué la aclimatación en Murcia se nota en destino',
+    ],
+  },
+  {
+    theme: 'Consulta profesional',
+    frequency: 'quincenal',
+    description:
+      'La vía de conversión: 750 uds, mezcla de referencias, reserva de campaña. Pocas piezas, claras.',
+    example_topics: [
+      'Ejemplo de consulta completa a info@tricholand.com',
+      'Cuándo reservar campaña de TRI-PAC',
+    ],
+  },
+];
+
+const TRICHOLAND_RECS =
+  'Reparto 25/15/25/20/15: oficio, surtido, PAISAJISMO, divulgación, operativa. El mes debe leerse como una cuenta de planta ornamental columnar, no como el manual de expedición de un mayorista. Al menos un tercio de las teselas de feed ocurren fuera del umbráculo (jardín, patio, lineal, planta en suelo). El educativo enseña cultivo y composición; la venta directa se concentra en pocas piezas (750 uds, presupuesto, reserva). Mantener la línea roja etnobotánica. Frente a generalistas de Elche, Tricholand gana por especialidad de columna Y por enseñar cómo se planta, no solo cómo se embala.';
 
 const COMPETITORS = [
   {
@@ -263,6 +382,7 @@ async function main() {
   loadEnvLocal();
   const confirm = hasFlag('confirm');
   const aiRulesOnly = hasFlag('ai-rules-only');
+  const spectrumOnly = hasFlag('spectrum');
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !key) {
@@ -343,7 +463,7 @@ async function main() {
     console.log(`  - ${e.id} | ${e.name} | ${e.status}`);
   }
 
-  if (!confirm && !aiRulesOnly) {
+  if (!confirm && !aiRulesOnly && !spectrumOnly) {
     console.log('\n(dry-run) Config que se aplicaría:');
     console.log(
       JSON.stringify(
@@ -363,17 +483,54 @@ async function main() {
   }
 
   let projectId = existing?.[0]?.id;
-  if (aiRulesOnly) {
+  if (aiRulesOnly || spectrumOnly) {
     if (!projectId) {
       console.error('No hay proyecto Tricholand que actualizar.');
       process.exit(1);
     }
-    const { error } = await sb.from('projects').update({ ai_rules: TRICHOLAND_AI_RULES }).eq('id', projectId);
+    const projectPatch = spectrumOnly
+      ? {
+          ai_rules: TRICHOLAND_AI_RULES,
+          physical_constraints: TRICHOLAND_PHYSICAL_CONSTRAINTS,
+          physical_constraints_at: new Date().toISOString(),
+        }
+      : { ai_rules: TRICHOLAND_AI_RULES };
+    const { error } = await sb.from('projects').update(projectPatch).eq('id', projectId);
     if (error) {
-      console.error('Error update ai_rules:', error.message);
+      console.error('Error update proyecto:', error.message);
       process.exit(1);
     }
-    console.log(`\n✓ ai_rules actualizadas en ${projectId} (${TRICHOLAND_AI_RULES.length} chars)`);
+    if (spectrumOnly) {
+      const { data: strat, error: sErr } = await sb
+        .from('strategies')
+        .select('id')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sErr) {
+        console.error('Error leyendo estrategia:', sErr.message);
+        process.exit(1);
+      }
+      if (strat?.id) {
+        const { error: uErr } = await sb
+          .from('strategies')
+          .update({
+            content_pillars: TRICHOLAND_PILLARS,
+            thematic_lines: TRICHOLAND_THEMES,
+            recommendations: TRICHOLAND_RECS,
+          })
+          .eq('id', strat.id);
+        if (uErr) {
+          console.error('Error update estrategia:', uErr.message);
+          process.exit(1);
+        }
+        console.log(`✓ estrategia ${strat.id} reabierta (paisajismo 25% + divulgación 20%)`);
+      } else {
+        console.log('⚠ No hay estrategia que actualizar; regenera estrategia después.');
+      }
+    }
+    console.log(`\n✓ proyecto ${projectId} actualizado (${TRICHOLAND_AI_RULES.length} chars de ai_rules)`);
     return;
   }
 
