@@ -324,7 +324,7 @@ TIPOS DE ESCENA (reparte entre posts consecutivos; usa solo los que existan de v
 
 REGLAS DURAS:
 - Dos posts consecutivos del muro NO pueden compartir el mismo tipo de escena ni la misma combinación sujeto + lugar + gesto icónico.
-- PRODUCTO / LUGAR: las refs anclan CÓMO ES esa cosa; el encuadre, la escala y el gesto deben cambiar.
+- PRODUCTO / LUGAR: las refs anclan CÓMO ES esa cosa (forma, geometría). El gesto de las fotos (mano presentando, carro, bancada) NO es el producto: como mucho 1 de cada 5 teselas puede repetirlo.
 - ESTILO / MOODBOARD: las refs no anclan ningún objeto. Demuestran libertad. Cada tesela inventa sujeto, metáfora y territorio nuevos.
 - Si el negocio es B2B o de un solo producto, la variedad sale de plano / lugar / gesto / escala, NO de inventar parejas, playas o vidas ajenas.
 - Si el negocio es lifestyle, reparte protagonistas y escenarios; no uses una sola plantilla (p. ej. "pareja en naturaleza") para todo el mes.

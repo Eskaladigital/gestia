@@ -162,7 +162,9 @@ export function CalendarView({ items, projectId, projectName, imageOrientation }
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:flex-row xl:items-center gap-2 w-full xl:w-auto">
           {pendingBriefsCount > 0 && (
             <button
-              onClick={() => handleGenerateVisualBriefs()}
+              onClick={() => handleGenerateVisualBriefs(
+                localItems.filter(i => !i.visual_prompt?.trim()).map(i => i.id)
+              )}
               className="text-xs font-bold text-white uppercase tracking-wider px-3 sm:px-4 py-2 bg-brand-600 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all text-center"
             >
               Generar briefs pendientes ({pendingBriefsCount})

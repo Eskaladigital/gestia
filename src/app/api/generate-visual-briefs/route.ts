@@ -92,16 +92,33 @@ interface VisualResult {
   brief: string | null;
 }
 
+function buildReferenceCaptionCatalog(
+  images: Array<{ reference_role?: string | null; caption?: string | null; product_identity?: string | null }>
+): string {
+  if (!images.length) return '';
+  const lines = images.map((image, idx) => {
+    const role = image.reference_role && image.reference_role !== 'pending' ? image.reference_role : 'ref';
+    const identity = (image.product_identity || '').trim();
+    const caption = (image.caption || '').trim().slice(0, 220);
+    return `${idx + 1}. [${role}]${identity ? ` ${identity}.` : ''}${caption ? ` ${caption}` : ''}`;
+  });
+  return [
+    '## FICHAS DE LAS FOTOS DE REFERENCIA (texto; no adjuntamos las fotos aquí)',
+    `Lee las ${images.length}. Extrae forma del producto o licencia de estilo según el rol. NO copies el gesto de una foto (mano presentando, carro, bancada) salvo que ESTE slide lo pida.`,
+    ...lines,
+  ].join('\n');
+}
+
 async function processOneVisual(
   job: VisualJob,
   project: any,
   userId: string,
   referenceGuidance: ReferenceGuidanceInput,
-  referenceImageUrls: string[],
+  referenceCatalog: string,
   supabase: any,
   feedNeighbors: ReturnType<typeof buildFeedNeighborDigest> | null,
 ): Promise<VisualResult | null> {
-  const { system, user: userPrompt, agentKey } = buildSingleVisualPrompt(project, {
+  const built = buildSingleVisualPrompt(project, {
     post: job.post,
     visualIndex: job.visualIndex,
     totalVisuals: job.totalVisualsForPost,
@@ -113,6 +130,10 @@ async function processOneVisual(
     siblingShotCards: job.siblingShotCards,
     feedNeighbors,
   }, referenceGuidance);
+  const { system, agentKey } = built;
+  const userPrompt = referenceCatalog
+    ? `${built.user}\n\n${referenceCatalog}`
+    : built.user;
 
   // Reintento automático: ante un fallo transitorio de la IA o un prompt vacío,
   // se reintenta con pequeña espera creciente, en vez de descartar el visual.
@@ -123,7 +144,6 @@ async function processOneVisual(
         agentKey,
         userId,
         maxTokens: 4096,
-        inputImages: referenceImageUrls,
       });
 
       const rawData = aiResponse.data as unknown as Record<string, unknown> | null;
@@ -150,22 +170,22 @@ async function processOneVisual(
     return null;
   }
 
-  try {
-    await supabase
-      .from('content_item_visuals')
-      .upsert({
-        content_item_id: job.contentItemId,
-        visual_index: job.visualIndex,
-        label: job.label,
-        visual_prompt: vPrompt,
-        visual_brief: null,
-        image_status: 'pending',
-        image_url: null,
-        image_error: null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'content_item_id,visual_index' });
-  } catch (e) {
-    console.warn('[generate-visual-briefs] upsert to content_item_visuals failed (table may not exist yet):', e);
+  const { error: upsertErr } = await supabase
+    .from('content_item_visuals')
+    .upsert({
+      content_item_id: job.contentItemId,
+      visual_index: job.visualIndex,
+      label: job.label,
+      visual_prompt: vPrompt,
+      visual_brief: null,
+      image_status: 'pending',
+      image_url: null,
+      image_error: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'content_item_id,visual_index' });
+  if (upsertErr) {
+    console.error('[generate-visual-briefs] upsert to content_item_visuals failed:', upsertErr);
+    return null;
   }
 
   return {
@@ -248,7 +268,7 @@ export async function POST(request: NextRequest) {
     }
 
     const referenceImages = await listProjectReferenceImages(supabase, project_id);
-    const referenceImageUrls = referenceImages.map(image => image.image_url);
+    const referenceCatalog = buildReferenceCaptionCatalog(referenceImages);
     const referenceGuidance: ReferenceGuidanceInput = {
       sellsPhysicalProduct: project.sells_physical_product ?? null,
       productReferenceCount: countProductReferenceImages(referenceImages),
@@ -351,6 +371,7 @@ export async function POST(request: NextRequest) {
         });
 
         let visualsDone = 0;
+        let visualsSaved = 0;
         let postsCompleted = 0;
         let globalPostsCompleted = 0;
         let aborted = false;
@@ -405,7 +426,7 @@ export async function POST(request: NextRequest) {
                 project,
                 user.id,
                 referenceGuidance,
-                referenceImageUrls,
+                referenceCatalog,
                 supabase,
                 neighborSources.length
                   ? buildFeedNeighborDigest(neighborSources, job.contentItemId)
@@ -421,6 +442,7 @@ export async function POST(request: NextRequest) {
             if (signal.aborted) { aborted = true; break; }
 
             if (result) {
+              visualsSaved++;
               if (!postVisualResults.has(result.contentItemId)) {
                 postVisualResults.set(result.contentItemId, []);
               }
@@ -465,6 +487,16 @@ export async function POST(request: NextRequest) {
 
           const nextOffset = offset + visualsDone;
           const hasMore = nextOffset < fullQueue.length;
+
+          if (!aborted && batchQueue.length > 0 && visualsSaved === 0) {
+            send('error', {
+              error: 'La IA no ha podido guardar ningún prompt de este lote. Revisa Config IA o reinténtalo; no se ha escrito nada.',
+              totalUpdated: postsCompleted,
+              visualsDone: offset + visualsDone,
+            });
+            try { controller.close(); } catch { /* ignore */ }
+            return;
+          }
 
           globalPostsCompleted = postsCompleted;
           try {

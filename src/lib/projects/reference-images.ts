@@ -550,6 +550,7 @@ ROLES DEL CATÁLOGO:
 
 CRITERIOS:
 - Si el slide muestra el producto (aunque sea en una escena con personas o en un paisaje), incluye SIEMPRE al menos una referencia "product"; prioriza la vista que coincida (interior/exterior/detalle). NO la descartes por el hecho de que haya personas o paisaje.
+- NO elijas una foto de "mano/guante presentando el producto" ni un carro/rack salvo que el slide pida explícitamente oficio o manipulación. Esas fotos son un gesto, no la forma del producto.
 - Si el slide es exclusivamente un logo o tipografía, prioriza "logo" y descarta las fotográficas.
 - Si el slide no tiene NADA que ver con el producto (p. ej. una cita sobre fondo de color), puedes devolver lista vacía.
 - Devuelve como mucho 4 referencias y como mínimo 0. Ordena de más a menos relevante.
@@ -670,8 +671,9 @@ INCLUYE cuando aplique:
 - Geometría y forma INVIOLABLES (proporciones, silueta, materiales estructurales).
 - Si es un ESPACIO (vehículo, sauna, local): distribución de delante a atrás o de izquierda a derecha, zonas y adyacencias; qué está PROHIBIDO mezclar (p. ej. nunca cabaña rectangular si el producto es barril).
 - Si hay identidad gráfica visible: colores y logo sin variantes inventadas.
-- Entornos permitidos y PROHIBIDOS en imagen (p. ej. naturaleza sí, urbano no).
-- Personas/objetos permitidos o prohibidos si se deducen de las fotos.
+- Si el producto ES un ESPACIO (vehículo, sauna, local): puedes fijar entornos y adyacencias que se vean en las fotos.
+- Si el producto es un OBJETO o una PLANTA: ancla SOLO su forma. El set de las fotos (vivero, taller, mesa) NO es el único entorno permitido. El brief decide oficio, destino o documento.
+- Manos, guantes, carros, bancadas y mesas de las fotos son ESCENA, no identidad del producto. No los declares obligatorios ni únicos.
 
 REGLAS DE CONSOLIDACIÓN:
 - Si las fichas o fotos muestran tipologías INCOMPATIBLES (barril vs tienda de campaña vs cabaña rectangular), elige UNA sola tipología dominante (la que más repiten las fotos de producto o la más específica) y declara PROHIBIDO inventar las otras.
