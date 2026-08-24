@@ -465,7 +465,7 @@ export function ProjectSettingsPanel({
                       ? 'Tras «Generar estrategia», GestIA clasifica el negocio (alquiler de coches = sí; marketing digital = no).'
                       : productNature === 'physical'
                         ? 'Las fotos marcadas como Producto anclan la forma real; sin ellas, la IA pedirá subirlas.'
-                        : 'Las referencias son moodboard de estilo: no se clona un objeto concreto en todas las piezas.'}
+                        : 'Las referencias son licencia creativa: demuestran una forma de mostrar, no un objeto a repetir.'}
                   </p>
                 </div>
                 <div>

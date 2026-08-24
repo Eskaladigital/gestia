@@ -133,10 +133,10 @@ USO DE LAS IMÁGENES DE REFERENCIA (dos ejes que NO debes mezclar):
   }
   return `${prompt}
 
-USO DE LAS IMÁGENES DE REFERENCIA (MOODBOARD DE ESTILO — el cliente NO vende un producto físico que clonar):
-- Inspiran paleta, luz, contraste y energía visual; NO copies literalmente el mismo objeto de una referencia en cada imagen.
-- Cada generación debe VARIAR sujetos y metáforas según ESTE prompt; prohibido repetir la misma tipología (p. ej. la misma máquina expendedora) en todas las piezas.
-- El encuadre, la escena y los personajes los decide ESTE prompt, no las referencias.`;
+USO DE LAS IMÁGENES DE REFERENCIA (LICENCIA CREATIVA — no hay producto que clonar):
+- Cada foto demuestra un PUNTO: una forma de mostrar (juego, metáfora, extrañeza fotografiada como real). Extrae esa libertad y ÚSALA para inventar ESTA escena.
+- El sujeto, el animal o el objeto de una referencia es un EJEMPLO, no un molde. Esta imagen debe ser una idea nueva, según ESTE prompt.
+- El encuadre, la escena, la luz y los personajes los decide ESTE prompt.`;
 }
 
 /**
@@ -188,9 +188,9 @@ function applyReferenceCaptionsToPrompt(
     lines.push('- [ESTILO/INSPIRACIÓN] y [LUGAR/CONTEXTO]: úsalas solo para el ambiente, la paleta o el entorno. NO copies de ellas la forma del producto.');
     lines.push('Decides libremente ángulo, plano, luz y encuadre según ESTE prompt; lo único que no cambia es la identidad del producto.');
   } else {
-    lines.push('- Todas las referencias son INSPIRACIÓN DE ESTILO: extrae mood, paleta y actitud; NO clones el mismo objeto concreto en cada pieza.');
-    lines.push('- Varía metáforas y sujetos según ESTE prompt. Si una referencia muestra una máquina u objeto surreal, NO lo repitas salvo que el prompt lo exija explícitamente.');
-    lines.push('Decides libremente escena, encuadre y luz según ESTE prompt.');
+    lines.push('- Todas las referencias son LICENCIA: demuestran diversión y libertad. Inventa la escena de ESTE prompt; no copies ni evites un objeto de las fotos.');
+    lines.push('- Un animal, una máquina o una metáfora en una ref es un ejemplo de atrevimiento, no el protagonista de este slide.');
+    lines.push('Decides libremente escena, sujeto, encuadre y luz según ESTE prompt.');
   }
   if (selectorReasoning) {
     lines.push(`(Selector: ${selectorReasoning})`);

@@ -294,7 +294,7 @@ function referenceAnalysisSystemExtra(projectContext?: {
   }
   if (projectContext.sellsPhysicalProduct === false) {
     lines.push(
-      'CONTEXTO CRÍTICO: este cliente NO vende un producto físico reproducible (agencia, consultoría, servicio, moodboard). Usa rol "style" para imágenes de inspiración o metáfora. NO uses "product" para objetos creativos (máquinas, esculturas, animales, escenas surrealistas) salvo que sea el packaging o bien real que el negocio vende. El caption debe servir para copiar LUZ y ACTITUD visual, no solo el objeto.'
+      'CONTEXTO CRÍTICO: este cliente NO vende un producto físico reproducible (agencia, consultoría, servicio, moodboard). Usa rol "style" para imágenes que demuestran una FORMA DE MOSTRAR (metáfora, juego, libertad). NO uses "product" para objetos creativos (máquinas, esculturas, animales, escenas surrealistas). El caption debe nombrar el PUNTO de la foto (qué licencia se toma), no tratar el objeto como algo a clonar.'
     );
   } else if (projectContext.sellsPhysicalProduct === true) {
     lines.push(
@@ -570,16 +570,16 @@ export interface ReferenceSelectionResult {
   reasoning: string;
 }
 
-const REFERENCE_SELECTOR_MOODBOARD_SYSTEM = `Eres un asistente de dirección de arte. El cliente NO vende un producto físico: las referencias son MOODBOARD de estilo (estética, luz, energía disruptiva). Elige las que mejor inspiren el MOOD del slide, NO un objeto concreto a clonar.
+const REFERENCE_SELECTOR_MOODBOARD_SYSTEM = `Eres un asistente de dirección de arte. El cliente NO vende un producto físico: las referencias son LICENCIA CREATIVA. Cada foto demuestra un punto (una forma de mostrar), no un objeto a clonar ni a evitar.
 
 ROLES:
-- "style", "place", "scene", "person": inspiración de ambiente, metáfora o actitud visual.
-- "product" en el catálogo es un error de clasificación: trátalo como "style" y NO copies su forma literal en todas las piezas.
+- "style", "place", "scene", "person": ejemplos de libertad, metáfora o actitud. Sirven para autorizar invención, no para copiar el sujeto.
+- "product" en el catálogo es un error de clasificación: trátalo como "style".
 - "logo": solo si el slide es de marca.
 
 CRITERIOS:
-- Prioriza variedad: elige referencias que aporten paleta/atmósfera, no la misma metáfora repetida.
-- PROHIBIDO forzar la misma tipología de objeto (p. ej. la misma máquina) en slides que piden escenas distintas.
+- Elige refs que empujen DIVERSIÓN y ALTERNANCIA: otra broma, otro registro, otra energía.
+- No elijas una ref porque el slide "parezca" el mismo objeto. El slide debe inventar su propia escena.
 - Devuelve hasta 4 ids o lista vacía si ninguna aporta.
 
 FORMATO: JSON { "selected_ids": [...], "reasoning": "..." }`;

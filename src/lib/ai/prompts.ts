@@ -324,7 +324,8 @@ TIPOS DE ESCENA (reparte entre posts consecutivos; usa solo los que existan de v
 
 REGLAS DURAS:
 - Dos posts consecutivos del muro NO pueden compartir el mismo tipo de escena ni la misma combinación sujeto + lugar + gesto icónico.
-- Fidelidad a referencias ≠ copiar el mismo fotograma. Las refs anclan CÓMO ES el producto o el lugar; el ENCUADRE, la escala y el gesto deben cambiar.
+- PRODUCTO / LUGAR: las refs anclan CÓMO ES esa cosa; el encuadre, la escala y el gesto deben cambiar.
+- ESTILO / MOODBOARD: las refs no anclan ningún objeto. Demuestran libertad. Cada tesela inventa sujeto, metáfora y territorio nuevos.
 - Si el negocio es B2B o de un solo producto, la variedad sale de plano / lugar / gesto / escala, NO de inventar parejas, playas o vidas ajenas.
 - Si el negocio es lifestyle, reparte protagonistas y escenarios; no uses una sola plantilla (p. ej. "pareja en naturaleza") para todo el mes.
 - El muro debe poder leerse en 3 segundos: que se distingan las piezas, no un tapiz del mismo color / mismo objeto / mismo gesto.`;
@@ -906,7 +907,7 @@ Cada post DEBE incluir un campo "production_specs" con detalles técnicos de pro
     · Al menos UN slide debe ser un detalle, flat lay o cenital sin el producto/sujeto principal protagonizando (un objeto secundario, una mano, un mapa, comida, una textura, un cuaderno abierto, una vista del lugar, una herramienta, un rincón).
     · Al menos UN slide debe ser interior (si tiene sentido en el tema) y al menos UN slide debe ser exterior (si tiene sentido); si el tema es 100% indoor o 100% outdoor, varía entonces escala y momento del día.
     · Cuando el tema gire alrededor de un producto/lugar muy "fotogénico repetible" (camper, autocaravana, coche, hotel, tienda, plato estrella, destino), está PROHIBIDO que más de UN slide sea el clásico plano de tres cuartos del producto en entorno abierto. El resto deben ser planos claramente distintos entre sí: detalle, interior, escena humana, entorno sin producto, cenital, POV, primer plano, etc.
-  - VARIEDAD ENTRE PUBLICACIONES DEL MES (el feed es la unidad): el conjunto del calendario NO debe parecer un catálogo del mismo producto repetido. En publicaciones consecutivas cambia el TIPO DE ESCENA (detalle / lote / oficio / destino / documento / humano / producto-héroe / entorno). No conviertas el feed en la misma foto del producto en distintos fondos. Fidelidad a referencias ≠ copiar el mismo fotograma.
+  - VARIEDAD ENTRE PUBLICACIONES DEL MES (el feed es la unidad): el conjunto del calendario NO debe parecer un catálogo del mismo producto repetido. En publicaciones consecutivas cambia el TIPO DE ESCENA (detalle / lote / oficio / destino / documento / humano / producto-héroe / entorno). No conviertas el feed en la misma foto del producto en distintos fondos. Si las refs son de estilo, cada tesela inventa sujeto y metáfora; si son de producto, cambia el fotograma, no la forma.
   - Estructura recomendada (adáptala al tema):
     · Slide 1 = gancho visual con un plano poco esperado (no el típico de catálogo).
     · Slides intermedios = desarrollo narrativo con al menos 1 detalle, 1 escena humana o ambiental y 1 cambio de escala respecto al gancho.

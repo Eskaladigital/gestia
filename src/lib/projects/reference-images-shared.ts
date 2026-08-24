@@ -98,14 +98,17 @@ export function buildExpectProductPhotosGuidance(): string {
 export function buildStyleReferenceGuidance(styleCount: number): string {
   if (styleCount <= 0) return '';
   return [
-    '## REFERENCIAS VISUALES = MOODBOARD DE ESTILO (NO hay producto físico que clonar)',
-    `Dispones de ${styleCount} imagen(es) de inspiración (estética disruptiva, paleta, luz, energía).`,
+    '## REFERENCIAS VISUALES = LICENCIA CREATIVA (no hay producto que clonar)',
+    `Hay ${styleCount} imagen(es) de ejemplo. No son el producto del cliente. Cada una demuestra un PUNTO: una forma de mostrar (metáfora, humor, escala, extrañeza fotografiada como real).`,
     '',
-    'REGLAS:',
-    '- Extrae el PATRÓN COMÚN: tono, contraste, tipo de metáfora visual, nivel de surrealismo o cinematográfico — NO un objeto concreto repetido en cada pieza.',
-    '- PROHIBIDO tratar una referencia como "el producto" del cliente ni reproducir la misma tipología (p. ej. la misma máquina expendedora) en todos los slides.',
-    '- Cada pieza del calendario debe VARIAR sujeto, metáfora y encuadre; las referencias solo inspiran ambiente y actitud visual.',
-    '- Si el prompt del slide pide una escena distinta, créala libremente; no copies literalmente objetos de las referencias salvo que el slide lo pida explícitamente.',
+    'PARA QUÉ SIRVEN:',
+    '- Autorizan DIVERSIÓN, ALTERNANCIA y LIBERTAD. El feed debe sentirse libre: otra broma, otro sujeto, otro territorio, otro gesto.',
+    '- Extrae el REGISTRO (audacia, juego, surrealismo cotidiano, impacto en un segundo). Úsalo para INVENTAR escenas nuevas.',
+    '- El éxito NO es repetir ni evitar un objeto de las fotos. El éxito es que cada tesela sea una idea visual distinta, con la misma libertad que esas fotos se permitieron.',
+    '',
+    'LO QUE NO HACEN:',
+    '- No anclan forma, animal, máquina ni localización. Eso solo lo hacen las refs marcadas como Producto (otro tipo de proyecto).',
+    '- No conviertas el moodboard en catálogo ni en veto: si una foto tiene un animal o un objeto raro, eso es un EJEMPLO de libertad, no un molde ni un tabú.',
   ].join('\n');
 }
 
