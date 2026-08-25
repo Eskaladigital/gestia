@@ -11,7 +11,7 @@ export default async function AdministratorUsersPage() {
     .order('sort_order');
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       <div className="mb-10">
         <p className="text-[10px] font-bold text-surface-900 uppercase tracking-[0.25em] mb-2">Administración</p>
         <h1 className="font-display text-3xl sm:text-4xl font-bold text-surface-900 tracking-tight leading-none">

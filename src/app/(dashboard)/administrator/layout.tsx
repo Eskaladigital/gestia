@@ -15,7 +15,7 @@ export default async function AdministratorLayout({ children }: { children: Reac
   }
 
   return (
-    <div>
+    <div className="w-full">
       <div className="mb-2">
         <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.25em]">Área de administración</p>
       </div>

@@ -42,9 +42,9 @@ type GridDensity = 'large' | 'medium' | 'small';
 type SortMode = 'recent' | 'oldest' | 'project';
 
 const GRID: Record<GridDensity, string> = {
-  large: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
-  medium: 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
-  small: 'grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8',
+  large: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6',
+  medium: 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8',
+  small: 'grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10',
 };
 
 const SORT_LABEL: Record<SortMode, string> = {

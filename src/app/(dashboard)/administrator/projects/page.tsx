@@ -22,6 +22,9 @@ type EnrichedProjectRow = ProjectRow & {
   strategies: number;
 };
 
+const actionLinkClass =
+  'text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-white text-red-700 hover:bg-red-50 transition-colors whitespace-nowrap';
+
 function AdminProjectsTable({
   rows,
   variant,
@@ -31,28 +34,27 @@ function AdminProjectsTable({
 }) {
   if (rows.length === 0) return null;
 
-  const lastHeading = 'Acciones';
-
   return (
     <div className="bg-white border-2 border-surface-900 shadow-brutal-sm overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[960px] text-sm">
         <thead>
           <tr className="border-b-2 border-surface-900 bg-surface-100">
-            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Proyecto</th>
-            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Propietario</th>
-            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden md:table-cell">Email</th>
-            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden lg:table-cell">Posts</th>
-            <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
-            <th className="text-right px-4 py-3 font-bold text-[10px] uppercase tracking-wider">{lastHeading}</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Proyecto</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Propietario</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider hidden xl:table-cell">Sector</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Posts</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider hidden lg:table-cell">Actualizado</th>
+            <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Acciones</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p) => (
             <tr
               key={p.id}
-              className={`border-b border-surface-200 hover:bg-surface-50 ${p.deleted_at ? 'opacity-80 bg-surface-50/80' : ''}`}
+              className={`border-b border-surface-200 last:border-b-0 hover:bg-surface-50 ${p.deleted_at ? 'opacity-80 bg-surface-50/80' : ''}`}
             >
-              <td className="px-4 py-3 align-top">
+              <td className="px-5 py-3.5 align-middle">
                 <span className="font-display font-bold text-surface-900 block">{p.name}</span>
                 <span className="text-xs text-surface-500 line-clamp-1">{p.url || 'Sin URL'}</span>
                 {p.deleted_at && (
@@ -61,31 +63,41 @@ function AdminProjectsTable({
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 align-top text-surface-700">
-                <span className="font-medium">{p.ownerName}</span>
-                {p.company && <span className="block text-xs text-surface-500">{p.company}</span>}
+              <td className="px-5 py-3.5 align-middle text-surface-700">
+                <span className="font-medium block">{p.ownerName}</span>
+                <span className="block text-xs text-surface-500 font-mono">{p.email}</span>
+                {p.company ? <span className="block text-xs text-surface-400">{p.company}</span> : null}
               </td>
-              <td className="px-4 py-3 align-top text-surface-600 hidden md:table-cell font-mono text-xs">
-                {p.email}
+              <td className="px-5 py-3.5 align-middle text-xs text-surface-600 hidden xl:table-cell">
+                {p.sector || '—'}
               </td>
-              <td className="px-4 py-3 align-top hidden lg:table-cell">
+              <td className="px-5 py-3.5 align-middle">
                 <span className="font-mono text-xs font-bold text-surface-700 tabular-nums">{p.posts}</span>
-                <span className="text-[10px] text-surface-400 ml-1">/ {p.strategies} estrat.</span>
+                <span className="block text-[10px] text-surface-400">{p.strategies} estrat.</span>
               </td>
-              <td className="px-4 py-3 align-top">
+              <td className="px-5 py-3.5 align-middle">
                 <span className="text-[10px] font-mono font-bold uppercase border border-surface-900 px-2 py-1">
                   {p.status}
                 </span>
               </td>
-              <td className="px-4 py-3 align-top text-right">
-                <div className="flex flex-col items-end gap-2">
+              <td className="px-5 py-3.5 align-middle text-xs text-surface-500 hidden lg:table-cell whitespace-nowrap">
+                {new Date(p.updated_at).toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </td>
+              <td className="px-5 py-3.5 align-middle">
+                <div className="flex items-center gap-1.5">
                   {variant === 'active' && !p.deleted_at ? (
-                    <Link
-                      href={projectDashboardBasePath(p.id, true)}
-                      className="text-xs font-bold text-red-700 uppercase tracking-wider hover:underline"
-                    >
-                      Abrir →
-                    </Link>
+                    <>
+                      <Link href={projectDashboardBasePath(p.id, true)} className={actionLinkClass}>
+                        Abrir
+                      </Link>
+                      <Link href={`${projectDashboardBasePath(p.id, true)}/calendar`} className={actionLinkClass}>
+                        Calendario
+                      </Link>
+                    </>
                   ) : null}
                   <AdministratorTrashedProjectActions
                     projectId={p.id}
@@ -146,7 +158,7 @@ export default async function AdministratorProjectsPage() {
     return {
       ...p,
       email,
-      ownerName: profileName || metaName || email,
+      ownerName: profileName || metaName || 'Sin nombre',
       company: profileById[p.user_id]?.company_name || null,
       posts: contentCountByProject[p.id] ?? 0,
       strategies: strategyCountByProject[p.id] ?? 0,
@@ -159,7 +171,7 @@ export default async function AdministratorProjectsPage() {
   const deletedCount = trashedRows.length;
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full">
       <div className="mb-8">
         <h1 className="font-display text-3xl sm:text-4xl font-bold text-surface-900 tracking-tight leading-none">
           Proyectos
@@ -177,8 +189,8 @@ export default async function AdministratorProjectsPage() {
         <>
           <section className="mb-2">
             <h2 className="font-display text-lg font-bold text-surface-900 mb-1">Activos</h2>
-            <p className="text-xs text-surface-500 font-medium mb-4 max-w-2xl">
-              Proyectos en uso. Puedes abrir la ficha, moverlos a la papelera o eliminarlos del todo (tuyos o de cualquier cliente).
+            <p className="text-xs text-surface-500 font-medium mb-4">
+              Proyectos en uso. Puedes abrir la ficha o el calendario, moverlos a la papelera o eliminarlos del todo.
             </p>
             {activeRows.length > 0 ? (
               <AdminProjectsTable rows={activeRows} variant="active" />
@@ -195,7 +207,7 @@ export default async function AdministratorProjectsPage() {
                 <span className="text-xl leading-none" aria-hidden>🗑️</span>
                 <div>
                   <h2 className="font-display text-lg font-bold text-surface-900">Papelera</h2>
-                  <p className="text-xs text-surface-500 font-medium max-w-2xl mt-1">
+                  <p className="text-xs text-surface-500 font-medium mt-1">
                     Archivados por el cliente desde su panel. Puedes <strong className="text-surface-700">restaurarlos</strong> (vuelven a activos y se puede abrir ficha) o{' '}
                     <strong className="text-surface-700">eliminarlos del todo</strong> como haría el propietario.
                   </p>

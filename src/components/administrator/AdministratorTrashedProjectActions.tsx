@@ -84,53 +84,53 @@ export function AdministratorTrashedProjectActions({
   }
 
   const busy = loading !== null;
+  const btn =
+    'text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 transition-colors disabled:opacity-50 whitespace-nowrap';
 
   return (
-    <div className="flex flex-col items-end gap-1 min-w-[140px]">
+    <div className="contents">
       {error ? (
-        <span className="text-[10px] font-bold text-red-600 max-w-[220px] text-right leading-snug">{error}</span>
+        <span className="text-[10px] font-bold text-red-600 leading-snug">{error}</span>
       ) : null}
-      <div className="flex flex-wrap justify-end gap-1.5">
-        {variant === 'active' ? (
-          <>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void moveToTrash()}
-              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-surface-100 text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50"
-            >
-              {loading === 'trash' ? '…' : 'Papelera'}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void permanentDelete()}
-              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
-            >
-              {loading === 'delete' ? '…' : 'Eliminar'}
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void restore()}
-              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-surface-100 text-surface-900 hover:bg-surface-200 transition-colors disabled:opacity-50"
-            >
-              {loading === 'restore' ? '…' : 'Restaurar'}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void permanentDelete()}
-              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
-            >
-              {loading === 'delete' ? '…' : 'Eliminar'}
-            </button>
-          </>
-        )}
-      </div>
+      {variant === 'active' ? (
+        <>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void moveToTrash()}
+            className={`${btn} bg-surface-100 text-surface-900 hover:bg-surface-200`}
+          >
+            {loading === 'trash' ? '…' : 'Papelera'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void permanentDelete()}
+            className={`${btn} bg-red-50 text-red-700 hover:bg-red-100`}
+          >
+            {loading === 'delete' ? '…' : 'Eliminar'}
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void restore()}
+            className={`${btn} bg-surface-100 text-surface-900 hover:bg-surface-200`}
+          >
+            {loading === 'restore' ? '…' : 'Restaurar'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void permanentDelete()}
+            className={`${btn} bg-red-50 text-red-700 hover:bg-red-100`}
+          >
+            {loading === 'delete' ? '…' : 'Eliminar'}
+          </button>
+        </>
+      )}
     </div>
   );
 }

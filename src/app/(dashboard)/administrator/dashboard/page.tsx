@@ -1,5 +1,6 @@
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import Link from 'next/link';
+import { projectDashboardBasePath } from '@/lib/utils';
 
 export default async function AdministratorDashboardPage() {
   const supabase = await createServerSupabase();
@@ -52,7 +53,7 @@ export default async function AdministratorDashboardPage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full">
       <div className="mb-10">
         <h1 className="font-display text-3xl sm:text-4xl font-bold text-surface-900 tracking-tight leading-none">
           Panel de administracion
@@ -120,39 +121,54 @@ export default async function AdministratorDashboardPage() {
           </Link>
         </div>
         <div className="bg-white border-2 border-surface-900 shadow-brutal-sm overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b-2 border-surface-900 bg-surface-100">
-                <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Proyecto</th>
-                <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden sm:table-cell">Propietario</th>
-                <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
-                <th className="text-left px-4 py-3 font-bold text-[10px] uppercase tracking-wider hidden md:table-cell">Actualizado</th>
+                <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Proyecto</th>
+                <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider hidden sm:table-cell">Propietario</th>
+                <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Estado</th>
+                <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider hidden md:table-cell">Actualizado</th>
+                <th className="text-left px-5 py-3 font-bold text-[10px] uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {(recentProjects ?? []).map((p: any) => (
-                <tr key={p.id} className="border-b border-surface-200 hover:bg-surface-50">
-                  <td className="px-4 py-3">
-                    <Link href={`/administrator/projects`} className="font-display font-bold text-surface-900 hover:text-red-700">
-                      {p.name}
-                    </Link>
-                    <span className="block text-xs text-surface-500 truncate max-w-[200px]">{p.url || 'Sin URL'}</span>
+                <tr key={p.id} className="border-b border-surface-200 last:border-b-0 hover:bg-surface-50">
+                  <td className="px-5 py-3.5">
+                    <span className="font-display font-bold text-surface-900 block">{p.name}</span>
+                    <span className="block text-xs text-surface-500 truncate">{p.url || 'Sin URL'}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-surface-600 hidden sm:table-cell font-mono">
+                  <td className="px-5 py-3.5 text-xs text-surface-600 hidden sm:table-cell font-mono">
                     {emailById[p.user_id] || p.user_id.slice(0, 8)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-5 py-3.5">
                     <span className="text-[10px] font-mono font-bold uppercase border border-surface-900 px-2 py-1">
                       {p.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-surface-500 hidden md:table-cell">
+                  <td className="px-5 py-3.5 text-xs text-surface-500 hidden md:table-cell whitespace-nowrap">
                     {new Date(p.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        href={projectDashboardBasePath(p.id, true)}
+                        className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-white text-red-700 hover:bg-red-50 transition-colors whitespace-nowrap"
+                      >
+                        Abrir
+                      </Link>
+                      <Link
+                        href={`${projectDashboardBasePath(p.id, true)}/calendar`}
+                        className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border-2 border-surface-900 bg-white text-red-700 hover:bg-red-50 transition-colors whitespace-nowrap"
+                      >
+                        Calendario
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
               {(recentProjects ?? []).length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-surface-500">No hay proyectos</td></tr>
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm text-surface-500">No hay proyectos</td></tr>
               )}
             </tbody>
           </table>

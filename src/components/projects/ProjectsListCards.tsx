@@ -209,11 +209,22 @@ export default function ProjectsListCards({
                 <CardBody project={project} showBadge />
               </Link>
 
-              {/* Action bar: badge context + delete */}
-              <div className="flex items-center justify-between px-5 py-2.5 border-t-2 border-surface-200 bg-surface-50">
-                <span className="text-[10px] font-bold text-surface-900 uppercase tracking-wider group-hover:text-brand-600 transition-colors">
-                  Abrir proyecto →
-                </span>
+              {/* Action bar: atajos + papelera */}
+              <div className="flex items-center justify-between gap-2 px-5 py-2.5 border-t-2 border-surface-200 bg-surface-50">
+                <div className="flex items-center gap-3 flex-wrap min-w-0">
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="text-[10px] font-bold text-surface-900 uppercase tracking-wider hover:text-brand-600 transition-colors"
+                  >
+                    Abrir proyecto →
+                  </Link>
+                  <Link
+                    href={`/projects/${project.id}/calendar`}
+                    className="text-[10px] font-bold text-surface-900 uppercase tracking-wider hover:text-brand-600 transition-colors"
+                  >
+                    Abrir calendario →
+                  </Link>
+                </div>
                 {soleActiveProjectLocked ? (
                   <span
                     className="p-1.5 text-surface-300 cursor-not-allowed border-2 border-transparent"

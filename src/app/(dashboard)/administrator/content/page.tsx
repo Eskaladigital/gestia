@@ -152,7 +152,7 @@ export default async function AdministratorContentPage() {
     .filter((row): row is AdminContentVisual => row !== null && !!row.displayUrl);
 
   return (
-    <div className="max-w-[1600px] mx-auto">
+    <div className="w-full">
       <div className="mb-8">
         <h1 className="font-display text-3xl sm:text-4xl font-bold text-surface-900 tracking-tight leading-none">
           Contenido
