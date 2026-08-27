@@ -18,7 +18,7 @@ import type { Project } from '@/types';
 export const runtime = 'nodejs';
 export const maxDuration = 90;
 
-const SUGGEST_MODEL = 'gpt-4o';
+const SUGGEST_MODEL = 'gpt-5.6-terra';
 
 const SUGGEST_SYSTEM = `Eres un director de arte y consultor de identidad de marca. Tu tarea es leer la información disponible de un proyecto (descripción del negocio, identidad de marca, reglas IA y descripciones de las imágenes de referencia que el usuario ha subido) y, si es posible, también las propias imágenes, y redactar un bloque corto en español llamado "REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES DEL PRODUCTO".
 
@@ -118,7 +118,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const openai = new OpenAI({ apiKey });
     const response = await openai.chat.completions.create({
       model: SUGGEST_MODEL,
-      temperature: 0.2,
       max_completion_tokens: 900,
       messages: [
         { role: 'system', content: SUGGEST_SYSTEM },
