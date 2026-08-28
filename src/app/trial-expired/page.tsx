@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { isAdminRole } from '@/lib/auth/roles';
-import { ESKALA_MARKETING_DIGITAL } from '@/lib/utils';
+import { MarketingFooter } from '@/components/layout/MarketingFooter';
 import { LogoutButton } from './LogoutButton';
 
 export default async function TrialExpiredPage() {
@@ -89,21 +89,7 @@ export default async function TrialExpiredPage() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-surface-200 py-6 px-6 sm:px-10">
-        <div className="max-w-7xl mx-auto text-center text-xs text-surface-400">
-          <a
-            href={ESKALA_MARKETING_DIGITAL.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-surface-500 hover:text-brand-600 transition-colors"
-          >
-            {ESKALA_MARKETING_DIGITAL.name}
-          </a>
-          <span className="mx-1.5">·</span>
-          <span>{ESKALA_MARKETING_DIGITAL.tagline}</span>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { createServerSupabase } from '@/lib/supabase/server';
-import { ESKALA_MARKETING_DIGITAL } from '@/lib/utils';
 import { MarketingNavCenter, MarketingNavActions } from '@/components/layout/MarketingNav';
+import { MarketingFooter } from '@/components/layout/MarketingFooter';
 import type { SubscriptionPlan } from '@/types';
 
 export default async function PricingPage() {
@@ -151,27 +151,7 @@ export default async function PricingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-surface-200 py-8 px-6 sm:px-10">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row gap-6 sm:items-center sm:justify-between">
-          <img src="/images/logo/logo_gestia.png" alt="GestIA" className="h-6 w-auto" />
-          <div className="text-xs text-surface-400 space-y-1 sm:text-right">
-            <p>Gestia RRSS — Estrategia de contenido con IA</p>
-            <p>
-              <a
-                href={ESKALA_MARKETING_DIGITAL.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-surface-600 hover:text-brand-600 transition-colors"
-              >
-                {ESKALA_MARKETING_DIGITAL.name}
-              </a>
-              <span className="mx-1.5 text-surface-300">·</span>
-              <span>{ESKALA_MARKETING_DIGITAL.tagline}</span>
-            </p>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }
