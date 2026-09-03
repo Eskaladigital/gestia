@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { fetchAccessibleProject } from '@/lib/auth/roles';
-import { buildSingleVisualPrompt, buildFeedNeighborDigest, decomposePostIntoVisuals, callAI, type VisualBriefInput, type FeedNeighborSource } from '@/lib/ai';
+import { buildSingleVisualPrompt, buildFeedNeighborDigest, decomposePostIntoVisuals, lockedSpacePromptSuffix, callAI, type VisualBriefInput, type FeedNeighborSource } from '@/lib/ai';
 import {
   countProductReferenceImages,
   countStyleReferenceImages,
@@ -41,6 +41,7 @@ interface VisualJob {
   previousSlideContext?: string;
   nextSlideContext?: string;
   siblingShotCards?: string[];
+  lockedSpace?: string;
   post: VisualBriefInput;
 }
 
@@ -75,6 +76,7 @@ function buildVisualQueue(posts: ContentItem[]): VisualJob[] {
         previousSlideContext: visuals[i].previousSlideContext,
         nextSlideContext: visuals[i].nextSlideContext,
         siblingShotCards: visuals[i].siblingShotCards,
+        lockedSpace: visuals[i].lockedSpace,
         post: briefInput,
       });
     }
@@ -129,6 +131,7 @@ async function processOneVisual(
     nextSlideContext: job.nextSlideContext,
     siblingShotCards: job.siblingShotCards,
     feedNeighbors,
+    lockedSpace: job.lockedSpace,
   }, referenceGuidance);
   const { system, agentKey } = built;
   const userPrompt = referenceCatalog
@@ -169,6 +172,8 @@ async function processOneVisual(
     console.warn(`[generate-visual-briefs] Visual descartado tras ${MAX_VISUAL_ATTEMPTS} intentos: ${job.contentItemId}[${job.visualIndex}].`);
     return null;
   }
+
+  vPrompt = `${vPrompt}${lockedSpacePromptSuffix(job.lockedSpace || '')}`;
 
   const { error: upsertErr } = await supabase
     .from('content_item_visuals')

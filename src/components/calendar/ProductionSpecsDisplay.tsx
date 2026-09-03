@@ -20,7 +20,8 @@ export function ProductionSpecsDisplay({
     (specs.num_slides != null ||
       specs.duration_seconds != null ||
       specs.media_type ||
-      (specs.scene_summary && specs.scene_summary.trim()));
+      (specs.scene_summary && specs.scene_summary.trim()) ||
+      (specs.locked_space && specs.locked_space.trim()));
 
   if (!hasAny) {
     if (!showEmptyHint) return null;
@@ -68,6 +69,12 @@ export function ProductionSpecsDisplay({
           </span>
         )}
       </div>
+      {s.locked_space?.trim() && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-surface-600 mb-1">Estancia única (misma en todos los slides)</p>
+          <p className="text-xs text-surface-800 leading-relaxed whitespace-pre-wrap font-medium">{s.locked_space}</p>
+        </div>
+      )}
       {s.scene_summary?.trim() && (
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-surface-600 mb-1">Guión / escenas (del calendario)</p>

@@ -348,6 +348,12 @@ export interface ProductionSpecs {
   media_type?: 'imagen' | 'video';
   /** Resumen de escenas o slides para guiar el brief visual */
   scene_summary?: string;
+  /**
+   * Ficha arquitectónica de la estancia única de esta pieza (carrusel/reel).
+   * Se copia literal en todos los slides para que no cambie la ventana, el
+   * cabecero o el suelo entre fotogramas.
+   */
+  locked_space?: string;
 }
 
 export interface ContentItem {

@@ -22,7 +22,8 @@ function buildProductionSpecs(
   numSlides: string,
   durationSeconds: string,
   mediaType: string,
-  sceneSummary: string
+  sceneSummary: string,
+  lockedSpace?: string | null
 ): ProductionSpecs | null {
   const o: ProductionSpecs = {};
   const n = numSlides.trim() ? parseInt(numSlides, 10) : NaN;
@@ -31,6 +32,7 @@ function buildProductionSpecs(
   if (Number.isFinite(d) && d > 0) o.duration_seconds = d;
   if (mediaType === 'imagen' || mediaType === 'video') o.media_type = mediaType;
   if (sceneSummary.trim()) o.scene_summary = sceneSummary.trim();
+  if (lockedSpace?.trim()) o.locked_space = lockedSpace.trim();
   return Object.keys(o).length ? o : null;
 }
 
@@ -225,7 +227,13 @@ export function PostEditor({ item, projectName, onSave, onStatusChange, onClose,
       cta,
       post_goal: postGoal,
       hashtags: hashtags.split(',').map(h => h.trim()).filter(Boolean),
-      production_specs: buildProductionSpecs(numSlides, durationSeconds, mediaType, sceneSummary),
+      production_specs: buildProductionSpecs(
+        numSlides,
+        durationSeconds,
+        mediaType,
+        sceneSummary,
+        item.production_specs?.locked_space
+      ),
       visual_brief: visualBrief.trim() || null,
       visual_prompt: visualPrompt.trim() || null,
     });

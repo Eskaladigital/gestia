@@ -122,8 +122,8 @@ Reglas:
 - Devuelve solo JSON válido en español.
 
 production_specs por formato:
-- Carrusel: { num_slides: 3-10, media_type: "imagen", scene_summary: "Slide 1: ..., Slide 2: ..." }
-- Reel: { duration_seconds: 15-60, media_type: "video", scene_summary: "Escena 1 (0:00-0:08): ..." }
+- Carrusel: { num_slides: 3-10, media_type: "imagen", locked_space: "ficha de estancia única si la historia es UN espacio", scene_summary: "Slide 1: ..., Slide 2: ..." }
+- Reel: { duration_seconds: 15-60, media_type: "video", locked_space: "igual si ocurre en UNA estancia", scene_summary: "Escena 1 (0:00-0:08): ..." }
 - Story: { media_type: "imagen"|"video", duration_seconds: 8-15 si video, scene_summary: "..." }
 - Publicación: { media_type: "imagen", scene_summary: "..." }
 

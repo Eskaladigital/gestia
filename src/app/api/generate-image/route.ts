@@ -25,6 +25,7 @@ import {
   effectiveReferenceRoleForPipeline,
   projectUsesProductImageFidelity,
 } from '@/lib/projects/product-fidelity';
+import { lockedSpacePromptSuffix, resolveLockedSpace } from '@/lib/ai';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
 // enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6-terra + gpt-image-2 + referencias.
@@ -391,14 +392,14 @@ export async function POST(request: NextRequest) {
   const VISUAL_SELECT_WITH_ORIENTATION = `
       *,
       content_items!inner(
-        id, project_id, format,
+        id, project_id, format, idea, production_specs,
         projects!inner( id, user_id, image_orientation )
       )
     `;
   const VISUAL_SELECT_LEGACY = `
       *,
       content_items!inner(
-        id, project_id, format,
+        id, project_id, format, idea, production_specs,
         projects!inner( id, user_id )
       )
     `;
@@ -496,6 +497,19 @@ export async function POST(request: NextRequest) {
       useProductFidelity,
       imageAesthetic
     );
+    const itemForSpace = (visual as any).content_items;
+    const lockedSpace = resolveLockedSpace({
+      id: itemForSpace?.id || '',
+      scheduled_date: '',
+      format: itemForSpace?.format || null,
+      content_type: '',
+      idea: itemForSpace?.idea || '',
+      copy: null,
+      cta: null,
+      post_goal: null,
+      production_specs: itemForSpace?.production_specs || null,
+    });
+    prompt = `${prompt}${lockedSpacePromptSuffix(lockedSpace)}`;
     if (selectedReferenceImages.length > 0) {
       prompt = applyReferenceCaptionsToPrompt(
         prompt,

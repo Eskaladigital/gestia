@@ -12,7 +12,8 @@
  *   node -r ./scripts/preload-tls-local.cjs scripts/run-rcr-pipeline.mjs --project-id=<uuid> --only=calendar,briefs
  *
  * Pasos: brand, site, competitors, strategy, calendar, briefs
- * Calendario por defecto: agosto 2026 completo (month=7, year=2026, replace).
+ * Calendario por defecto: septiembre 2026 (month=8, year=2026, replace).
+ *   --month=8 --year=2026   (month es 0-index, como Date: 8 = septiembre)
  */
 import fs from 'fs';
 import path from 'path';
@@ -214,12 +215,14 @@ async function main() {
     }
 
     if (step === 'calendar') {
+      const month = Number(getArg('month') || '8');
+      const year = Number(getArg('year') || '2026');
       const res = await postJson(
         'generate-calendar',
         {
           project_id: projectId,
-          month: 7, // agosto
-          year: 2026,
+          month,
+          year,
           duration_months: 1,
           calendar_mode: 'replace',
           // mes completo desde el día 1 (sin start_date)
@@ -240,7 +243,7 @@ async function main() {
       console.log(`  eventos SSE: ${events.length}; done: ${done.length}`);
       const last = events[events.length - 1];
       if (last) console.log('  último:', JSON.stringify(last.data).slice(0, 300));
-      console.log(`✓ calendar agosto 2026 (${Math.round((Date.now() - t0) / 1000)}s)`);
+      console.log(`✓ calendar ${month + 1}/${year} (${Math.round((Date.now() - t0) / 1000)}s)`);
       continue;
     }
 

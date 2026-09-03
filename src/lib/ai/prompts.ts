@@ -897,15 +897,17 @@ El copy es CONTENIDO, no un pie de foto decorativo:
 ESPECIFICACIONES DE PRODUCCIÓN (campo "production_specs"):
 Cada post DEBE incluir un campo "production_specs" con detalles técnicos de producción según el formato:
 
-- CARRUSEL: { "num_slides": N, "media_type": "imagen", "scene_summary": "Slide 1 — Plano: ... | Sujeto: ... | Acción: ... | Hora/luz: ... | Lugar: ...\nSlide 2 — Plano: ... | Sujeto: ... | ..." }
+- CARRUSEL: { "num_slides": N, "media_type": "imagen", "locked_space": "…", "scene_summary": "Slide 1 — Plano: ... | Sujeto: ... | Acción: ... | Hora/luz: ... | Lugar: ...\nSlide 2 — Plano: ... | Sujeto: ... | ..." }
   - num_slides entre 3 y 10 (decide el número según la complejidad del tema)
+  - locked_space: OBLIGATORIO cuando la micro-historia ocurre en UN espacio físico (dormitorio, salón, oficina, local, obra, cocina). Es un párrafo de 4-8 frases que FIJA la arquitectura: tipo de hueco (ventana alta / de suelo a techo / balconera), tratamiento (cortina translúcida / persiana / sin cortina — elige UNO y no lo cambies), cama y cabecero sí/no y de qué tipo, suelo, split y en qué pared, mesita, materiales. Este párrafo se COPIA IDÉNTICO en todos los slides. Si la historia es un viaje o recorre varios sitios (camper, ruta, varios locales), locked_space = "".
   - scene_summary: NO es "una línea por slide". Cada slide debe describirse como una FICHA TÉCNICA de fotograma con CINCO campos separados por " | ": Plano (general / medio / detalle / cenital / POV / contrapicado / flat lay), Sujeto (quién o qué es el protagonista — puede ser una persona, un objeto, un lugar, una textura, un mapa…), Acción (qué está pasando o qué se muestra), Hora/luz (mañana / mediodía / tarde / golden hour / luz interior cálida…), Lugar (sitio concreto, no genérico).
   - El conjunto de slides debe contar una MICRO-HISTORIA con principio, desarrollo y cierre. No es un álbum de fotos del mismo sujeto en distintos paisajes.
   - REGLAS DURAS DE VARIEDAD entre slides del mismo carrusel (obligatorias, son ley):
-    · Cada slide debe variar respecto al anterior en al menos DOS de estos ejes: localización, hora del día, escala del plano, protagonista, acción.
+    · Cada slide debe variar respecto al anterior en al menos DOS de estos ejes: escala del plano, protagonista, acción, ángulo. La localización NO es un eje de variedad si hay locked_space.
+    · Si hay locked_space, TODOS los slides ocurren en ESA estancia. El campo Lugar de cada slide debe repetir la MISMA frase corta de lugar (no inventes otra ventana, otra cortina ni otro cabecero).
     · PROHIBIDO repetir el mismo plano principal (misma combinación de plano + sujeto + acción) en dos slides cualesquiera del carrusel. Si se repite, reescríbelo.
     · Al menos UN slide debe ser un detalle, flat lay o cenital sin el producto/sujeto principal protagonizando (un objeto secundario, una mano, un mapa, comida, una textura, un cuaderno abierto, una vista del lugar, una herramienta, un rincón).
-    · Al menos UN slide debe ser interior (si tiene sentido en el tema) y al menos UN slide debe ser exterior (si tiene sentido); si el tema es 100% indoor o 100% outdoor, varía entonces escala y momento del día.
+    · El "al menos UN slide interior y UN slide exterior" SOLO aplica si locked_space está vacío (viaje, ruta, varios sitios). Con estancia única, varía escala y acción DENTRO de esa estancia.
     · Cuando el tema gire alrededor de un producto/lugar muy "fotogénico repetible" (camper, autocaravana, coche, hotel, tienda, plato estrella, destino), está PROHIBIDO que más de UN slide sea el clásico plano de tres cuartos del producto en entorno abierto. El resto deben ser planos claramente distintos entre sí: detalle, interior, escena humana, entorno sin producto, cenital, POV, primer plano, etc.
   - VARIEDAD ENTRE PUBLICACIONES DEL MES (el feed es la unidad): el conjunto del calendario NO debe parecer un catálogo del mismo producto repetido. En publicaciones consecutivas cambia el TIPO DE ESCENA (detalle / lote / oficio / destino / documento / humano / producto-héroe / entorno). No conviertas el feed en la misma foto del producto en distintos fondos. Si las refs son de estilo, cada tesela inventa sujeto y metáfora; si son de producto, cambia el fotograma, no la forma.
   - Estructura recomendada (adáptala al tema):
@@ -914,8 +916,9 @@ Cada post DEBE incluir un campo "production_specs" con detalles técnicos de pro
     · Slide final = CTA con composición limpia y zona libre para texto overlay.
   - Ejemplo orientativo de estructura para un carrusel de "viaje en camper por Murcia" (no copies, solo entiende el patrón): Slide 1 detalle de manos sobre el mapa al amanecer; Slide 2 plano general de la camper saliendo de la ciudad a primera hora; Slide 3 cenital de un desayuno improvisado en la mesa interior; Slide 4 escena humana de espaldas mirando al mar desde la puerta lateral abierta; Slide 5 detalle de las llaves colgadas en el salpicadero al atardecer; Slide 6 plano medio de la camper aparcada junto a una cala con luz de tarde y CTA.
 
-- REEL: { "duration_seconds": N, "media_type": "video", "scene_summary": "Escena 1 (0:00-0:08): ..., Escena 2 (0:08-0:20): ..." }
+- REEL: { "duration_seconds": N, "media_type": "video", "locked_space": "…", "scene_summary": "Escena 1 (0:00-0:08): ..., Escena 2 (0:08-0:20): ..." }
   - duration_seconds entre 15 y 60
+  - locked_space: igual que en carrusel si el reel ocurre en UNA estancia. Si hay técnico, fíjalo también (misma ropa de trabajo en todos los fotogramas).
   - scene_summary: guión breve con escenas y timing
 
 - STORY: { "media_type": "imagen" | "video", "duration_seconds": N (solo si video, 8-15), "scene_summary": "..." }
@@ -953,6 +956,7 @@ FORMATO DE RESPUESTA JSON:
         "num_slides": 5,
         "duration_seconds": null,
         "media_type": "imagen",
+        "locked_space": "Dormitorio murciano de piso real: ventana alta con cortina translúcida blanca (SIEMPRE la misma), cama con cabecero tapizado beige, mesita de madera clara, split blanco en la pared de la cabecera, suelo de gres claro. No cambies ninguno de estos anclajes entre slides.",
         "scene_summary": "Slide 1: Gancho — pregunta impactante sobre fondo de marca. Slide 2: Dato clave. ..."
       }
     }
@@ -1084,7 +1088,46 @@ export interface VisualBriefInput {
     duration_seconds?: number;
     media_type?: string;
     scene_summary?: string;
+    locked_space?: string;
   } | null;
+}
+
+const ONE_SPACE_HINT =
+  /dormitorio|habitaci[oó]n|sal[oó]n|oficina|local\b|estancia|cocina|cl[ií]nica|consulta|piso|vivienda|obra|instalaci[oó]n|ba[nñ]o/i;
+
+/**
+ * Estancia única de una pieza (carrusel/reel). Si el calendario ya dejó
+ * `locked_space`, se usa tal cual. Si no, se reconstruye del primer "Lugar"
+ * del scene_summary para que briefs e imagen no inventen otra habitación.
+ */
+export function resolveLockedSpace(post: VisualBriefInput): string {
+  const specs = post.production_specs;
+  const explicit = typeof specs?.locked_space === 'string' ? specs.locked_space.trim() : '';
+  if (explicit.length > 30) return explicit;
+
+  const summary = specs?.scene_summary || '';
+  const lugares = [...summary.matchAll(/Lugar:\s*([^|\n]+)/gi)]
+    .map(m => m[1].replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  const firstLugar = lugares[0] || '';
+  const idea = (post.idea || '').trim();
+  if (!firstLugar && !ONE_SPACE_HINT.test(`${idea} ${summary}`)) return '';
+
+  const ancla = firstLugar || `el mismo espacio físico que describe la idea «${idea}»`;
+  return [
+    `ESTANCIA ÚNICA DE ESTA PIEZA (cópiala literal en Escena y Fondo; no la reescribas ni la “mejores”): ${ancla}.`,
+    'Ancla arquitectura idéntica en TODOS los slides/fotogramas: mismo hueco de ventana (tamaño y tipo: alta / de suelo a techo / balconera), mismo tratamiento (cortina sí o no y de qué tela; persiana o contraventana sí o no), mismo cabecero o su ausencia, misma cama, mismo suelo, mismo split y en qué pared va, misma mesita y mismos materiales.',
+    'Cambia SOLO el encuadre, la escala de plano y la acción. PROHIBIDO inventar otra habitación, otra ventana u otro mobiliario.',
+  ].join(' ');
+}
+
+export function lockedSpacePromptSuffix(lockedSpace: string): string {
+  const text = lockedSpace.trim();
+  if (!text) return '';
+  return `
+
+ESTANCIA ÚNICA DE ESTA PUBLICACIÓN (prioridad absoluta — si este slide cambia ventana, cortina, cabecero, suelo o split respecto a los demás, la imagen se considerará fallida):
+${text}`;
 }
 
 function buildBrandContext(project: Project): string {
@@ -1306,6 +1349,8 @@ export interface SingleVisualInput {
   siblingShotCards?: string[];
   /** Teselas vecinas del muro (posts anterior/siguiente + mapa del tramo). */
   feedNeighbors?: FeedNeighborDigest | null;
+  /** Ficha arquitectónica idéntica para todos los slides de esta pieza. */
+  lockedSpace?: string;
 }
 
 const ASPECT_RATIOS: Record<string, string> = {
@@ -1430,6 +1475,7 @@ REGLAS ESTRICTAS:
 - NUNCA describir la escena como si fuera una foto fija. Siempre transmitir MOVIMIENTO, ACCIÓN y NARRATIVA
 - Ser HIPER-ESPECÍFICO: no "un plano bonito del producto" sino "travelling lateral a velocidad lenta siguiendo la mano del ceramista mientras gira la pieza en el torno, con partículas de arcilla flotando en contraluz dorado"
 - Incluir --ar ${ar} al final de la sección Composición
+- Si te dan ESTANCIA ÚNICA, TODOS los fotogramas ocurren en ESA arquitectura (misma ventana, mismas cortinas, mismo mobiliario). Si hay técnico, es la MISMA persona con la MISMA ropa. Cambia el plano y la acción, no el piso ni el vestuario.
 
 ${PROJECT_AESTHETIC_GUARD}
 
@@ -1470,10 +1516,10 @@ Hay DOS niveles independientes que NO debes confundir:
 
 2) VARIEDAD ESCÉNICA (sí, obligatoria entre slides):
    - DIFERENTE encuadre, DIFERENTE escala de plano, DIFERENTE sujeto u objeto principal o DIFERENTE acción respecto a los demás slides.
-   - DIFERENTE momento del día u hora cuando ayude al arco narrativo.
-   - DIFERENTE localización dentro del mismo proyecto cuando tenga sentido.
+   - El momento del día puede cambiar SOLO si la ficha lo pide y NO hay estancia única bloqueada.
+   - La localización NO cambia si el usuario te da una ESTANCIA ÚNICA / locked_space: entonces es LA MISMA habitación en todos los slides.
 
-Regla mental: la coherencia es de TONO Y PALETA, NO de escena ni de encuadre. Dos slides nunca pueden ser "la misma foto en otro sitio".
+Regla mental: la coherencia es de TONO, PALETA y —si hay estancia única— DE ARQUITECTURA. Dos slides nunca pueden ser "la misma foto con otro encuadre idéntico", PERO tampoco pueden ser "otra habitación con otra ventana". Cambia el plano, no el piso.
 
 ═══════════════════════════════════════════
 PROHIBICIONES DURAS PARA ESTE SLIDE
@@ -1482,6 +1528,7 @@ PROHIBICIONES DURAS PARA ESTE SLIDE
 - PROHIBIDO el cliché "producto/vehículo/objeto en tres cuartos sobre carretera/calle/paisaje abierto con cielo dramático" si ya hay otro slide que lo usa. Como mucho UN slide del carrusel puede ser ese plano. El resto deben ser claramente distintos.
 - PROHIBIDO inventar un slide genérico cuando el calendario te ha dado una ficha de fotograma concreta (Plano / Sujeto / Acción / Hora / Lugar): respeta la ficha al pie de la letra.
 - PROHIBIDO perder el arco narrativo: este slide debe enlazar de forma legible con el slide anterior y con el siguiente.
+- PROHIBIDO, si te dan ESTANCIA ÚNICA, cambiar el hueco de ventana, las cortinas, el cabecero, el suelo o la pared del split. Copia esa ficha literal en Escena y Fondo.
 
 ═══════════════════════════════════════════
 ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
@@ -1495,7 +1542,7 @@ ESTRUCTURA OBLIGATORIA (usa exactamente estas secciones como encabezados):
 
 **Luz y Atmósfera:** Iluminación coherente en TONO Y PALETA con el resto del carrusel (misma cocina cromática, misma sensación general). PERO la luz puede cambiar de momento del día o de calidad (interior vs. exterior, mañana vs. tarde) si así lo pide la ficha del slide; lo que debe mantenerse es el "look", no la hora exacta. Contraste que permita superponer texto legible. Mínimo 4 frases.
 
-**Fondo:** Qué hay detrás del sujeto. FUNDAMENTAL: el fondo debe incluir zonas de color uniforme o desenfocado suave donde pueda ir texto overlay con buena legibilidad. Colores del fondo compatibles con la paleta de marca. El fondo debe ayudar a diferenciar este slide del anterior (cambio de localización, de profundidad, de elementos). Mínimo 3 frases.
+**Fondo:** Qué hay detrás del sujeto. FUNDAMENTAL: el fondo debe incluir zonas de color uniforme o desenfocado suave donde pueda ir texto overlay con buena legibilidad. Colores del fondo compatibles con la paleta de marca. Si hay ESTANCIA ÚNICA, el fondo es ESA arquitectura vista desde otro ángulo — no otro piso. Si no hay estancia única, el fondo puede cambiar de localización. Mínimo 3 frases.
 
 **Estilo:** Estética definida por las reglas del proyecto y la identidad de marca (documental, cruda, artesanal, moderna…), NUNCA "editorial premium" por defecto. Mismo "look" fotográfico que los demás slides (lente, grano, tratamiento de color, sensación general), pero DISTINTA composición y DISTINTO contenido. Si es educativo: claro y legible. Si es aspiracional: lifestyle real. Evita el aspecto de catálogo y el cliché publicitario. Mínimo 3 frases.
 
@@ -1503,7 +1550,7 @@ REGLAS ESTRICTAS:
 - NO incluir texto literal en la descripción (el texto se añade en postproducción).
 - El prompt COMPLETO debe tener AL MENOS 250 palabras.
 - CADA sección debe tener al menos 3-4 frases completas.
-- COHERENCIA = paleta, tono y look. VARIEDAD = encuadre, escala, sujeto, acción, momento.
+- COHERENCIA = paleta, tono, look y, si hay ESTANCIA ÚNICA, la misma arquitectura. VARIEDAD = encuadre, escala, sujeto, acción.
 - Dejar ZONAS PARA TEXTO OVERLAY (fondos limpios, colores sólidos, áreas desenfocadas).
 - Si es slide de GANCHO: máximo impacto visual e intriga, PERO sin caer en el plano de catálogo más obvio del sector.
 - Si es slide de CTA: composición limpia, directa, espacio para botón/texto.
@@ -1581,6 +1628,7 @@ export function buildSingleVisualPrompt(
     nextSlideContext,
     siblingShotCards,
     feedNeighbors,
+    lockedSpace,
   } = input;
   const ar = ASPECT_RATIOS[post.format || ''] || '4:5';
   const agentKey = resolveVisualAgent(post.format, post.production_specs?.media_type);
@@ -1598,6 +1646,10 @@ export function buildSingleVisualPrompt(
   const physicalConstraintsBlock = buildPhysicalConstraintsBlock(project);
   const physicalPriorityInstruction = physicalConstraintsBlock
     ? `\n- Las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES del inicio de este mensaje tienen PRIORIDAD ABSOLUTA sobre cualquier otra instrucción si entran en conflicto: no inventes geometría, adyacencias, logos ni sujetos prohibidos. Reformula la escena para cumplirlas sin perder el objetivo del slide.`
+    : '';
+  const resolvedLockedSpace = (lockedSpace || '').trim() || resolveLockedSpace(post);
+  const lockedSpaceBlock = resolvedLockedSpace
+    ? `\n\n## ESTANCIA ÚNICA DE ESTA PIEZA (cópiala LITERAL en Escena y Fondo; no la reescribas)\n${resolvedLockedSpace}`
     : '';
   const carouselShotCardLine = physicalConstraintsBlock
     ? `- La "Ficha de ESTE slide" (Plano / Sujeto / Acción / Hora / Lugar) define la intención narrativa; si entrara en conflicto con las REGLAS FÍSICAS E IDENTITARIAS INVIOLABLES de arriba, PRIORIZA esas reglas: mantén el papel del slide en el arco (gancho, desarrollo, CTA…) pero corrige geometría y adyacencias para que sean físicamente posibles en el producto real.`
@@ -1621,7 +1673,7 @@ export function buildSingleVisualPrompt(
 - Este fotograma representa UN MOMENTO CONCRETO de esta escena del vídeo`;
 
     instructions = `INSTRUCCIONES FINALES:
-- Concéntrate en ESTE fotograma de ESTE vídeo. Distínguelo de las teselas vecinas del muro: no copies su gesto, plano ni lugar.${physicalPriorityInstruction}
+- Concéntrate en ESTE fotograma de ESTE vídeo. Distínguelo de las teselas vecinas del muro: no copies su gesto, plano ni lugar.${resolvedLockedSpace ? ' Si hay ESTANCIA ÚNICA, el lugar SÍ se copia: es el mismo piso; cambia el plano, no la arquitectura ni la ropa del técnico.' : ''}${physicalPriorityInstruction}
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 300 palabras, con las 7 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo, Movimiento).
 - Cada sección debe tener AL MENOS 3-4 frases completas con detalles sensoriales, técnicos y cinematográficos.
@@ -1656,8 +1708,8 @@ export function buildSingleVisualPrompt(
 - Genera SOLO el campo "visual_prompt". No generes visual_brief.
 - El visual_prompt DEBE tener al menos 250 palabras, con las 6 secciones obligatorias (Escena, Composición, Sujetos, Luz y Atmósfera, Fondo, Estilo).
 - Cada sección debe tener AL MENOS 3-4 frases completas.
-- COHERENCIA OBLIGATORIA con el resto del carrusel SOLO en: paleta, tratamiento de color, "look" fotográfico, sensación general.
-- VARIEDAD OBLIGATORIA respecto al resto del carrusel en: encuadre, escala de plano, sujeto principal, acción y/o momento del día. PROHIBIDO repetir un plano (combinación plano+sujeto+acción) que ya esté usado en cualquier otro slide del MAPA COMPLETO. Si la ficha de este slide se parece demasiado a la del slide anterior o siguiente, escoge un ángulo, escala o detalle distinto para diferenciarlo.
+- COHERENCIA OBLIGATORIA con el resto del carrusel en: paleta, tratamiento de color, "look" fotográfico${resolvedLockedSpace ? ' y LA MISMA ESTANCIA (copia literal el bloque ESTANCIA ÚNICA; no inventes otra ventana, cortina o cabecero)' : ', sensación general'}.
+- VARIEDAD OBLIGATORIA respecto al resto del carrusel en: encuadre, escala de plano, sujeto principal y acción${resolvedLockedSpace ? '. NO cambies de habitación.' : ' y/o momento del día'}. PROHIBIDO repetir un plano (combinación plano+sujeto+acción) que ya esté usado en cualquier otro slide del MAPA COMPLETO. Si la ficha de este slide se parece demasiado a la del slide anterior o siguiente, escoge un ángulo, escala o detalle distinto para diferenciarlo.
 - Si en el MAPA COMPLETO ya hay un slide con un plano de tres cuartos del producto/sujeto principal en entorno abierto (carretera, calle, paisaje), está PROHIBIDO que este slide sea otro plano del mismo tipo. Busca un detalle, un interior, una escena humana, un cenital, un POV o un entorno sin el sujeto principal.
 - ${carouselShotCardLine}
 - Deja ZONAS LIMPIAS para texto overlay en postproducción.${visualIndex === 0 ? '\n- Este es el slide de GANCHO: máximo impacto visual e intriga, pero EVITA el plano de catálogo más obvio del sector.' : ''}${visualIndex === totalVisuals - 1 ? '\n- Este es el slide FINAL (CTA): composición limpia y directa, espacio para texto de llamada a la acción.' : ''}
@@ -1704,7 +1756,7 @@ export function buildSingleVisualPrompt(
 
   return {
     system,
-    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}${imageAestheticBlock ? `\n\n${imageAestheticBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}${(() => {
+    user: `${header}${physicalConstraintsBlock ? `\n\n${physicalConstraintsBlock}` : ''}${lockedSpaceBlock}${creativeDirectionBlock ? `\n\n${creativeDirectionBlock}` : ''}${imageAestheticBlock ? `\n\n${imageAestheticBlock}` : ''}\n\n${brandBlock}\n\n${contextBlock}${referenceGuidanceBlock ? `\n\n${referenceGuidanceBlock}` : ''}${(() => {
     const neighbors = buildFeedNeighborsBlock(feedNeighbors);
     return neighbors ? `\n\n${neighbors}` : '';
   })()}\n\n${postBlock}\n\n${visualBlock}\n\n${instructions}`,
@@ -1723,6 +1775,8 @@ export type DecomposedVisual = {
   nextSlideContext?: string;
   /** Fichas de TODOS los slides hermanos, incluida la propia (solo carruseles). */
   siblingShotCards?: string[];
+  /** Estancia arquitectónica idéntica para todos los visuales de esta pieza. */
+  lockedSpace?: string;
 };
 
 /**
@@ -1736,6 +1790,7 @@ export type DecomposedVisual = {
 export function decomposePostIntoVisuals(post: VisualBriefInput): DecomposedVisual[] {
   const format = post.format || 'publicacion';
   const specs = post.production_specs;
+  const lockedSpace = resolveLockedSpace(post) || undefined;
 
   if (format === 'carrusel') {
     const numSlides = specs?.num_slides || 5;
@@ -1766,6 +1821,7 @@ export function decomposePostIntoVisuals(post: VisualBriefInput): DecomposedVisu
         siblingShotCards: slideCards.map((card, idx) =>
           card ? `Slide ${idx + 1}: ${card}` : `Slide ${idx + 1}: (sin ficha)`
         ),
+        lockedSpace,
       });
     }
     return visuals;
@@ -1781,11 +1837,12 @@ export function decomposePostIntoVisuals(post: VisualBriefInput): DecomposedVisu
       return sceneParts.map((part, i) => ({
         label: `Fotograma clave – Escena ${i + 1}`,
         slideContext: part.trim(),
+        lockedSpace,
       }));
     }
 
-    return [{ label: 'Fotograma clave (key frame)', slideContext: sceneSummary || undefined }];
+    return [{ label: 'Fotograma clave (key frame)', slideContext: sceneSummary || undefined, lockedSpace }];
   }
 
-  return [{ label: 'Imagen principal', slideContext: specs?.scene_summary || undefined }];
+  return [{ label: 'Imagen principal', slideContext: specs?.scene_summary || undefined, lockedSpace }];
 }

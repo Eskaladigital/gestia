@@ -45,7 +45,8 @@ scripts/
 ├── create-premium-user.mjs              # Crear/actualizar usuario premium (service role)
 ├── clone-project-wellness.mjs           # Clonar/afinar proyectos (Retiru, Furgocasa, Eskala…); npm run project:clone-wellness
 ├── bootstrap-rebel-classic-raid.mjs     # Crear/actualizar proyecto Rebel Classic Raid (onboarding + ai_rules)
-└── run-rcr-pipeline.mjs                 # Pipeline RCR vía API (Bearer): marca→web→comp→estrategia→calendario→briefs
+├── bootstrap-neotermica.mjs             # Crear/actualizar proyecto Neotérmica RRSS (onboarding + ai_rules)
+└── run-rcr-pipeline.mjs                 # Pipeline vía API (Bearer): marca→web→comp→estrategia→calendario→briefs
 
 src/
 ├── app/
@@ -381,7 +382,8 @@ Requieren `.env.local` con Supabase + OpenAI (o clave en `provider_api_keys` del
 | `node -r ./scripts/preload-tls-local.cjs ./node_modules/tsx/dist/cli.mjs scripts/inspect-project-fidelity.mjs` | Inspección en consola de reglas y roles actuales. |
 | `npm run project:clone-wellness` | Clona/afina proyectos (perfiles wellness, `--rules=furgocasa\|retiros\|eskala`, `--tune-id`). Requiere `--confirm` para escribir. |
 | `node -r ./scripts/preload-tls-local.cjs scripts/bootstrap-rebel-classic-raid.mjs --confirm` | Crea/actualiza el proyecto **Rebel Classic Raid** con config editorial. |
-| `node -r ./scripts/preload-tls-local.cjs scripts/run-rcr-pipeline.mjs --project-id=<uuid>` | Ejecuta el pipeline contra `npm run dev` con `Authorization: Bearer` (pasos: `brand,site,competitors,strategy,calendar,briefs`). |
+| `node -r ./scripts/preload-tls-local.cjs scripts/bootstrap-neotermica.mjs --confirm` | Crea/actualiza el proyecto **Neotérmica** (RRSS; molde Ruiz Estrada + Furgocasa + Tricholand). |
+| `node -r ./scripts/preload-tls-local.cjs scripts/run-rcr-pipeline.mjs --project-id=<uuid>` | Pipeline contra `npm run dev` (Bearer). Pasos: `brand,site,competitors,strategy,calendar,briefs`. `--only=` / `--from=` / `--month=` / `--year=` (month 0-index; def. septiembre 2026). |
 
 Las rutas `/api/*` aceptan **Bearer access_token** (además de cookies SSR) para automatización; sin sesión, responden **401 JSON** (no redirect a `/login`).
 

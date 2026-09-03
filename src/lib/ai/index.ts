@@ -8,6 +8,8 @@ export {
   buildVisualBriefsPrompt,
   buildSingleVisualPrompt,
   decomposePostIntoVisuals,
+  resolveLockedSpace,
+  lockedSpacePromptSuffix,
   buildFeedNeighborDigest,
   buildProjectContext,
   getMonthWeekSegmentsWithQuotas,

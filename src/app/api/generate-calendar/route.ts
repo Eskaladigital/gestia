@@ -175,6 +175,10 @@ function normalizeProductionSpecs(raw: any, format: string): Record<string, unkn
     specs.scene_summary = raw.scene_summary.trim().slice(0, 2000);
   }
 
+  if (typeof raw.locked_space === 'string' && raw.locked_space.trim()) {
+    specs.locked_space = raw.locked_space.trim().slice(0, 1200);
+  }
+
   return Object.keys(specs).length > 0 ? specs : null;
 }
 
