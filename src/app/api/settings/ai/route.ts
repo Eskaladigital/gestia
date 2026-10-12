@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { AGENT_DEFAULTS, AGENT_PIPELINE_ORDER, resolveSupportedModel } from '@/lib/ai/constants';
-import type { AgentKey, AIProvider } from '@/types';
+import type { AgentKey, AIProvider, KeyProvider } from '@/types';
 
 const VALID_KEYS = AGENT_PIPELINE_ORDER;
-const VALID_PROVIDERS: AIProvider[] = ['openai', 'anthropic', 'google'];
+/** Proveedores con API key guardable. `runway` solo se usa para vídeo (no para agentes). */
+const VALID_PROVIDERS: KeyProvider[] = ['openai', 'anthropic', 'google', 'runway'];
 
 function resolveTemperature(provider: AIProvider, model: string, temperature: number): number {
   return provider === 'openai' && (model === 'gpt-5.6' || model.startsWith('gpt-5.6-'))

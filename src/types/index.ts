@@ -43,6 +43,8 @@ export type VisualCreativeDirection = 'literal' | 'equilibrado' | 'disruptivo';
 export type ImageAesthetic = 'profesional' | 'lifestyle' | 'ugc';
 
 export type AIProvider = 'openai' | 'anthropic' | 'google';
+/** Proveedores con API key en `provider_api_keys` (los de texto/imagen + Runway para vídeo). */
+export type KeyProvider = AIProvider | 'runway';
 export type AgentKey = 'analyze_site' | 'analyze_competitors' | 'generate_strategy' | 'generate_calendar' | 'brand_recognition' | 'generate_visual_briefs' | 'visual_briefs_story' | 'visual_briefs_video' | 'visual_briefs_carousel' | 'visual_briefs_feed';
 
 // ---- AI Agent Config ----
@@ -527,6 +529,9 @@ export interface ContentItemVisual {
   video_model?: string | null;
   video_source_image_url?: string | null;
   video_generated_at?: string | null;
+  /** Tarea Runway en curso (animación asíncrona, migración 033). */
+  video_task_id?: string | null;
+  video_task_started_at?: string | null;
   /**
    * Texto del último error reportado por el usuario sobre la imagen generada.
    * Se inyecta en el prompt al regenerar para que la IA corrija puntos concretos

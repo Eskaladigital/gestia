@@ -11,9 +11,11 @@
  *   node -r ./scripts/preload-tls-local.cjs scripts/run-rcr-pipeline.mjs --project-id=<uuid> --from=strategy
  *   node -r ./scripts/preload-tls-local.cjs scripts/run-rcr-pipeline.mjs --project-id=<uuid> --only=calendar,briefs
  *
- * Pasos: brand, site, competitors, strategy, calendar, briefs
+ * Pasos: brand, site, competitors, strategy, calendar, briefs, images
  * Calendario por defecto: septiembre 2026 (month=8, year=2026, replace).
  *   --month=8 --year=2026   (month es 0-index, como Date: 8 = septiembre)
+ * Briefs/imágenes de un mes:
+ *   --from-date=2026-10-01 --to-date=2026-10-31
  */
 import fs from 'fs';
 import path from 'path';
@@ -92,7 +94,7 @@ async function main() {
   const base = (getArg('base') || process.env.NEXT_PUBLIC_APP_URL || DEFAULT_BASE).replace(/\/$/, '');
   const from = getArg('from');
   const only = getArg('only');
-  const allSteps = ['brand', 'site', 'competitors', 'strategy', 'calendar', 'briefs'];
+  const allSteps = ['brand', 'site', 'competitors', 'strategy', 'calendar', 'briefs', 'images'];
   let steps = allSteps;
   if (only) {
     steps = only.split(',').map(s => s.trim()).filter(Boolean);
@@ -120,31 +122,29 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  console.log(`Auth magiclink → ${OWNER_EMAIL}`);
-  const { data: linkData, error: linkErr } = await service.auth.admin.generateLink({
-    type: 'magiclink',
-    email: OWNER_EMAIL,
-  });
-  if (linkErr) {
-    console.error('generateLink:', linkErr.message);
-    process.exit(1);
-  }
-  const tokenHash = linkData?.properties?.hashed_token;
-  if (!tokenHash) {
-    console.error('No hashed_token en generateLink');
-    process.exit(1);
+  let accessToken = '';
+
+  async function refreshAccessToken() {
+    console.log(`Auth magiclink → ${OWNER_EMAIL}`);
+    const { data: linkData, error: linkErr } = await service.auth.admin.generateLink({
+      type: 'magiclink',
+      email: OWNER_EMAIL,
+    });
+    if (linkErr) throw new Error(`generateLink: ${linkErr.message}`);
+    const tokenHash = linkData?.properties?.hashed_token;
+    if (!tokenHash) throw new Error('No hashed_token en generateLink');
+
+    const { data: otpData, error: otpErr } = await anon.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'email',
+    });
+    if (otpErr || !otpData?.session) {
+      throw new Error(`verifyOtp: ${otpErr?.message || 'sin sesión'}`);
+    }
+    accessToken = otpData.session.access_token;
   }
 
-  const { data: otpData, error: otpErr } = await anon.auth.verifyOtp({
-    token_hash: tokenHash,
-    type: 'email',
-  });
-  if (otpErr || !otpData?.session) {
-    console.error('verifyOtp:', otpErr?.message || 'sin sesión');
-    process.exit(1);
-  }
-
-  const accessToken = otpData.session.access_token;
+  await refreshAccessToken();
   console.log(`Base API: ${base}`);
   console.log(`Proyecto: ${projectId}`);
   console.log(`Pasos: ${steps.join(' → ')}`);
@@ -256,11 +256,16 @@ async function main() {
       const svc = createClient(url, serviceKey, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
-      const { data: itemRows } = await svc
+      let itemsQuery = svc
         .from('content_items')
         .select('id')
         .eq('project_id', projectId)
         .order('scheduled_date', { ascending: true });
+      const fromDate = getArg('from-date');
+      const toDate = getArg('to-date');
+      if (fromDate) itemsQuery = itemsQuery.gte('scheduled_date', fromDate);
+      if (toDate) itemsQuery = itemsQuery.lte('scheduled_date', toDate);
+      const { data: itemRows } = await itemsQuery;
       const contentItemIds = (itemRows || []).map(r => r.id);
       if (!contentItemIds.length) throw new Error('No hay content_items para briefs');
 
@@ -301,6 +306,67 @@ async function main() {
         if (batch > 40) throw new Error('Demasiados batches de briefs; abortando');
       }
       console.log(`✓ briefs (${Math.round((Date.now() - t0) / 1000)}s)`);
+      continue;
+    }
+
+    if (step === 'images') {
+      const { createClient } = await import('@supabase/supabase-js');
+      const svc = createClient(url, serviceKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      let itemsQuery = svc
+        .from('content_items')
+        .select('id')
+        .eq('project_id', projectId)
+        .order('scheduled_date', { ascending: true });
+      const fromDate = getArg('from-date');
+      const toDate = getArg('to-date');
+      if (fromDate) itemsQuery = itemsQuery.gte('scheduled_date', fromDate);
+      if (toDate) itemsQuery = itemsQuery.lte('scheduled_date', toDate);
+      const { data: itemRows } = await itemsQuery;
+      const contentItemIds = (itemRows || []).map(r => r.id);
+      if (!contentItemIds.length) throw new Error('No hay content_items para imágenes');
+
+      const { data: visualRows, error: visualErr } = await svc
+        .from('content_item_visuals')
+        .select('id, content_item_id, label, image_url, visual_prompt')
+        .in('content_item_id', contentItemIds)
+        .order('visual_index', { ascending: true });
+      if (visualErr) throw new Error(visualErr.message);
+      const queue = (visualRows || []).filter(v => v.visual_prompt && !v.image_url);
+      console.log(`  ${queue.length} visuals pendientes de imagen (${(visualRows || []).length} en total)`);
+
+      let done = 0;
+      let failed = 0;
+      for (const visual of queue) {
+        if (done > 0 && done % 12 === 0) {
+          await refreshAccessToken();
+          console.log('  token renovado');
+        }
+        let res = await postJson('generate-image', { visual_id: visual.id });
+        if (res.status === 401) {
+          await refreshAccessToken();
+          console.log('  token renovado tras 401');
+          res = await postJson('generate-image', { visual_id: visual.id });
+        }
+        const raw = await res.text();
+        let json = {};
+        try {
+          json = raw ? JSON.parse(raw) : {};
+        } catch {
+          /* ignore */
+        }
+        if (!res.ok || !json.image_url) {
+          failed += 1;
+          console.error(
+            `  ✗ ${visual.label || visual.id}: ${res.status} ${(json.error || raw).toString().slice(0, 220)}`
+          );
+          continue;
+        }
+        done += 1;
+        console.log(`  ✓ ${done}/${queue.length} ${visual.label || visual.id}`);
+      }
+      console.log(`✓ images ok=${done} fail=${failed} (${Math.round((Date.now() - t0) / 1000)}s)`);
       continue;
     }
 

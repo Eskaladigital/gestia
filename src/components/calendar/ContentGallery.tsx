@@ -247,6 +247,7 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
   const [videoModalVisual, setVideoModalVisual] = useState<{
     visual: ContentItemVisual;
     contentItemId: string;
+    format?: ContentItem['format'];
   } | null>(null);
 
   const visualsMapRef = useRef(visualsMap);
@@ -1063,8 +1064,8 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
                                     <Pencil size={14} />
                                   </ActionIcon>
                                   <ActionIcon
-                                    title="Animar esta imagen con IA de vídeo (Veo)"
-                                    onClick={() => setVideoModalVisual({ visual, contentItemId: item.id })}
+                                    title="Animar esta imagen con IA de vídeo (Runway / Veo)"
+                                    onClick={() => setVideoModalVisual({ visual, contentItemId: item.id, format: item.format })}
                                     className={
                                       visualHasVideo(visual)
                                         ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-700'
@@ -1344,6 +1345,7 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
       {videoModalVisual && (
         <VideoGenModal
           visual={videoModalVisual.visual}
+          contentFormat={videoModalVisual.format}
           onClose={() => setVideoModalVisual(null)}
           onGenerated={patch => {
             patchVisual(videoModalVisual.contentItemId, videoModalVisual.visual.id, patch);

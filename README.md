@@ -2,11 +2,11 @@
 
 **Producto de [Eskala Marketing Digital](https://www.eskaladigital.com/)** — agencia de marketing digital en Murcia. Hecho con 🧡 en Murcia.
 
-Aplicación SaaS para crear estrategias y calendarios de contenido para redes sociales usando inteligencia artificial: generación de **imágenes** con fidelidad de producto (referencias + reglas físicas), **edición post-IA**, **animación a vídeo** (Veo) y galería de producción con copy listo para publicar. Incluye **interfaz adaptable a móvil** y **PWA** (instalable desde el navegador).
+Aplicación SaaS para crear estrategias y calendarios de contenido para redes sociales usando inteligencia artificial: generación de **imágenes** con fidelidad de producto (referencias + reglas físicas), **edición post-IA**, **animación a vídeo** (Runway para reels, Veo) y galería de producción con copy listo para publicar. Incluye **interfaz adaptable a móvil** y **PWA** (instalable desde el navegador).
 
 **Repositorio:** [github.com/Eskaladigital/gestia](https://github.com/Eskaladigital/gestia)
 
-**Última actualización de esta documentación:** 15 de agosto de 2026 (generación de imágenes vía Responses API + gpt-image-2, SDK OpenAI 7).
+**Última actualización de esta documentación:** 15 de septiembre de 2026 (generación de imágenes vía Responses API + gpt-image-2.5-sunburst, SDK OpenAI 7.15).
 
 ## Stack
 
@@ -16,8 +16,9 @@ Aplicación SaaS para crear estrategias y calendarios de contenido para redes so
 - **Tailwind CSS**
 - **ESLint 9** + `eslint-config-next` 16 (requerido para `npm install` sin conflictos de peer dependencies)
 - **Supabase** (PostgreSQL + Auth + RLS)
-- **OpenAI API** (`openai` **7.x**): modelos de texto/visión configurables por agente; agentes principales y orquestación de imágenes con `gpt-5.6-terra`, briefs/refinado con `gpt-5.4-mini`, tool `image_generation` → `gpt-image-2` y fallback a **Images API** (`images.generate` / `images.edit`)
+- **OpenAI API** (`openai` **7.15+**): modelos de texto/visión configurables por agente; agentes principales y orquestación de imágenes con `gpt-5.6-terra`, briefs/refinado con `gpt-5.4-mini`, tool `image_generation` → `gpt-image-2.5-sunburst` (`quality: xhigh`) y fallback a **Images API** (`images.generate` / `images.edit`)
 - **Google GenAI** (`@google/genai`) — animación image-to-video con **Veo** (`POST /api/generate-video`)
+- **Runway API** (REST, `api.dev.runwayml.com`) — animación image-to-video con **Gen-4.5 / Gen-4 Turbo**; motor por defecto en **reels** (`POST /api/generate-video`, `engine: 'runway'`)
 - **Puppeteer** (Chrome sin cabeza en el servidor: miniaturas de las URLs analizadas → Supabase Storage)
 - **Zustand** (estado del onboarding)
 - **PWA**: `manifest.json`, service worker (`public/sw.js`), iconos y metadatos en el layout raíz
@@ -66,7 +67,7 @@ src/
 │       ├── generate-calendar/
 │       ├── generate-visual-briefs/  # Brief creativo + prompt IA por post del calendario
 │       ├── generate-image/          # Imagen IA por visual (refs, reglas físicas, feedback)
-│       ├── generate-video/          # Animación Veo a partir de imagen ya generada
+│       ├── generate-video/          # Animación Runway / Veo a partir de imagen ya generada
 │       ├── save-visual-image-edit/  # Guardar PNG editado + image_edit_json (o borrar edición)
 │       ├── report-image-error/
 │       ├── administrator/users/
@@ -155,7 +156,7 @@ Pensada como **centro de producción**: imágenes, texto para publicar y prompts
   - Bloque **«📝 Texto para redes»** (si el post tiene `copy` / CTA / hashtags): muestra el texto listo para pegar en Instagram u otras redes, plegable (3 líneas colapsadas), botón **Copiar texto** (copy + CTA + hashtags de una vez). Una sola vez por post, no repetido en cada slide del carrusel.
   - Rejilla de **visuals** (imágenes/vídeos) del post.
 - Por cada **visual** (slide / fotograma):
-  - Barra superior de **iconos** (con tooltip): copiar prompt, generar/regenerar, reportar error, editar imagen, animar (Veo), espejo, descargar.
+  - Barra superior de **iconos** (con tooltip): copiar prompt, generar/regenerar, reportar error, editar imagen, animar (Runway / Veo), espejo, descargar.
   - **Título del visual** (p. ej. «Slide 1 (gancho)») como etiqueta sobre la imagen, con punto de estado (verde / ámbar / rojo).
   - Imagen (prioriza `edited_image_url` si existe; badge **Editada**), vídeo IA debajo si existe, **prompt** editable en panel oscuro (plegable).
 - **Descargar todas** del mes: en escritorio genera un **ZIP**; en **móvil/iOS** guarda las imágenes **una a una en Fotos** (Web Share API), sin ZIP.
@@ -186,7 +187,7 @@ Cada visual puede generar una imagen IA (`POST /api/generate-image`). En la gale
 | Generar / Regenerar | Cola de generación con modal de progreso (`ImageGenProgressModal`). |
 | Reportar | Texto libre en `user_feedback`; se inyecta al regenerar y se limpia al éxito. |
 | Editar | Abre `ImageEditorModal` (ver abajo). Guarda vía `POST /api/save-visual-image-edit`. |
-| Animar | `VideoGenModal` + `POST /api/generate-video`: Veo anima la imagen **ya generada** (no la repinta); MP4 en `video_url` (027). |
+| Animar | `VideoGenModal` + `POST /api/generate-video`: anima la imagen **ya generada** (no la repinta) con **Runway** (Gen-4.5 / Gen-4 Turbo, 5 o 10 s; **por defecto en reels**) o **Google Veo** (8 s). Selector de motor, modelo, duración y coste estimado en el modal, y **aviso de coste obligatorio** antes de lanzar (como en imágenes; avisa también si se va a regenerar un vídeo ya existente); MP4 en `video_url` y motor en `video_model` (`runway-gen4.5`, `veo-…`) (027, 033). |
 | Espejo | Flip horizontal persistente (`image_flip_horizontal`); deshabilitado si hay edición guardada. |
 | Descargar | Imagen individual; **Descargar todas** del mes → ZIP en escritorio, o **guardar en Fotos** una a una en móvil/iOS. |
 
@@ -229,7 +230,7 @@ Pipeline en **dos capas** (constantes en `src/lib/ai/constants.ts`):
 | Capa | Modelo / API | Rol |
 |------|----------------|-----|
 | **Orquestación** (vía principal) | `gpt-5.6-terra` (`reasoning: medium`) + **Responses API** + tool `image_generation` | Lee el prompt final y las referencias con visión (`detail: high`), optimiza instrucciones y dispara la generación. |
-| **Ejecución** | `gpt-image-2` (`quality: high`) | Renderiza la imagen. Procesa las referencias en alta fidelidad automáticamente (no admite `input_fidelity`). |
+| **Ejecución** | `gpt-image-2.5-sunburst` (`quality: xhigh`) | Renderiza la imagen. Sunburst = precisión con referencias de marca/producto. Procesa refs en alta fidelidad automáticamente (no admite `input_fidelity`). |
 | **Fallback** | Images API (`images.edit` / `images.generate`) | Si la Responses API falla; mismo modelo, tamaño y calidad. Si OpenAI rechaza las refs, reintenta sin ellas. |
 
 **Antes de la API de imagen**, el prompt pasa por:
@@ -254,7 +255,7 @@ Pipeline en **dos capas** (constantes en `src/lib/ai/constants.ts`):
 | Cuadrado | `1248×1248` | 1:1 |
 | Horizontal | `1872×1248` | 3:2 |
 
-Coste orientativo en UI: ~**$0,25** / imagen (`IMAGE_GENERATION_ESTIMATED_COST_USD`). La ruta usa `runtime: nodejs` y `maxDuration: 300` (2–3 min con referencias).
+Coste orientativo en UI: ~**$0,35** / imagen (`IMAGE_GENERATION_ESTIMATED_COST_USD`). La ruta usa `runtime: nodejs` y `maxDuration: 300` (2–3 min con referencias).
 
 Proyectos **sin producto físico** (consultoría, branding puro): las fotos son inspiración (`style` / `place`); no se activa el modo fidelidad estricta.
 
@@ -313,6 +314,7 @@ En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001`
 | `026_content_item_visuals_image_edit.sql` | Edición post-IA: `image_edit_json` (capas: tipografía, efecto, fondo, color, mayúsculas, cursiva, espaciado, rotación, opacidad + filtros globales), `edited_image_url`, `image_edited_at` (PNG final en bucket `visual-assets`; prioridad en galería y descarga) |
 | `027_content_item_visuals_video_animation.sql` | Animación con IA de vídeo: `video_motion_prompt`, `video_url`, `video_status`, `video_error`, `video_model`, `video_source_image_url`, `video_generated_at` |
 | `028_project_reference_images_role.sql` | Rol por referencia (`reference_role`, `role_confidence`, `role_is_manual`), identidad de producto (`product_identity`, `product_traits`, `reference_view`). Base del motor de fidelidad |
+| `033_provider_api_keys_runway.sql` | Admite `runway` en `provider_api_keys.provider` (API key de Runway por usuario para animar reels) y añade `video_task_id` / `video_task_started_at` a `content_item_visuals` (animación Runway asíncrona) |
 
 **Storage:**
 
@@ -357,9 +359,14 @@ Opcional para capturas:
 
 - `DISABLE_PUPPETEER_SCREENSHOTS=1` — desactiva Puppeteer en `analyze-site` (útil en serverless sin Chrome, p. ej. Vercel estándar). El análisis de texto sigue funcionando.
 
-Para **animación a vídeo** (Google Veo, `POST /api/generate-video`):
+Para **animación a vídeo** (`POST /api/generate-video`):
 
-- `GOOGLE_AI_API_KEY` en el servidor, o clave de Google en **Ajustes → Proveedores IA** (`provider_api_keys`) por usuario.
+- **Runway** (motor por defecto en reels): `RUNWAYML_API_SECRET` en el servidor, o clave de Runway en **Ajustes → Proveedores IA** (tarjeta «Runway (vídeo)», requiere migración **033**). Se crea en [dev.runwayml.com](https://dev.runwayml.com) → API Keys; los créditos se compran allí (1 crédito = 0,01 USD).
+- **Google Veo**: `GOOGLE_AI_API_KEY` en el servidor, o clave de Google en **Ajustes → Proveedores IA** (`provider_api_keys`) por usuario.
+
+**Costes Runway** (por clip): Gen-4.5 = 12 créditos/s → **$0,60** (5 s) / **$1,20** (10 s). Gen-4 Turbo = 5 créditos/s → **$0,25** (5 s) / **$0,50** (10 s). Veo 3.1 Fast ≈ $1,20 (8 s).
+
+**Cómo funciona (asíncrono):** `POST /api/generate-video` con `engine: 'runway'` lanza `POST /v1/image_to_video` en Runway (cabecera `X-Runway-Version: 2024-11-06`, imagen = `edited_image_url` o `image_url` pública de Supabase, ratio `720:1280` o `1280:720` según la orientación del proyecto), guarda `video_task_id` / `video_task_started_at` (migración **033**) y responde al instante con `status: 'generating'`. El modal consulta `GET /api/generate-video?visual_id=…` cada 8 s: cada consulta mira la tarea una vez y, cuando Runway termina, el servidor descarga el MP4, lo sube a `visual-assets` y deja el visual en `ready`. No depende del límite de 300 s de la función, así que la cola de Runway (`PENDING` / `THROTTLED`, cuentas que procesan 1–2 tareas a la vez) no da error: el modal muestra «En cola en Runway…» y **se puede cerrar**; al reabrirlo sigue consultando. Si en 30 min no termina, se marca error. Un segundo «Generar» sobre un visual con tarea en curso no lanza otra (no cobra dos veces). Veo sigue siendo síncrono.
 
 ### 4. Ejecutar en desarrollo
 
@@ -403,7 +410,7 @@ npm run start
 3. En Supabase, añade esa URL y `https://tu-proyecto.vercel.app/callback` (y dominio custom si lo usas) en **Redirect URLs** y **Site URL** según corresponda.
 4. **`npm install`** en Vercel requiere **ESLint ≥ 9** (ya fijado en `package.json`) para compatibilidad con `eslint-config-next@16`.
 5. Puppeteer en rutas API puede no funcionar en el runtime serverless por defecto; usa `DISABLE_PUPPETEER_SCREENSHOTS=1` o un entorno con Chromium compatible si necesitas capturas en producción.
-6. Para **Veo** en producción, añade **`GOOGLE_AI_API_KEY`** (o claves por usuario en `provider_api_keys`) y ejecuta las migraciones hasta **027** (vídeo) y **028** (roles de referencia) si aún no están aplicadas.
+6. Para **vídeo** en producción, añade **`RUNWAYML_API_SECRET`** (Runway, reels) y/o **`GOOGLE_AI_API_KEY`** (Veo) (o claves por usuario en `provider_api_keys`) y ejecuta las migraciones hasta **027** (vídeo) y **028** (roles de referencia) si aún no están aplicadas.
 
 ## Flujo de uso
 
@@ -412,7 +419,7 @@ npm run start
 3. En la ficha del proyecto (`/projects/[id]`), **Fase 1 — Base**: analizar web → analizar competidores → generar estrategia (botones independientes; el estado del pipeline se refleja en la UI). Las secciones de **identidad de marca** (`BrandCard`), **ficha del negocio** (`BusinessCard`) y **competidores** (`CompetitorsCard`) son **editables** desde el dashboard. En **`ProjectReferenceImagesCard`** sube fotos reales (exterior, interior, detalle): la IA asigna **rol** y caption; las marcadas **Producto** regeneran solas **`physical_constraints`** (en **`ProjectSettingsPanel`**, solo lectura si hay producto). Los deseos creativos van en **Reglas IA** (`ai_rules`), no en reglas físicas.
 4. **Analizar web** además del texto guarda **miniaturas** (Puppeteer) de hasta 3 URLs en el bucket Supabase **`screenshots`** y enlaza `screenshot_url` en cada fila de `scraped_content`. El proceso puede alargarse varios minutos en la primera ejecución (descarga de Chromium, red lenta, etc.). Requiere Node con Chrome embebido (típico en `npm run dev` / `next start` en tu PC o VPS); en muchos despliegues serverless no hay navegador — usa `DISABLE_PUPPETEER_SCREENSHOTS=1` o un host con Node “completo”.
 5. **Fase 2 — Calendario**: solo disponible cuando existe estrategia guardada. Primera vez genera el mes actual; si ya hay posts, puedes **añadir** publicaciones al mes o **reemplazar** todo el mes (modal). El calendario puede incluir `production_specs` (slides, duración, tipo de medio) y un paso posterior de **briefs visuales** (`generate-visual-briefs`).
-6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). En la pestaña **Contenido**: navega por mes (flechas / atajos), elige densidad **Vista** (por defecto **Pequeña**), genera pendientes del mes, lee el **texto para redes** y el prompt junto a cada imagen, edita con el **editor inmersivo** (texto, tipografías, rotación, opacidad, filtros), anima a vídeo (Veo) y descarga (ZIP en PC o Fotos en móvil).
+6. **Fase 3 — Imágenes**: una vez generados los briefs, cada visual puede producir una **imagen IA** (`generate-image`). En la pestaña **Contenido**: navega por mes (flechas / atajos), elige densidad **Vista** (por defecto **Pequeña**), genera pendientes del mes, lee el **texto para redes** y el prompt junto a cada imagen, edita con el **editor inmersivo** (texto, tipografías, rotación, opacidad, filtros), anima a vídeo (Runway en reels / Veo) y descarga (ZIP en PC o Fotos en móvil).
 7. Revisar y editar posts en **Lista** o **Calendario** (cuadrícula mensual con las mismas flechas de mes); cambiar estado borrador → aprobado desde el detalle del día o el editor; **exportar JSON** desde la barra superior.
 
 Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al completar de nuevo pasos correctamente (p. ej. calendario generado) puede volver a **`ready`** según la lógica actual de las rutas API.
@@ -427,8 +434,8 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 | `POST /api/generate-strategy` | Estrategia de contenido |
 | `POST /api/generate-calendar` | Calendario (`calendar_mode`: append / replace, etc.) |
 | `POST /api/generate-visual-briefs` | Brief creativo + prompt generativo por ítem del calendario |
-| `POST /api/generate-image` | Imagen IA por visual: Responses API (`gpt-5.6-terra` → `gpt-image-2`, refs en alta fidelidad automática), fallback Images API, `physical_constraints`, QA de fidelidad (reintento opcional vía `IMAGE_FIDELITY_AUTO_RETRY`). |
-| `POST /api/generate-video` | Anima con Veo la imagen ya generada de un visual (`video_motion_prompt` → `video_url`); no regenera la imagen estática. |
+| `POST /api/generate-image` | Imagen IA por visual: Responses API (`gpt-5.6-terra` → `gpt-image-2.5-sunburst` xhigh, refs en alta fidelidad automática), fallback Images API, `physical_constraints`, QA de fidelidad (reintento opcional vía `IMAGE_FIDELITY_AUTO_RETRY`). |
+| `POST /api/generate-video` | Anima la imagen ya generada de un visual (`video_motion_prompt` → `video_url`); no regenera la imagen estática. Body: `visual_id`, `motion_prompt`, `engine` (`runway` \| `veo`), `runway_model` (`gen4.5` \| `gen4_turbo`), `duration` (5 \| 10). |
 | `POST /api/save-visual-image-edit` | Multipart: guarda PNG editado + `image_edit_json` en `content_item_visuals` (bucket `visual-assets`); `clear=true` borra edición y vuelve a la imagen IA base. |
 | `POST /api/report-image-error` | Guarda en `content_item_visuals.user_feedback` un texto libre del usuario describiendo un error de la imagen; se usa al regenerar. |
 | `GET/POST/PATCH /api/projects` | Listar activos, crear; `PATCH` también sirve para onboarding y **papelera** (`deleted_at`: ISO string o `null` para restaurar) |
@@ -467,7 +474,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [ ] Integración Firecrawl explícita si quieres otro proveedor de extracción
 - [ ] Streaming de respuestas IA (SSE)
 - [ ] Exportación a CSV / Google Sheets
-- [x] Generación de imágenes IA con **Responses API** (`gpt-5.6-terra` + `gpt-image-2`, resolución premium, fallback Images API)
+- [x] Generación de imágenes IA con **Responses API** (`gpt-5.6-terra` + `gpt-image-2.5-sunburst` xhigh, resolución premium, fallback Images API)
 - [x] Reporte de error por imagen con texto libre, aplicado como corrección al regenerar
 - [x] Carruseles con variedad narrativa forzada (ficha técnica por slide + mapa completo al director de arte)
 - [x] Orientación de imagen por proyecto (vertical / cuadrado / horizontal)
@@ -479,6 +486,7 @@ Si un paso de IA falla, el proyecto puede pasar a estado **`error`**; al complet
 - [x] Scripts CLI: `references:reanalyze`, `references:sync-rules`, inspección de fidelidad
 - [x] Editor de imagen post-IA inmersivo (UI oscura, chips «Aa», tipografías Google Fonts, efectos, rotación, opacidad, filtros, PNG en `edited_image_url`)
 - [x] Animación a vídeo por visual (Veo, desde imagen existente)
+- [x] Runway image-to-video (Gen-4.5 / Gen-4 Turbo), por defecto en reels, con key por usuario
 - [x] Navegación por mes en pestañas Calendario y Contenido (flechas + atajos; acciones masivas de Contenido acotadas al mes visible)
 - [x] Vista Contenido: densidad de rejilla Grande / Mediana / Pequeña (defecto Pequeña), cards de ancho uniforme, iconos de acción, texto para redes (copy) por post
 - [x] Descarga masiva del mes: ZIP en escritorio; guardar en Carrete (iOS) imagen a imagen en móvil

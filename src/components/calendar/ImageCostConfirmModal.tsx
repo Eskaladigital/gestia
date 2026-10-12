@@ -51,7 +51,7 @@ export function ImageCostConfirmModal({ imageCount, onConfirm, onCancel }: Image
 
           <div className="bg-surface-50 border border-surface-200 p-3 text-xs text-surface-600 leading-relaxed space-y-1">
             <p>Cada imagen se genera con <strong>{IMAGE_GENERATION_MODEL}</strong> en proporción nativa de Instagram: 4:5 en feed/carrusel y 9:16 en stories/reels (calidad {IMAGE_GENERATION_QUALITY}).</p>
-            <p>Coste estimado: <strong>${IMAGE_GENERATION_ESTIMATED_COST_USD.toFixed(2)}/imagen</strong>. Duración: ~30-60 segundos por imagen.</p>
+            <p>Coste estimado: <strong>${IMAGE_GENERATION_ESTIMATED_COST_USD.toFixed(2)}/imagen</strong>. Duración: ~45-90 segundos por imagen (Sunburst xhigh; más si hay referencias).</p>
             <p>Las imágenes se generan de forma secuencial. Puedes cerrar esta ventana y seguirán generándose.</p>
           </div>
         </div>

@@ -73,9 +73,28 @@ IMÁGENES — MEZCLA OBLIGATORIA (molde Ruiz Estrada, adaptado a oficio):
 - PROHIBIDO inventar logos de Daikin/Mitsubishi como marca de la cuenta; si aparece un aparato, que sea creíble, no un packshot de tienda.
 - EL FEED ES LA UNIDAD: dos posts consecutivos no pueden compartir el mismo gesto icónico (split en pared blanca + técnico de espaldas). Variedad de plano, lugar y tipo de escena.
 
+CUOTA VISUAL DEL MES (OBLIGATORIA — si el muro se lee en 3 segundos como "split + sofá + técnico", has fallado y reescribes el mes):
+- El split de vivienda (dormitorio o salón con unidad interior blanca) es MINORÍA: como mucho 8 de ~21 posts. El resto NO puede resolverse con otra foto del mismo split en otra pared beige.
+- COMERCIO / EMPRESA: al menos 3 posts del mes ocurren en un local, clínica, despacho o pequeño comercio murciano. Visualmente se distingue del piso: mostrador, puerta que se abre, sillas de espera, terrazo de local, escaparate. PROHIBIDO disfrazar un salón con una planta y llamarlo "comercio".
+- SUELO RADIANTE: al menos 1 post (mejor 2). Visual = solera, tubo, aislamiento, colector o obra limpia de suelo. NUNCA un split de pared para "representar" el suelo radiante.
+- AEROTERMIA / ACS / CUARTO TÉCNICO: al menos 1 post. Visual = depósito, cuarto técnico, grifo/ACS, no otro salón.
+- CONDUCTOS: al menos 1 post. Visual = falso techo abierto, conducto aislado o rejilla lineal. No el mismo split.
+- CALDERA o RADIADORES: al menos 1 post (invierno también existe en Murcia). Visual = radiador, caldera, cuarto de calefacción. No un split.
+- UNIDAD EXTERIOR / AZOTEA / PATIO: al menos 1 post. El oficio también se ve fuera.
+- El técnico de polo azul NO puede ser el protagonista de más de 1 de cada 3 teselas del feed. Si el muro es "el mismo hombre señalando paredes", reescríbelo.
+
+CÓMO SE FOTOGRAFÍA CADA OFICIO (para que la IA no lo colapse todo a split):
+- Split vivienda → dormitorio o salón. Ya hay de sobra; no lo uses como comodín.
+- Comercio → mostrador, puerta, espera. "Climatiza tu comercio" se VE, no se escribe en un salón.
+- Suelo radiante → suelo abierto / tubo / colector. Si no se ve el suelo, no es suelo radiante.
+- Aerotermia → cuarto técnico + ACS. Si se ve un sofá, has fallado.
+- Conductos → techo, no pared.
+- Caldera/radiador → pieza de calor, no de frío.
+
 REGLAS DE VARIEDAD ENTRE PUBLICACIONES:
 - Evitar dos piezas seguidas solo comerciales o solo de un mismo oficio (p. ej. dos splits).
-- Carruseles: micro-historia (problema → criterio → oficio/estancia → visita), no álbum del mismo aparato.`;
+- Carruseles: micro-historia (problema → criterio → oficio/estancia → visita), no álbum del mismo aparato.
+- Antes de cerrar el mes, recorre la RETÍCULA: si quitas los textos, ¿se distinguen comercio, suelo, aerotermia y vivienda? Si no, el mes no vale.`;
 
 const NEOTERMICA_PHYSICAL_CONSTRAINTS = `SERVICIO, NO PRODUCTO SKU: Neotérmica instala, repara y renueva climatización. No hay un único objeto a clonar (no es la Ducato de Furgocasa ni el columnar de Tricholand). Las refs, si las hay, son estilo / lugar / oficio.
 

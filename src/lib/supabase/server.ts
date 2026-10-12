@@ -16,7 +16,7 @@ export async function createServerSupabase() {
       : '';
 
   if (bearer) {
-    return createClient(
+    const client = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
@@ -24,6 +24,11 @@ export async function createServerSupabase() {
         auth: { autoRefreshToken: false, persistSession: false },
       }
     );
+    // Sin cookies no hay sesión en memoria: getUser() ignora el header y
+    // devuelve null. Los scripts del pipeline mandan solo Bearer.
+    const getUser = client.auth.getUser.bind(client.auth);
+    client.auth.getUser = ((jwt?: string) => getUser(jwt || bearer)) as typeof client.auth.getUser;
+    return client;
   }
 
   const cookieStore = await cookies();

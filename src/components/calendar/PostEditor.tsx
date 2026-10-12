@@ -523,7 +523,7 @@ export function PostEditor({ item, projectName, onSave, onStatusChange, onClose,
                               </button>
                               <button
                                 type="button"
-                                title="Animar esta imagen con IA de vídeo (Veo)"
+                                title="Animar esta imagen con IA de vídeo (Runway / Veo)"
                                 onClick={() => setVideoModalVisual(visual)}
                                 className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border transition-colors ${
                                   visualHasVideo(visual)
@@ -704,6 +704,7 @@ export function PostEditor({ item, projectName, onSave, onStatusChange, onClose,
       {videoModalVisual && (
         <VideoGenModal
           visual={videoModalVisual}
+          contentFormat={item.format}
           onClose={() => setVideoModalVisual(null)}
           onGenerated={patch => {
             setVisuals(prev =>

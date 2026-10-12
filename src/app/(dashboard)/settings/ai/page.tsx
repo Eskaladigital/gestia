@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { AVAILABLE_MODELS, getModelsForProvider } from '@/lib/ai/constants';
-import type { AIProvider, AgentKey } from '@/types';
+import { AVAILABLE_MODELS, RUNWAY_VIDEO_MODELS, getModelsForProvider } from '@/lib/ai/constants';
+import type { AIProvider, AgentKey, KeyProvider } from '@/types';
 
 interface AgentConfigUI {
   agent_key: AgentKey;
@@ -22,13 +22,13 @@ interface AgentConfigUI {
 }
 
 interface ProviderStatus {
-  provider: AIProvider;
+  provider: KeyProvider;
   has_key: boolean;
   is_valid: boolean;
   last_verified_at: string | null;
 }
 
-const PROVIDER_META: Record<AIProvider, { label: string; color: string; bgActive: string; borderActive: string; dotColor: string; placeholder: string; prefix: string }> = {
+const PROVIDER_META: Record<KeyProvider, { label: string; color: string; bgActive: string; borderActive: string; dotColor: string; placeholder: string; prefix: string }> = {
   openai: {
     label: 'OpenAI',
     color: 'text-emerald-700',
@@ -56,9 +56,20 @@ const PROVIDER_META: Record<AIProvider, { label: string; color: string; bgActive
     placeholder: 'AIza...',
     prefix: 'AIza',
   },
+  runway: {
+    label: 'Runway (vídeo)',
+    color: 'text-fuchsia-700',
+    bgActive: 'bg-fuchsia-50',
+    borderActive: 'border-fuchsia-300',
+    dotColor: 'bg-fuchsia-500',
+    placeholder: 'key_...',
+    prefix: 'key_',
+  },
 };
 
 const PROVIDER_ORDER: AIProvider[] = ['openai', 'anthropic', 'google'];
+/** Tarjetas de API key: los proveedores de agentes + Runway (solo animación imagen → vídeo). */
+const KEY_PROVIDER_ORDER: KeyProvider[] = [...PROVIDER_ORDER, 'runway'];
 
 export default function AISettingsPage() {
   const [configs, setConfigs] = useState<AgentConfigUI[]>([]);
@@ -66,9 +77,9 @@ export default function AISettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
-  const [keyInputs, setKeyInputs] = useState<Record<AIProvider, string>>({ openai: '', anthropic: '', google: '' });
-  const [keyEditing, setKeyEditing] = useState<AIProvider | null>(null);
-  const [keySaving, setKeySaving] = useState<AIProvider | null>(null);
+  const [keyInputs, setKeyInputs] = useState<Record<KeyProvider, string>>({ openai: '', anthropic: '', google: '', runway: '' });
+  const [keyEditing, setKeyEditing] = useState<KeyProvider | null>(null);
+  const [keySaving, setKeySaving] = useState<KeyProvider | null>(null);
 
   const fetchData = useCallback(async () => {
     const res = await fetch('/api/settings/ai');
@@ -82,7 +93,7 @@ export default function AISettingsPage() {
 
   const activeProviders = providers.filter(p => p.has_key).map(p => p.provider);
 
-  async function saveApiKey(provider: AIProvider) {
+  async function saveApiKey(provider: KeyProvider) {
     const key = keyInputs[provider]?.trim();
     if (!key || key.length < 10) return;
 
@@ -98,7 +109,7 @@ export default function AISettingsPage() {
     await fetchData();
   }
 
-  async function deleteApiKey(provider: AIProvider) {
+  async function deleteApiKey(provider: KeyProvider) {
     if (!confirm(`¿Eliminar la API key de ${PROVIDER_META[provider].label}? Los agentes que la usen dejarán de funcionar.`)) return;
     await fetch('/api/settings/ai', {
       method: 'PATCH',
@@ -176,12 +187,12 @@ export default function AISettingsPage() {
           <span className="text-xl">🔌</span>
           <h2 className="font-display text-lg font-bold text-surface-900">Proveedores conectados</h2>
           <span className="text-[10px] font-mono font-bold bg-surface-900 text-white px-2 py-0.5 uppercase tracking-widest">
-            {activeProviders.length}/{PROVIDER_ORDER.length}
+            {activeProviders.length}/{KEY_PROVIDER_ORDER.length}
           </span>
         </div>
 
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-          {PROVIDER_ORDER.map(providerId => {
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          {KEY_PROVIDER_ORDER.map(providerId => {
             const meta = PROVIDER_META[providerId];
             const status = providers.find(p => p.provider === providerId);
             const hasKey = status?.has_key ?? false;
@@ -220,7 +231,7 @@ export default function AISettingsPage() {
                   <div className="mb-3">
                     <p className="text-[10px] font-bold text-surface-400 uppercase tracking-wider mb-1.5">Modelos</p>
                     <div className="flex flex-wrap gap-1">
-                      {getModelsForProvider(providerId).map(m => (
+                      {(providerId === 'runway' ? RUNWAY_VIDEO_MODELS : getModelsForProvider(providerId)).map(m => (
                         <span key={m.id} className={`text-[10px] px-1.5 py-0.5 border font-mono ${hasKey ? 'border-surface-300 bg-white text-surface-700' : 'border-surface-200 bg-surface-100 text-surface-400'}`}>
                           {m.label}
                         </span>

@@ -28,7 +28,7 @@ import {
 import { lockedSpacePromptSuffix, resolveLockedSpace } from '@/lib/ai';
 
 // CRÍTICO: esta ruta usa `sharp` para normalizar referencias antes de
-// enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6-terra + gpt-image-2 + referencias.
+// enviarlas a OpenAI y tarda ~2-3 min con gpt-5.6-terra + gpt-image-2.5-sunburst + referencias.
 // - runtime nodejs: sharp no funciona en Edge.
 // - maxDuration 300: con varias referencias la generación orquestada puede pasar
 //   de 60s de Vercel Pro por defecto.
@@ -537,10 +537,10 @@ export async function POST(request: NextRequest) {
     // === VÍA PRINCIPAL: Responses API ===
     // gpt-5.6-terra orquesta la generación: lee el prompt y las referencias con
     // visión de alto detalle, optimiza las instrucciones con su conocimiento
-    // del mundo y llama al tool image_generation (gpt-image-2, calidad high).
-    // Es la vía que OpenAI recomienda para máxima calidad e instruction
-    // following; gpt-image-2 procesa las referencias en alta fidelidad
-    // automáticamente (no admite el parámetro input_fidelity).
+    // del mundo y llama al tool image_generation (gpt-image-2.5-sunburst,
+    // calidad xhigh). Es la vía que OpenAI recomienda para máxima calidad e
+    // instruction following; Sunburst prioriza precisión con referencias de
+    // marca/producto (no admite el parámetro input_fidelity).
     async function generateViaResponses(
       genPrompt: string,
       refs: ProjectReferenceImage[]

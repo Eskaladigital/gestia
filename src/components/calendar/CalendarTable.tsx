@@ -122,6 +122,7 @@ export function CalendarTable({
   const [videoModalVisual, setVideoModalVisual] = useState<{
     visual: ContentItemVisual;
     contentItemId: string;
+    format?: ContentItem['format'];
   } | null>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const router = useRouter();
@@ -607,9 +608,9 @@ export function CalendarTable({
                                               </button>
                                               <button
                                                 type="button"
-                                                title="Animar esta imagen con IA de vídeo (Veo)"
+                                                title="Animar esta imagen con IA de vídeo (Runway / Veo)"
                                                 onClick={() =>
-                                                  setVideoModalVisual({ visual, contentItemId: item.id })
+                                                  setVideoModalVisual({ visual, contentItemId: item.id, format: item.format })
                                                 }
                                                 className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border-2 border-surface-900 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all ${
                                                   visualHasVideo(visual)
@@ -792,6 +793,7 @@ export function CalendarTable({
       {videoModalVisual && (
         <VideoGenModal
           visual={videoModalVisual.visual}
+          contentFormat={videoModalVisual.format}
           onClose={() => setVideoModalVisual(null)}
           onGenerated={patch => {
             patchVisualInCache(videoModalVisual.contentItemId, videoModalVisual.visual.id, patch);

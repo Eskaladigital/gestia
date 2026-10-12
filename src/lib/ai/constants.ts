@@ -250,7 +250,14 @@ export function resolveSupportedModel(provider: AIProvider, model?: string | nul
 }
 
 export const IMAGE_PROMPT_REFINER_MODEL = 'gpt-5.4-mini';
-export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
+
+/**
+ * Motor de imagen (Images API + tool `image_generation` de Responses).
+ * GPT Image 2.5 Sunburst = precisión en edición y fidelidad a referencias
+ * (campañas RRSS con producto/marca). Alternativa rápida: `gpt-image-2.5-flare`.
+ * Docs: https://developers.openai.com/api/docs/guides/image-generation
+ */
+export const IMAGE_GENERATION_MODEL = 'gpt-image-2.5-sunburst';
 
 /**
  * Modelo "orquestador" de la Responses API para generación de imágenes.
@@ -262,22 +269,73 @@ export const IMAGE_GENERATION_MODEL = 'gpt-image-2';
 export const IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.6-terra';
 export const IMAGE_ORCHESTRATOR_REASONING_EFFORT: ReasoningEffort = 'medium';
 
-// Nota: gpt-image-2 procesa SIEMPRE las referencias en alta fidelidad y
-// rechaza el parámetro `input_fidelity` (era de gpt-image-1/1.5): no enviarlo.
+// Nota: gpt-image-2 / 2.5 procesan SIEMPRE las referencias en alta fidelidad y
+// rechazan el parámetro `input_fidelity` (era de gpt-image-1/1.5): no enviarlo.
 
 export const VIDEO_GENERATION_MODEL = 'veo-3.1-fast-generate-preview';
 export const VIDEO_GENERATION_DURATION_SECONDS = 8;
 export const VIDEO_GENERATION_ESTIMATED_COST_USD = 1.2;
 
+// ── Runway (image-to-video) ─────────────────────────────────────────────────
+// Alternativa a Veo, pensada sobre todo para REELS (formato `reel` / `video_corto`).
+// API REST: https://docs.dev.runwayml.com · 1 crédito = 0,01 USD.
+export type VideoEngine = 'veo' | 'runway';
+export type RunwayVideoModel = 'gen4.5' | 'gen4_turbo';
+
+export const RUNWAY_API_BASE = 'https://api.dev.runwayml.com/v1';
+export const RUNWAY_API_VERSION = '2024-11-06';
+export const RUNWAY_USD_PER_CREDIT = 0.01;
+/** Runway limita `promptText` a 1000 caracteres. */
+export const RUNWAY_MAX_PROMPT_LENGTH = 1000;
+
+export const RUNWAY_VIDEO_MODELS: {
+  id: RunwayVideoModel;
+  label: string;
+  creditsPerSecond: number;
+  description: string;
+}[] = [
+  {
+    id: 'gen4.5',
+    label: 'Gen-4.5',
+    creditsPerSecond: 12,
+    description: 'Máxima calidad y movimiento realista.',
+  },
+  {
+    id: 'gen4_turbo',
+    label: 'Gen-4 Turbo',
+    creditsPerSecond: 5,
+    description: 'Más rápido y ~2,5× más barato. Ideal para pruebas.',
+  },
+];
+
+export const RUNWAY_DEFAULT_MODEL: RunwayVideoModel = 'gen4.5';
+/** Duraciones válidas en ambos modelos (segundos). */
+export const RUNWAY_DURATIONS = [5, 10] as const;
+export type RunwayDuration = (typeof RUNWAY_DURATIONS)[number];
+export const RUNWAY_DEFAULT_DURATION: RunwayDuration = 5;
+
+export function getRunwayModel(id: string | null | undefined) {
+  return RUNWAY_VIDEO_MODELS.find(m => m.id === id) ?? RUNWAY_VIDEO_MODELS[0];
+}
+
+export function estimateRunwayCostUsd(model: string, durationSeconds: number): number {
+  return getRunwayModel(model).creditsPerSecond * durationSeconds * RUNWAY_USD_PER_CREDIT;
+}
+
+/** Formatos de contenido que son reel/vídeo: por defecto se animan con Runway. */
+export function isReelFormat(format: string | null | undefined): boolean {
+  return format === 'reel' || format === 'video_corto';
+}
+
 /**
- * Tamaños que usamos realmente en la app. gpt-image-2 acepta resoluciones
- * arbitrarias (múltiplos de 16, ratio ≤ 3:1, ≤ 2560x1440 px totales sin ser
- * "experimental"), tanto en `images.generate`/`images.edit` como en el tool
- * `image_generation` de la Responses API. Usamos ~1.5x la resolución clásica
- * (1024) con ratios nativos de Instagram (4:5, 1:1, 3:2 y 9:16): más nitidez
- * tras el reescalado de Instagram (que sirve a 1080px) sin disparar coste ni
- * latencia. Los tamaños 2:3 (1248x1872) quedan como legacy: Instagram feed los
- * rechaza (solo admite de 4:5 a 1,91:1).
+ * Tamaños que usamos realmente en la app. GPT Image 2.5 acepta resoluciones
+ * custom (múltiplos de 16, ratio entre 1:3 y 3:1, arista ≤ 3840 px; por encima
+ * de 2560x1440 es experimental), tanto en `images.generate`/`images.edit` como
+ * en el tool `image_generation` de la Responses API. Usamos ~1.5x la resolución
+ * clásica (1024) con ratios nativos de Instagram (4:5, 1:1, 3:2 y 9:16): más
+ * nitidez tras el reescalado de Instagram (que sirve a 1080px) sin disparar
+ * coste ni latencia. Los tamaños 2:3 (1248x1872) quedan como legacy: Instagram
+ * feed los rechaza (solo admite de 4:5 a 1,91:1).
  */
 export type OpenAIImageSize =
   | '1248x1248'
@@ -286,16 +344,21 @@ export type OpenAIImageSize =
   | '1280x1600'
   | '1152x2048';
 
+/** Calidad de salida GPT Image 2.5: low | medium | high | xhigh | max | auto. */
+export type OpenAIImageQuality = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'auto';
+
 /** Tamaño legacy / fallback. Usa `resolveImageSizeForFormat(orientation, format)` para nuevas llamadas. */
 export const IMAGE_GENERATION_SIZE: OpenAIImageSize = '1280x1600';
-export const IMAGE_GENERATION_QUALITY = 'high';
-export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.25;
+/** `xhigh`: detalle premium para creatividades de campaña (Sunburst). */
+export const IMAGE_GENERATION_QUALITY: OpenAIImageQuality = 'xhigh';
+/** Orientativo UI; tokens de salida 2.5 varían con size/quality (mismas tarifas $/M que gpt-image-2). */
+export const IMAGE_GENERATION_ESTIMATED_COST_USD = 0.35;
 
 /** Orientación por defecto de un proyecto cuando la columna aún no existe (pre-migración 022). */
 export const DEFAULT_IMAGE_ORIENTATION: ImageOrientation = 'vertical';
 
 /**
- * Tamaños según orientación (resolución premium de gpt-image-2).
+ * Tamaños según orientación (resolución premium GPT Image 2.5).
  * - vertical   → 4:5 (retrato de feed Instagram; el máximo vertical que acepta el feed)
  * - cuadrado   → 1:1 (feed clásico Instagram, LinkedIn)
  * - horizontal → 3:2 (web, blog, LinkedIn artículo; dentro del rango 4:5–1,91:1 del feed)
