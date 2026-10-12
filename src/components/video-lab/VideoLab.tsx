@@ -52,6 +52,14 @@ type SearchHit = { id: string; label: string | null; brief: string | null; image
 
 const btn = 'text-[11px] font-bold border border-surface-900 px-2 py-1 disabled:opacity-50';
 
+function clipStatusLabel(status: string) {
+  if (status === 'queued') return 'en cola';
+  if (status === 'generating') return 'Runway lo está haciendo';
+  if (status === 'ready') return 'listo';
+  if (status === 'error') return 'falló';
+  return status;
+}
+
 function sessionId() {
   const key = 'gestia-video-lab-session';
   const cur = sessionStorage.getItem(key);
@@ -89,6 +97,7 @@ export function VideoLab() {
   const [more, setMore] = useState(false);
   const [autopilot, setAutopilot] = useState(false);
   const [notice, setNotice] = useState('');
+  const [rootId, setRootId] = useState('');
   const appliedClip = useRef('');
 
   const load = useCallback(async () => {
@@ -116,6 +125,7 @@ export function VideoLab() {
   useEffect(() => {
     void load();
     if (sessionStorage.getItem('gestia-video-lab-autopilot') === sessionId()) setAutopilot(true);
+    setRootId(sessionStorage.getItem('gestia-video-lab-root') || '');
   }, [load]);
 
   const judgeOne = useCallback(async (clip: ClipRow, imageUrl: string) => {
@@ -224,6 +234,33 @@ export function VideoLab() {
   const bank = items.filter(i => i.set_id === setId);
   const runClips = clips.filter(c => c.run_id === runId);
   const tplName = (id: string | null) => templates.find(t => t.id === id)?.name || '—';
+
+  const pilot = useMemo(() => {
+    const start = rootId || runs.find(r => r.status === 'queued' || r.status === 'running')?.id || '';
+    const mine: RunRow[] = [];
+    const seen = new Set<string>();
+    let grew = true;
+    while (start && grew) {
+      grew = false;
+      for (const run of runs) {
+        if (seen.has(run.id)) continue;
+        if (run.id === start || (run.parent_run_id && seen.has(run.parent_run_id))) {
+          seen.add(run.id);
+          mine.push(run);
+          grew = true;
+        }
+      }
+    }
+    const ids = new Set(mine.map(r => r.id));
+    const list = clips.filter(c => ids.has(c.run_id));
+    const ready = list.filter(c => c.status === 'ready').length;
+    const generating = list.filter(c => c.status === 'generating').length;
+    const queued = list.filter(c => c.status === 'queued').length;
+    const failed = list.filter(c => c.status === 'error').length;
+    const judged = list.filter(c => c.status === 'ready' && (c.ai_judgment || c.human_score != null)).length;
+    const round = mine.reduce((m, r) => Math.max(m, r.round), 0);
+    return { list, ready, generating, queued, failed, judged, round, total: list.length };
+  }, [rootId, runs, clips]);
 
   const estimate = useMemo(() => {
     const per: Record<string, number> = { 'gen4.5': 12, gen4_turbo: 5 };
@@ -334,6 +371,43 @@ export function VideoLab() {
           Opción barata, 5 segundos. La primera ronda sale sobre 2,50 $. No pasa de 6 $. Hay que dejar la página abierta: el juez mira los vídeos en este navegador.
         </p>
         {notice && <p className="text-sm mt-2 border border-surface-900 bg-amber-50 px-3 py-2">{notice}</p>}
+        {(autopilot || busy || pilot.generating > 0 || pilot.queued > 0) && (
+          <div className="mt-3 border border-surface-900 p-3 space-y-2" aria-live="polite">
+            <p className="font-bold">
+              {busy
+                ? busy
+                : pilot.total === 0
+                  ? 'Enviando la prueba a Runway…'
+                  : pilot.generating || pilot.queued
+                    ? `Runway va por el vídeo ${pilot.ready + pilot.failed + 1} de ${pilot.total}`
+                    : pilot.judged < pilot.ready
+                      ? `Puntuando los vídeos: ${pilot.judged} de ${pilot.ready}`
+                      : 'Cerrando la prueba…'}
+            </p>
+            <div className="h-2 bg-surface-200" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pilot.total ? Math.round(((pilot.ready + pilot.failed) / pilot.total) * 100) : 0}>
+              <div
+                className={`h-2 bg-brand-600 ${pilot.generating || pilot.queued || busy ? 'animate-pulse' : ''}`}
+                style={{ width: `${pilot.total ? Math.max(8, Math.round(((pilot.ready + pilot.failed) / pilot.total) * 100)) : 12}%` }}
+              />
+            </div>
+            <p className="text-xs text-surface-600">
+              {pilot.total
+                ? `${pilot.ready} listos · ${pilot.generating} haciéndose · ${pilot.queued} en cola${pilot.failed ? ` · ${pilot.failed} fallidos` : ''}${pilot.round ? ` · ronda ${pilot.round} de 3` : ''}. Cada vídeo tarda unos minutos. No cierres esta página.`
+                : 'En unos segundos aparecen aquí. No cierres esta página.'}
+            </p>
+            {!!pilot.list.length && (
+              <ul className="text-xs space-y-0.5">
+                {pilot.list.map(c => (
+                  <li key={c.id}>
+                    {tplName(c.template_id)} · {clipStatusLabel(c.status)}
+                    {c.ai_judgment || c.human_score != null ? ` · nota ${(clipFinal(c) ?? 0).toFixed(1)}` : ''}
+                    {c.failure ? ` · ${c.failure}` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap gap-1">
         {steps.map(s => (
@@ -514,7 +588,11 @@ export function VideoLab() {
             <button type="button" className="text-[11px] underline ml-2" onClick={() => setAb(true)}>Ver dos a la vez</button>
           )}
         </div>
-        {!runClips.length && <p className="text-surface-500">Todavía no hay vídeos. Vuelve al paso 2 y genera.</p>}
+        {!runClips.length && (
+          <p className="text-surface-500">
+            {autopilot ? 'Los vídeos salen aquí cuando Runway termina cada uno. El primero tarda unos minutos.' : 'Todavía no hay vídeos. Vuelve al paso 2 y genera.'}
+          </p>
+        )}
         <div className="flex flex-wrap gap-3">
           {runClips.map(c => {
             const item = items.find(i => i.id === c.set_item_id);
@@ -611,6 +689,8 @@ export function VideoLab() {
                       return;
                     }
                     sessionStorage.setItem('gestia-video-lab-root', json.run_id);
+                    setRootId(json.run_id);
+                    setRunId(json.run_id);
                   });
                 }}
               >
