@@ -83,6 +83,29 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
   return lines
 }
 
+/** Baja el cuerpo hasta que la frase cabe entera. No se corta el final. */
+function fitWrapped(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxW: number,
+  start: number,
+  min: number,
+  maxLines: number,
+  weight: 'black' | 'bold',
+): { lines: string[]; size: number } {
+  const fontOf = (s: number) => (weight === 'black' ? FONT_BLACK(s) : FONT_BOLD(s))
+  let size = start
+  let lines: string[] = []
+  while (size >= min) {
+    ctx.font = fontOf(size)
+    lines = wrap(ctx, text, maxW)
+    if (lines.length <= maxLines) return { lines, size }
+    size -= 4
+  }
+  ctx.font = fontOf(min)
+  return { lines: wrap(ctx, text, maxW).slice(0, maxLines), size: min }
+}
+
 function spaced(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, sp: number) {
   ctx.textAlign = 'left'
   let cx = x
@@ -232,11 +255,11 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
   layer.height = H
   const lctx = layer.getContext('2d', { alpha: false })!
 
-  // Líneas de texto por escena (se calculan una vez)
+  // Líneas de texto por escena (se calculan una vez). El cuerpo baja si hace falta
+  // para que la frase quepa entera: cortarla a media línea deja el reel sin mensaje.
   const sceneLines = scenes.map((s) => {
-    const big = s.text.trim().length <= 44
-    ctx.font = big ? FONT_BLACK(92) : FONT_BOLD(64)
-    return { lines: wrap(ctx, s.text, W - 170).slice(0, 4), big }
+    const short = s.text.trim().length <= 44
+    return fitWrapped(ctx, s.text, W - 170, short ? 92 : 68, 46, 4, short ? 'black' : 'bold')
   })
 
   async function drawScene(c: CanvasRenderingContext2D, i: number, t: number) {
@@ -316,14 +339,13 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
     // texto de la escena
     if (t < textEnd) {
       const lt = t - starts[i]
-      const { lines, big } = sceneLines[i]
-      const size = big ? 92 : 64
+      const { lines, size } = sceneLines[i]
       const lh = Math.round(size * 1.08)
       const baseY = 1420 - lines.length * lh
       const out = prog(lt, sceneSec - 0.35, sceneSec - 0.05)
       ctx.textBaseline = 'top'
       ctx.textAlign = 'left'
-      ctx.font = big ? FONT_BLACK(size) : FONT_BOLD(size)
+      ctx.font = size >= 78 ? FONT_BLACK(size) : FONT_BOLD(size)
       lines.forEach((ln, k) => {
         const p = easeOut(prog(lt, 0.3 + k * 0.13, 0.75 + k * 0.13))
         if (p <= 0) return
@@ -352,9 +374,11 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
     ctx.textAlign = 'left'
     let y = 560
     const fade = (a: number, b: number) => easeOut(prog(et, a, b))
-    ctx.font = FONT_BOLD(64)
-    const la = data.closingA ? wrap(ctx, data.closingA, W - 170).slice(0, 4) : []
-    const lb = data.closingB ? wrap(ctx, data.closingB, W - 170).slice(0, 3) : []
+    const laFit = data.closingA ? fitWrapped(ctx, data.closingA, W - 170, 64, 40, 4, 'bold') : { lines: [] as string[], size: 64 }
+    const lbFit = data.closingB ? fitWrapped(ctx, data.closingB, W - 170, 64, 40, 3, 'bold') : { lines: [] as string[], size: 64 }
+    const la = laFit.lines
+    const lb = lbFit.lines
+    ctx.font = FONT_BOLD(laFit.size)
     la.forEach((ln, k) => {
       const p = fade(0.25 + k * 0.1, 0.65 + k * 0.1)
       if (p > 0) {
@@ -362,9 +386,10 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
         ctx.fillStyle = WHITE
         ctx.fillText(ln, 80, y + (1 - p) * 40)
       }
-      y += 72
+      y += Math.round(laFit.size * 1.12)
     })
     y += 20
+    ctx.font = FONT_BOLD(lbFit.size)
     lb.forEach((ln, k) => {
       const p = fade(0.75 + k * 0.1, 1.15 + k * 0.1)
       if (p > 0) {
@@ -372,7 +397,7 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
         ctx.fillStyle = accent
         ctx.fillText(ln, 80, y + (1 - p) * 40)
       }
-      y += 72
+      y += Math.round(lbFit.size * 1.12)
     })
     const bp = fade(1.4, 1.9)
     if (bp > 0) {
@@ -496,24 +521,138 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
   }
 }
 
-/** Reparte el copy del post en frases cortas para precargar los textos de las escenas. */
-export function suggestSceneTexts(copy: string, n: number): { scenes: string[]; closingA: string; closingB: string; cta: string } {
+const DANGLING_LAST =
+  /^(de|del|al|la|el|los|las|un|una|unos|unas|que|y|o|e|u|a|en|con|por|para|sin|sobre|lo|su|sus|tu|tus|mi|mis|te|se|me|nos|os|es|son|está|están|ser|estar|hace|hay|como|porque|cuando|donde|dónde|deja|dejan|pasa|pasan|parte)$/i
+
+const FINITE =
+  /\b(es|son|está|están|estás|estoy|estamos|era|fueron|hace|hacen|tiene|tienen|puede|pueden|significa|dejas|deja|dejan|pasa|pasan|empieza|empiezan|nota|notas|aparece|aparecen|hay|soy|somos|sientes|siente|quieres|quiero|recalcula)\b/i
+
+const GERUND = /\b\p{L}+(ando|endo)\b/iu
+
+function wordsOf(s: string): string[] {
+  return s.trim().split(/\s+/).filter(Boolean)
+}
+
+function lastWord(s: string): string {
+  const w = wordsOf(s.replace(/[«»"'“”]+/g, ''))
+  return (w[w.length - 1] || '').replace(/[.,;:!?…]+$/g, '')
+}
+
+function capFirst(t: string): string {
+  const m = t.match(/^([¿¡"«]*)(\p{L})/u)
+  if (!m || m.index === undefined) return t
+  return t.slice(0, m.index + m[1].length) + m[2].toUpperCase() + t.slice(m.index + m[0].length)
+}
+
+/** True si el rótulo está cortado: puntos suspensivos o se queda en «de», «ser», «que»… */
+export function captionLooksCut(text: string): boolean {
+  const t = (text || '').trim()
+  if (!t) return false
+  if (/…|\.{3}/.test(t)) return true
+  return DANGLING_LAST.test(lastWord(t))
+}
+
+function tidyLine(raw: string): string {
+  let t = raw
+    .replace(/[«»“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,;:\s]+|[,;:\s]+$/g, '')
+    .trim()
+  t = t.replace(/[…]+/g, '').replace(/\.{2,}/g, '').replace(/^(y|o|e|u|pero)\s+/i, '').trim()
+  if (!t) return ''
+  if (!/[.!?]$/.test(t)) t += '.'
+  return capFirst(t)
+}
+
+/** Frase que se puede poner en pantalla. Vacío si viene cortada o se queda a medias. */
+export function acceptCaption(text: string, maxWords = 18): string {
+  const raw = (text || '').trim()
+  if (!raw || /…|\.{3}/.test(raw)) return ''
+  const t = tidyLine(raw)
+  const n = wordsOf(t).length
+  const question = /\?$/.test(t)
+  if (n < (question ? 2 : 3) || n > maxWords) return ''
+  if (captionLooksCut(t)) return ''
+  return t
+}
+
+/** Trozo del copy: además tiene que ser una oración, no un recorte de coma. */
+function acceptClause(text: string, maxWords: number): string {
+  const t = acceptCaption(text, maxWords)
+  if (!t || wordsOf(t).length < 4) return ''
+  if (/\?$/.test(t)) return t
+  if (GERUND.test(t) && !FINITE.test(t)) return ''
+  if (!FINITE.test(t)) return ''
+  return t
+}
+
+function beatsInSentence(sentence: string): string[] {
+  const quotes: string[] = []
+  const stripped = sentence
+    .replace(/[«"“]([^»"”]+)[»"”]/g, (_, q) => {
+      quotes.push(String(q))
+      return ' '
+    })
+    .replace(/\s+/g, ' ')
+    .trim()
+  const out: string[] = []
+  const whole = acceptClause(stripped, 18)
+  if (whole) out.push(whole)
+  else {
+    for (const part of stripped.split(/\s*[,;:]\s*/)) {
+      const line = acceptClause(part, 14)
+      if (line) out.push(line)
+    }
+  }
+  for (const q of quotes) {
+    const line = acceptCaption(q, 12)
+    if (line && !out.includes(line)) out.push(line)
+  }
+  return out
+}
+
+function beatsFromCopy(copy: string): string[] {
   const clean = (copy || '')
     .replace(/#[\p{L}\p{N}_]+/gu, '')
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
     .replace(/\s+\n/g, '\n')
+    .trim()
+  if (!clean) return []
   const sentences = clean
-    .split(/(?<=[.!?…])\s+|\n+/)
+    .split(/(?<=[.!?])\s+|\n+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 3)
-  const short = (s: string) => {
-    const head = s.split(/[:;—–]/)[0].trim()
-    const words = head.split(/\s+/)
-    return words.length > 9 ? `${words.slice(0, 8).join(' ')}…` : head.replace(/[,]$/, '')
+  const beats: string[] = []
+  for (const sentence of sentences) {
+    for (const beat of beatsInSentence(sentence)) {
+      if (!beats.includes(beat)) beats.push(beat)
+    }
   }
-  const scenes = Array.from({ length: n }, (_, i) => (sentences[i] ? short(sentences[i]) : ''))
-  const last = sentences.find((s) => /^(comparte|guarda|reserva|escr[ií]benos|link|enlace)/i.test(s)) || ''
-  const closing = sentences.length > n ? sentences[Math.min(sentences.length - 1, n)] : ''
-  const [a, b] = closing.split(/;\s*|:\s*/)
-  return { scenes, closingA: (a || '').trim(), closingB: (b || '').trim(), cta: last }
+  return beats
+}
+
+/**
+ * Reparte el copy en rótulos que se leen enteros.
+ * Nunca corta a ocho palabras ni añade «…»: una frase a medias no dice nada en pantalla.
+ */
+export function suggestSceneTexts(
+  copy: string,
+  n: number,
+  ctaFromPost = '',
+): { scenes: string[]; closingA: string; closingB: string; cta: string } {
+  const beats = beatsFromCopy(copy)
+  const count = Math.max(0, n)
+  const scenes = Array.from({ length: count }, (_, i) => beats[i] || '')
+  const rest = beats.slice(count)
+  const cta =
+    (ctaFromPost || '')
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => acceptCaption(s, 16))
+      .find(Boolean) || ''
+  return {
+    scenes,
+    closingA: rest[0] || '',
+    closingB: rest.length > 1 ? rest[rest.length - 1] : '',
+    cta,
+  }
 }

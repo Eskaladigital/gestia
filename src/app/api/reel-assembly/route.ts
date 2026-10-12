@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { canActOnOwnedProject, isAdmin } from '@/lib/auth/roles';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { callAI } from '@/lib/ai/openai-client';
+import { acceptCaption, suggestSceneTexts } from '@/lib/reel-assembler';
 
 // Montaje del reel completo (clips + textos + cierre). El vídeo se dibuja en el
 // navegador (`src/lib/reel-assembler.ts`); este endpoint solo:
@@ -88,29 +89,56 @@ export async function POST(request: NextRequest) {
       .map((v: any, i: number) => `Escena ${i + 1}: ${(v.visual_brief || v.label || '').slice(0, 400)}`)
       .join('\n');
     const system =
-      'Eres editor de reels de Instagram en español. Escribes rótulos que aparecen sobre cada escena de un vídeo vertical. ' +
-      'Cada rótulo: una frase corta y natural (máx. 7 palabras), sin emojis ni hashtags, con punto final, que siga el hilo del copy y encaje con lo que se ve en la escena. ' +
-      'El cierre son dos frases cortas: closing_a (planteamiento) y closing_b (remate que se resalta en color). ' +
-      'cta: una línea final breve que invite a compartir o guardar (máx. 12 palabras). ' +
-      'location: lugar concreto si el copy lo menciona (ej. «Valle de Ricote · Murcia»), si no, cadena vacía. ' +
-      'brand_sub: palabra o dos que describan el negocio para poner bajo la marca (ej. «Campervans»), o vacío. ' +
+      'Eres editor de reels de Instagram en español de España. Escribes los rótulos que se leen SOBRE el vídeo. ' +
+      'Quien mira no lee el copy: si una frase se corta, el reel no dice nada. ' +
+      'Cada rótulo de escena es UNA frase completa, de 4 a 14 palabras, que se entiende sola, y termina en punto, interrogación o exclamación. ' +
+      'Prohibido: puntos suspensivos, copiar el inicio del párrafo, dejar un verbo colgando («deja de ser», «lo que te hace», «el navegador»). ' +
+      'Reescribe la idea para que quepa entera. No la recortes. ' +
+      'Los rótulos, en orden, cuentan el copy de principio a fin: gancho, giro, promesa y remate. No repitas la misma idea. ' +
+      'Si el copy tiene una pregunta o una frase entre comillas, esa frase va entera en su propio rótulo. ' +
+      'closing_a: la consecuencia, frase completa, máximo 16 palabras. ' +
+      'closing_b: el remate, frase completa, máximo 12 palabras. No lo dejes vacío. ' +
+      'cta: la llamada del post, acortada a una frase completa (máximo 14 palabras). Si hay CTA, no la dejes vacía. ' +
+      'location: lugar concreto si el copy lo nombra, si no cadena vacía. ' +
+      'brand_sub: una o dos palabras del negocio bajo la marca, o vacío. ' +
+      'El contenido sale SIEMPRE de este copy, nunca del ejemplo. Ejemplo de FORMA, no de tema: mal «Lo que de verdad importa es que…»; bien «Lo que importa es parar cuando apetece.» ' +
       'Responde SOLO JSON: {"scenes": string[], "closing_a": string, "closing_b": string, "cta": string, "location": string, "brand_sub": string}.';
     const user =
       `Marca: ${project.name}\nIdea: ${item.idea || ''}\nCopy del post:\n${item.copy || ''}\nCTA: ${item.cta || ''}\n\n` +
-      `Hay ${n} escenas, en este orden:\n${scenesInfo}\n\nDevuelve exactamente ${n} rótulos en "scenes".`;
+      `Hay ${n} escenas, en este orden:\n${scenesInfo}\n\nDevuelve exactamente ${n} rótulos en "scenes". Cada uno se lee entero, sin puntos suspensivos.`;
+    const local = suggestSceneTexts(item.copy || '', n, item.cta || '');
+    const pick = (ai: unknown, fallback: string, max: number) => acceptCaption(String(ai || ''), max) || fallback;
     try {
-      const { data } = await callAI<Suggestion>(system, user, { userId, temperature: 0.7, maxTokens: 1200 });
-      const scenes = Array.from({ length: n }, (_, i) => String(data?.scenes?.[i] || '').trim());
+      let { data } = await callAI<Suggestion>(system, user, { userId, temperature: 0.4, maxTokens: 1200 });
+      let scenes = Array.from({ length: n }, (_, i) => acceptCaption(String(data?.scenes?.[i] || ''), 16));
+      const broken = scenes.some(s => !s) || !acceptCaption(String(data?.closing_a || ''), 18) || !acceptCaption(String(data?.closing_b || ''), 14);
+      if (broken) {
+        const retry = await callAI<Suggestion>(
+          system,
+          `${user}\n\nLa respuesta anterior no vale: hay frases cortadas o vacías (${JSON.stringify(data)}). ` +
+            'Vuelve a escribirlas COMPLETAS. Cada rótulo termina en punto o interrogación y se entiende sin leer el resto.',
+          { userId, temperature: 0.3, maxTokens: 1200 },
+        );
+        data = retry.data;
+        scenes = Array.from({ length: n }, (_, i) => acceptCaption(String(data?.scenes?.[i] || ''), 16));
+      }
       return NextResponse.json({
-        scenes,
-        closing_a: String(data?.closing_a || '').trim(),
-        closing_b: String(data?.closing_b || '').trim(),
-        cta: String(data?.cta || '').trim(),
+        scenes: scenes.map((s, i) => s || local.scenes[i] || ''),
+        closing_a: pick(data?.closing_a, local.closingA, 18),
+        closing_b: pick(data?.closing_b, local.closingB, 14),
+        cta: pick(data?.cta, local.cta, 16),
         location: String(data?.location || '').trim(),
         brand_sub: String(data?.brand_sub || '').trim(),
       });
     } catch (err: any) {
-      return NextResponse.json({ error: err?.message || 'No se pudieron sugerir los textos' }, { status: 500 });
+      return NextResponse.json({
+        scenes: local.scenes,
+        closing_a: local.closingA,
+        closing_b: local.closingB,
+        cta: local.cta,
+        location: '',
+        brand_sub: '',
+      });
     }
   }
 

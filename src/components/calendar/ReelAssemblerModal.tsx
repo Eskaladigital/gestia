@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 import type { ContentItem, ContentItemVisual } from '@/types';
 import { getVisualDisplayUrl } from '@/lib/visual-image';
 import { createClient } from '@/lib/supabase/client';
-import { suggestSceneTexts, type ReelAssembly } from '@/lib/reel-assembler';
+import { captionLooksCut, suggestSceneTexts, type ReelAssembly } from '@/lib/reel-assembler';
 import { RUNWAY_VIDEO_MODELS, estimateRunwayCostUsd, getRunwayModel, type RunwayVideoModel } from '@/lib/ai/constants';
 
 type Phase = 'form' | 'animating' | 'rendering' | 'uploading' | 'done' | 'error';
@@ -71,12 +71,17 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
   const [runwayModel, setRunwayModel] = useState<RunwayVideoModel>('gen4.5');
   const [confirmAnim, setConfirmAnim] = useState(false);
   const aliveRef = useRef(true);
+  const savedOverlay = (item as { reel_overlay_json?: Overlay | null }).reel_overlay_json;
+  const rewriteTexts = useMemo(() => {
+    const texts = savedOverlay && Array.isArray(savedOverlay.texts) ? savedOverlay.texts : [];
+    if (texts.length === 0) return true;
+    return texts.some(captionLooksCut);
+  }, [savedOverlay]);
   const initial = useMemo<Overlay>(() => {
-    const saved = (item as any).reel_overlay_json as Overlay | null | undefined;
-    if (saved && Array.isArray(saved.texts)) {
-      return { ...saved, texts: scenes.map((_, i) => saved.texts[i] ?? '') };
+    if (!rewriteTexts && savedOverlay && Array.isArray(savedOverlay.texts)) {
+      return { ...savedOverlay, texts: scenes.map((_, i) => savedOverlay.texts[i] ?? '') };
     }
-    const s = suggestSceneTexts(item.copy || '', scenes.length);
+    const s = suggestSceneTexts(item.copy || '', scenes.length, item.cta || '');
     return {
       texts: s.scenes,
       location: '',
@@ -85,9 +90,9 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
       brand: projectName,
       brandSub: '',
       cta: s.cta,
-      accent: '#f26b3a',
+      accent: savedOverlay?.accent || '#f26b3a',
     };
-  }, [item, scenes, projectName]);
+  }, [item, scenes, projectName, rewriteTexts, savedOverlay]);
 
   const [ov, setOv] = useState<Overlay>(initial);
   const [phase, setPhase] = useState<Phase>('form');
@@ -99,6 +104,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const blobRef = useRef<Blob | null>(null);
 
+  const textsCut = ov.texts.some(captionLooksCut) || captionLooksCut(ov.closingA) || captionLooksCut(ov.closingB);
   const clipCount = scenes.filter(v => clipUrls[v.id]).length;
   const missing = scenes.filter(v => !clipUrls[v.id] && anim[v.id] !== 'generating');
   const animCost = missing.length * estimateRunwayCostUsd(runwayModel, CLIP_SECONDS);
@@ -134,12 +140,16 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'No se pudieron sugerir los textos');
+      const keep = (next: unknown, prev: string) => {
+        const t = String(next || '').trim();
+        return t && !captionLooksCut(t) ? t : prev;
+      };
       setOv(prev => ({
         ...prev,
-        texts: scenes.map((_, i) => json.scenes?.[i] || prev.texts[i] || ''),
-        closingA: json.closing_a || prev.closingA,
-        closingB: json.closing_b || prev.closingB,
-        cta: json.cta || prev.cta,
+        texts: scenes.map((_, i) => keep(json.scenes?.[i], prev.texts[i] || '')),
+        closingA: keep(json.closing_a, prev.closingA),
+        closingB: keep(json.closing_b, prev.closingB),
+        cta: keep(json.cta, prev.cta),
         location: json.location || prev.location,
         brandSub: json.brand_sub || prev.brandSub,
       }));
@@ -150,7 +160,18 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
     }
   }, [item.id, scenes]);
 
+  const rewriteOnce = useRef(false);
+  useEffect(() => {
+    if (!rewriteTexts || rewriteOnce.current || scenes.length === 0) return;
+    rewriteOnce.current = true;
+    void suggest();
+  }, [rewriteTexts, scenes.length, suggest]);
+
   const renderWith = useCallback(async (clips: Record<string, string>) => {
+    if (ov.texts.some(captionLooksCut) || captionLooksCut(ov.closingA) || captionLooksCut(ov.closingB)) {
+      setErrorMsg('Hay un rótulo a medias. Termina la frase antes de montar.');
+      return;
+    }
     setPhase('rendering');
     setPct(0);
     setErrorMsg('');
@@ -458,6 +479,12 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
                 {suggesting ? 'Sugiriendo…' : '✨ Sugerir textos con IA'}
               </button>
             </div>
+            {suggesting && (
+              <p className="text-[11px] text-surface-500">Reescribiendo los rótulos para que cada frase se entienda sola.</p>
+            )}
+            {textsCut && !suggesting && (
+              <p className="text-[11px] text-red-700">Hay una frase cortada. Termínala antes de montar: en el vídeo no se lee lo que queda detrás de los puntos suspensivos.</p>
+            )}
 
             <div className="space-y-2">
               {scenes.map((v, i) => (
@@ -605,7 +632,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
                   <button
                     type="button"
                     onClick={() => void render()}
-                    disabled={scenes.length === 0}
+                    disabled={scenes.length === 0 || textsCut}
                     className="text-xs font-bold uppercase tracking-wider text-surface-700 bg-white border-2 border-surface-900 px-4 py-2.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50"
                     title="Monta ya con las imágenes (sin animar con Runway)"
                   >
@@ -614,7 +641,8 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
                   <button
                     type="button"
                     onClick={() => setConfirmAnim(true)}
-                    className="text-xs font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-5 py-2.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all hover:bg-brand-700"
+                    disabled={textsCut}
+                    className="text-xs font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-5 py-2.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all hover:bg-brand-700 disabled:opacity-50"
                   >
                     🎬 Animar {missing.length} escenas y montar · ~${animCost.toFixed(2)}
                   </button>
@@ -623,7 +651,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
                 <button
                   type="button"
                   onClick={() => void render()}
-                  disabled={scenes.length === 0}
+                  disabled={scenes.length === 0 || textsCut}
                   className="text-xs font-bold uppercase tracking-wider text-white bg-brand-600 border-2 border-surface-900 px-5 py-2.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all hover:bg-brand-700 disabled:opacity-50"
                 >
                   {resultUrl ? 'Volver a montar' : '🎬 Montar reel'}
