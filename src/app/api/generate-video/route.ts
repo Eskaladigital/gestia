@@ -3,19 +3,24 @@ import { GoogleGenAI } from '@google/genai';
 import { canActOnOwnedProject, isAdmin } from '@/lib/auth/roles';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import {
-  RUNWAY_API_BASE,
-  RUNWAY_API_VERSION,
   RUNWAY_DEFAULT_DURATION,
   RUNWAY_DEFAULT_MODEL,
   RUNWAY_DURATIONS,
-  RUNWAY_MAX_PROMPT_LENGTH,
   RUNWAY_VIDEO_MODELS,
   VIDEO_GENERATION_DURATION_SECONDS,
   VIDEO_GENERATION_MODEL,
   type RunwayVideoModel,
   type VideoEngine,
 } from '@/lib/ai/constants';
-import type { ImageOrientation, KeyProvider } from '@/types';
+import type { ImageOrientation } from '@/types';
+import {
+  checkRunwayTask,
+  createRunwayTask,
+  ensureVisualAssetsBucket,
+  fetchImageAsBase64,
+  resolveProviderKey,
+  resolveRunwayRatio,
+} from '@/lib/video/runway';
 
 // Animación imagen → vídeo de un visual.
 // - Veo: síncrono (se lanza y se espera en esta misma petición, máx. ~270 s).
@@ -41,62 +46,6 @@ function resolveVideoAspectRatio(orientation: ImageOrientation | string | null |
   return orientation === 'horizontal' ? '16:9' : '9:16';
 }
 
-/** Runway usa ratios en píxeles. Igual que Veo: el cuadrado cae a vertical. */
-function resolveRunwayRatio(orientation: ImageOrientation | string | null | undefined): string {
-  return orientation === 'horizontal' ? '1280:720' : '720:1280';
-}
-
-async function resolveProviderKey(userId: string, provider: KeyProvider, envFallback: string | undefined) {
-  const supabase = createServiceSupabase();
-  const { data } = await supabase
-    .from('provider_api_keys')
-    .select('api_key')
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .maybeSingle();
-  return data?.api_key || envFallback || '';
-}
-
-const BUCKET_MIME = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/webm'];
-const BUCKET_LIMIT = 50 * 1024 * 1024;
-
-async function ensureBucket(supabase: ReturnType<typeof createServiceSupabase>) {
-  const { data } = await supabase.storage.getBucket(BUCKET);
-  if (data) {
-    const mimes = data.allowed_mime_types ?? [];
-    const allowsVideo = mimes.includes('video/mp4');
-    const bigEnough = (data.file_size_limit ?? 0) >= BUCKET_LIMIT;
-    if (allowsVideo && bigEnough) return;
-    const { error } = await supabase.storage.updateBucket(BUCKET, {
-      public: true,
-      fileSizeLimit: BUCKET_LIMIT,
-      allowedMimeTypes: BUCKET_MIME,
-    });
-    if (error) console.error('[generate-video] updateBucket:', error.message);
-    return;
-  }
-  const { error } = await supabase.storage.createBucket(BUCKET, {
-    public: true,
-    fileSizeLimit: BUCKET_LIMIT,
-    allowedMimeTypes: BUCKET_MIME,
-  });
-  if (error && !String(error.message || '').includes('already exists')) {
-    console.error('[generate-video] createBucket:', error.message);
-  }
-}
-
-async function fetchImageAsBase64(url: string): Promise<{ base64: string; mimeType: string }> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`No se pudo descargar la imagen base (${res.status})`);
-  }
-  const mimeType = res.headers.get('content-type') || 'image/png';
-  const buffer = Buffer.from(await res.arrayBuffer());
-  if (buffer.length < 1000) {
-    throw new Error('La imagen base es demasiado pequeña o está vacía');
-  }
-  return { base64: buffer.toString('base64'), mimeType };
-}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -164,83 +113,6 @@ async function generateWithVeo(opts: {
   throw new Error('Veo no devolvió ni bytes ni URI del vídeo.');
 }
 
-// ── Runway ──────────────────────────────────────────────────────────────────
-
-async function runwayFetch(apiKey: string, path: string, init?: RequestInit) {
-  const res = await fetch(`${RUNWAY_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'X-Runway-Version': RUNWAY_API_VERSION,
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-  const json: any = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const detail = json?.error || json?.message || JSON.stringify(json).slice(0, 300);
-    const err: any = new Error(
-      res.status === 401
-        ? 'Runway rechazó la API key (401). Revísala en Ajustes → Proveedores IA.'
-        : res.status === 429
-          ? 'Runway: demasiadas tareas a la vez o sin créditos (429). Espera un poco o recarga créditos.'
-          : `Runway devolvió un error (${res.status}): ${detail}`,
-    );
-    err.status = res.status;
-    throw err;
-  }
-  return json;
-}
-
-/** Crea la tarea en Runway y devuelve su id (no espera al resultado). */
-async function createRunwayTask(opts: {
-  apiKey: string;
-  prompt: string;
-  imageUrl: string;
-  ratio: string;
-  model: RunwayVideoModel;
-  duration: number;
-}): Promise<string> {
-  // Runway acepta la URL pública (Supabase Storage). Si no fuera https, data URI.
-  let promptImage = opts.imageUrl;
-  if (!/^https:\/\//i.test(promptImage)) {
-    const { base64, mimeType } = await fetchImageAsBase64(opts.imageUrl);
-    promptImage = `data:${mimeType};base64,${base64}`;
-  }
-  const created = await runwayFetch(opts.apiKey, '/image_to_video', {
-    method: 'POST',
-    body: JSON.stringify({
-      model: opts.model,
-      promptImage,
-      promptText: opts.prompt.slice(0, RUNWAY_MAX_PROMPT_LENGTH),
-      ratio: opts.ratio,
-      duration: opts.duration,
-    }),
-  });
-  const taskId: string | undefined = created?.id;
-  if (!taskId) throw new Error('Runway no devolvió el id de la tarea.');
-  return taskId;
-}
-
-type RunwayCheck =
-  | { state: 'running'; runwayStatus: string }
-  | { state: 'succeeded'; outputUrl: string }
-  | { state: 'failed'; reason: string };
-
-/** Mira el estado de la tarea una sola vez. Estados: PENDING | THROTTLED | RUNNING | SUCCEEDED | FAILED | CANCELLED. */
-async function checkRunwayTask(apiKey: string, taskId: string): Promise<RunwayCheck> {
-  const task = await runwayFetch(apiKey, `/tasks/${taskId}`);
-  if (task.status === 'SUCCEEDED') {
-    const url: string | undefined = Array.isArray(task.output) ? task.output[0] : undefined;
-    if (!url) return { state: 'failed', reason: 'Runway terminó pero no devolvió el vídeo.' };
-    return { state: 'succeeded', outputUrl: url };
-  }
-  if (task.status === 'FAILED' || task.status === 'CANCELLED') {
-    return { state: 'failed', reason: `Runway no pudo generar el vídeo: ${task.failure || task.failureCode || task.status}` };
-  }
-  return { state: 'running', runwayStatus: String(task.status || 'PENDING') };
-}
-
 // ── Comunes ─────────────────────────────────────────────────────────────────
 
 type LoadedVisual = { visual: any; project: any; userId: string };
@@ -286,7 +158,7 @@ async function saveVideo(visual: any, videoBuffer: Buffer, modelLabel: string) {
     throw new Error(`Vídeo generado demasiado pequeño (${videoBuffer.length} bytes)`);
   }
   const service = createServiceSupabase();
-  await ensureBucket(service);
+  await ensureVisualAssetsBucket();
   const contentItemId = visual.content_item_id;
   const projectId = visual.content_items?.project_id;
   const storagePath = `${projectId}/${contentItemId}/${visual.visual_index}-video-${Date.now()}.mp4`;

@@ -3,6 +3,7 @@ import { canActOnOwnedProject, isAdmin } from '@/lib/auth/roles';
 import { createServerSupabase, createServiceSupabase } from '@/lib/supabase/server';
 import { callAI } from '@/lib/ai/openai-client';
 import { acceptCaption, suggestSceneTexts } from '@/lib/reel-assembler';
+import { LOCKED_GEOMETRY, lockMotionPrompt } from '@/lib/video/motion';
 
 // Montaje del reel completo (clips + textos + cierre). El vídeo se dibuja en el
 // navegador (`src/lib/reel-assembler.ts`); este endpoint solo:
@@ -47,21 +48,22 @@ type Suggestion = {
   brand_sub: string;
 };
 
-/** Se añade siempre: Runway deforma la carrocería si el prompt mueve puertas o muebles. */
-const LOCKED_GEOMETRY =
-  'The vehicle body, doors, windows, walls, cabinets, seats, tables and the interior layout stay perfectly still and unchanged. Do not open, close, swing or reshape any door. Slow push-in only. Realistic natural motion, no morphing. Keep logos and text unchanged.';
-
-function lockMotionPrompt(raw: string): string {
-  const kept = raw
-    .split(/(?<=[.!?])\s+/)
-    .map(s => s.trim())
-    .filter(Boolean)
-    .filter(s => {
-      const rigid = /\b(door|tailgate|hatch|window|cabinet|bodywork|body panel|sliding)\b/i.test(s);
-      const moves = /\b(sway|swing|close|closes|closing|open|opens|opening|shut|slide|slides|fold|morph|reshape)\b/i.test(s);
-      return !(rigid && moves);
-    });
-  return `${kept.join(' ')} ${LOCKED_GEOMETRY}`.replace(/\s+/g, ' ').trim().slice(0, 900);
+async function productionMotionSystem(service: ReturnType<typeof createServiceSupabase>): Promise<string | null> {
+  const { data, error } = await service
+    .from('video_lab_settings')
+    .select('template_id, video_prompt_templates(system_prompt)')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error || !data?.template_id) return null;
+  const tpl = (data as { video_prompt_templates?: { system_prompt?: string } | { system_prompt?: string }[] | null })
+    .video_prompt_templates;
+  const row = Array.isArray(tpl) ? tpl[0] : tpl;
+  const text = row?.system_prompt?.trim();
+  if (!text) return null;
+  return (
+    text +
+    '\n\nYou will receive several scenes. Reply ONLY JSON: {"motions":[{"id": string, "prompt": string}]}. Each prompt follows the rules above.'
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -153,13 +155,15 @@ export async function POST(request: NextRequest) {
     const fallback = () =>
       'A hand, a piece of fabric or a few leaves move slightly. People, if present, make a small natural gesture. ' +
       LOCKED_GEOMETRY;
+    const recipe = await productionMotionSystem(service);
     const system =
+      recipe ||
       'You write image-to-video prompts for Runway Gen-4.5. For each scene, write ONE English prompt (max 45 words) naming ONLY what may move: ' +
-      'hands, people, hair, clothes, a bag or loose object, leaves, steam or water, plus one slow push-in. ' +
-      'NEVER animate or reshape the vehicle, its doors (open or closed), windows, walls, cabinets, seats, tables or the interior layout. ' +
-      'A parked camper stays parked. An open sliding door stays open and rigid; do not say it sways, swings, closes or slides. ' +
-      'Do not invent new objects or change the scene. ' +
-      'Reply ONLY JSON: {"motions": [{"id": string, "prompt": string}]}.';
+        'hands, people, hair, clothes, a bag or loose object, leaves, steam or water, plus one slow push-in. ' +
+        'NEVER animate or reshape the vehicle, its doors (open or closed), windows, walls, cabinets, seats, tables or the interior layout. ' +
+        'A parked camper stays parked. An open sliding door stays open and rigid; do not say it sways, swings, closes or slides. ' +
+        'Do not invent new objects or change the scene. ' +
+        'Reply ONLY JSON: {"motions": [{"id": string, "prompt": string}]}.';
     const user = list
       .map((v: any) => `id: ${v.id}\nScene ${v.visual_index + 1}: ${String(v.visual_brief || v.visual_prompt || v.label || '').slice(0, 700)}`)
       .join('\n\n');

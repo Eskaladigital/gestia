@@ -11,7 +11,6 @@ import { RUNWAY_VIDEO_MODELS, estimateRunwayCostUsd, getRunwayModel, type Runway
 
 type Phase = 'form' | 'animating' | 'rendering' | 'uploading' | 'done' | 'error';
 type AnimState = 'queued' | 'generating' | 'ready' | 'error';
-const CLIP_SECONDS = 5;
 
 type Overlay = {
   texts: string[];
@@ -69,6 +68,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
     ),
   );
   const [runwayModel, setRunwayModel] = useState<RunwayVideoModel>('gen4.5');
+  const [clipSeconds, setClipSeconds] = useState<5 | 10>(5);
   const [confirmAnim, setConfirmAnim] = useState(false);
   const aliveRef = useRef(true);
   const savedOverlay = (item as { reel_overlay_json?: Overlay | null }).reel_overlay_json;
@@ -107,7 +107,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
   const textsCut = ov.texts.some(captionLooksCut) || captionLooksCut(ov.closingA) || captionLooksCut(ov.closingB);
   const clipCount = scenes.filter(v => clipUrls[v.id]).length;
   const missing = scenes.filter(v => !clipUrls[v.id] && anim[v.id] !== 'generating');
-  const animCost = missing.length * estimateRunwayCostUsd(runwayModel, CLIP_SECONDS);
+  const animCost = missing.length * estimateRunwayCostUsd(runwayModel, clipSeconds);
   const busy = phase === 'rendering' || phase === 'uploading' || phase === 'animating';
 
   useEffect(() => {
@@ -116,6 +116,16 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
     return () => {
       aliveRef.current = false;
     };
+  }, []);
+  useEffect(() => {
+    fetch('/api/video-lab?view=recipe')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        if (!j) return;
+        if (j.model === 'gen4.5' || j.model === 'gen4_turbo') setRunwayModel(j.model);
+        if (j.duration === 5 || j.duration === 10) setClipSeconds(j.duration);
+      })
+      .catch(() => {});
   }, []);
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -192,7 +202,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
         accent: ov.accent,
       };
       const result = await assembleReel(data, {
-        sceneSeconds: CLIP_SECONDS,
+        sceneSeconds: clipSeconds,
         onProgress: (r, label) => {
           setPct(Math.round(r * 100));
           if (label) setStepLabel(label);
@@ -309,7 +319,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
           motion_prompt: motions[v.id] || v.video_motion_prompt || 'Natural realistic motion with a slow cinematic camera move.',
           engine: 'runway',
           runway_model: runwayModel,
-          duration: CLIP_SECONDS,
+          duration: clipSeconds,
         };
         let res = await fetch('/api/generate-video', {
           method: 'POST',
@@ -578,7 +588,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
                   >
                     {RUNWAY_VIDEO_MODELS.map(m => (
                       <option key={m.id} value={m.id}>
-                        {m.label} · ${estimateRunwayCostUsd(m.id, CLIP_SECONDS).toFixed(2)}/escena
+                        {m.label} · ${estimateRunwayCostUsd(m.id, clipSeconds).toFixed(2)}/escena
                       </option>
                     ))}
                   </select>
@@ -694,9 +704,9 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
               </div>
               <div className="bg-surface-50 border border-surface-200 p-3 text-xs text-surface-600 leading-relaxed space-y-1">
                 <p>
-                  Cada escena se anima con <strong>Runway {getRunwayModel(runwayModel).label}</strong> ({CLIP_SECONDS} s):{' '}
-                  {getRunwayModel(runwayModel).creditsPerSecond * CLIP_SECONDS} créditos por escena,{' '}
-                  {getRunwayModel(runwayModel).creditsPerSecond * CLIP_SECONDS * missing.length} en total (1 crédito = $0,01).
+                  Cada escena se anima con <strong>Runway {getRunwayModel(runwayModel).label}</strong> ({clipSeconds} s):{' '}
+                  {getRunwayModel(runwayModel).creditsPerSecond * clipSeconds} créditos por escena,{' '}
+                  {getRunwayModel(runwayModel).creditsPerSecond * clipSeconds * missing.length} en total (1 crédito = $0,01).
                 </p>
                 <p>La IA escribe el movimiento de cada escena a partir de su descripción. Al terminar, el reel se monta solo con los textos.</p>
                 <p>Montar el reel no cuesta nada; solo se paga la animación.</p>

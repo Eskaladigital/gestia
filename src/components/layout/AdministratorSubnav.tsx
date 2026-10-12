@@ -9,6 +9,7 @@ const items = [
   { label: 'Proyectos', href: '/administrator/projects' },
   { label: 'Contenido', href: '/administrator/content' },
   { label: 'Usuarios', href: '/administrator/users' },
+  { label: 'Vídeo', href: '/administrator/video-lab' },
   { label: 'Config IA', href: '/settings/ai' },
 ] as const;
 

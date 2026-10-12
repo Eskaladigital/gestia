@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/video-lab/tick",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
