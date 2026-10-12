@@ -192,6 +192,7 @@ export function ReelAssemblerModal({ item, visuals, projectName, onClose, onSave
         accent: ov.accent,
       };
       const result = await assembleReel(data, {
+        sceneSeconds: CLIP_SECONDS,
         onProgress: (r, label) => {
           setPct(Math.round(r * 100));
           if (label) setStepLabel(label);

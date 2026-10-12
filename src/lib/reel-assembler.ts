@@ -215,7 +215,8 @@ export async function assembleReel(data: ReelAssembly, opts: AssembleOptions = {
   const scenes = data.scenes.filter((s) => s.videoUrl || s.imageUrl)
   if (scenes.length === 0) throw new Error('No hay escenas con imagen o clip')
   const accent = data.accent || '#f26b3a'
-  const sceneSec = opts.sceneSeconds ?? 3.4
+  // El clip de Runway dura 5 s. Con 3,4 s se tiraba el final y cada escena se sentía cortada.
+  const sceneSec = opts.sceneSeconds ?? 5
   const endSec = opts.endSeconds ?? 3.0
 
   try {
