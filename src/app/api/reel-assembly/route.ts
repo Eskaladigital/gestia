@@ -46,6 +46,23 @@ type Suggestion = {
   brand_sub: string;
 };
 
+/** Se añade siempre: Runway deforma la carrocería si el prompt mueve puertas o muebles. */
+const LOCKED_GEOMETRY =
+  'The vehicle body, doors, windows, walls, cabinets, seats, tables and the interior layout stay perfectly still and unchanged. Do not open, close, swing or reshape any door. Slow push-in only. Realistic natural motion, no morphing. Keep logos and text unchanged.';
+
+function lockMotionPrompt(raw: string): string {
+  const kept = raw
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(s => {
+      const rigid = /\b(door|tailgate|hatch|window|cabinet|bodywork|body panel|sliding)\b/i.test(s);
+      const moves = /\b(sway|swing|close|closes|closing|open|opens|opening|shut|slide|slides|fold|morph|reshape)\b/i.test(s);
+      return !(rigid && moves);
+    });
+  return `${kept.join(' ')} ${LOCKED_GEOMETRY}`.replace(/\s+/g, ' ').trim().slice(0, 900);
+}
+
 export async function POST(request: NextRequest) {
   let body: any;
   try {
@@ -105,14 +122,15 @@ export async function POST(request: NextRequest) {
       .eq('content_item_id', contentItemId)
       .order('visual_index');
     const list = (visuals || []).filter((v: any) => ids.length === 0 || ids.includes(v.id));
-    const fallback = (v: any) =>
-      'Natural realistic motion: the people and objects in the scene move naturally (walking, gestures, hands, hair and clothes in the breeze, leaves swaying), with a slow smooth cinematic camera move. Keep faces, products, logos and any text unchanged. Realistic lighting, no morphing.' +
-      (v.visual_brief ? ` Scene: ${String(v.visual_brief).slice(0, 300)}` : '');
+    const fallback = () =>
+      'A hand, a piece of fabric or a few leaves move slightly. People, if present, make a small natural gesture. ' +
+      LOCKED_GEOMETRY;
     const system =
-      'You write image-to-video prompts for Runway Gen-4.5. For each scene, write ONE English prompt (max 60 words) describing what MOVES: ' +
-      'concrete subject actions (walking, driving, picking up, slicing, smiling, pointing), secondary motion (wind, water, leaves, steam, people in background) and ONE simple camera move ' +
-      '(tracking, slow push-in, gentle orbit, handheld). Vehicles drive forward on roads if they are on a road; parked vehicles stay parked. ' +
-      'Always end with: "Realistic, natural motion. Keep logos, products and text unchanged." No new objects, no scene changes. ' +
+      'You write image-to-video prompts for Runway Gen-4.5. For each scene, write ONE English prompt (max 45 words) naming ONLY what may move: ' +
+      'hands, people, hair, clothes, a bag or loose object, leaves, steam or water, plus one slow push-in. ' +
+      'NEVER animate or reshape the vehicle, its doors (open or closed), windows, walls, cabinets, seats, tables or the interior layout. ' +
+      'A parked camper stays parked. An open sliding door stays open and rigid; do not say it sways, swings, closes or slides. ' +
+      'Do not invent new objects or change the scene. ' +
       'Reply ONLY JSON: {"motions": [{"id": string, "prompt": string}]}.';
     const user = list
       .map((v: any) => `id: ${v.id}\nScene ${v.visual_index + 1}: ${String(v.visual_brief || v.visual_prompt || v.label || '').slice(0, 700)}`)
@@ -124,11 +142,11 @@ export async function POST(request: NextRequest) {
         temperature: 0.6,
         maxTokens: 1500,
       });
-      for (const m of data?.motions || []) if (m?.id && m?.prompt) motions[m.id] = String(m.prompt).slice(0, 900);
+      for (const m of data?.motions || []) if (m?.id && m?.prompt) motions[m.id] = lockMotionPrompt(String(m.prompt));
     } catch (err) {
       console.error('[reel-assembly] motions:', err);
     }
-    for (const v of list) if (!motions[v.id]) motions[v.id] = fallback(v);
+    for (const v of list) if (!motions[v.id]) motions[v.id] = lockMotionPrompt(fallback());
     return NextResponse.json({ motions });
   }
 
