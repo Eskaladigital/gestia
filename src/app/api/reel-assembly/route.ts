@@ -6,6 +6,8 @@ import { callAI } from '@/lib/ai/openai-client';
 // Montaje del reel completo (clips + textos + cierre). El vídeo se dibuja en el
 // navegador (`src/lib/reel-assembler.ts`); este endpoint solo:
 //  - action 'suggest' → propone con IA los textos de cada escena y el cierre.
+//  - action 'motions' → escribe con IA el prompt de movimiento (Runway) de cada
+//                       escena a partir de su brief, para animarlas en bloque.
 //  - action 'sign'    → URL firmada para subir el MP4 directo a Storage (sin
 //                       pasar por la función: los reels pesan 10–30 MB).
 //  - action 'save'    → guarda la URL pública del reel en el post (migración 034).
@@ -93,6 +95,41 @@ export async function POST(request: NextRequest) {
     } catch (err: any) {
       return NextResponse.json({ error: err?.message || 'No se pudieron sugerir los textos' }, { status: 500 });
     }
+  }
+
+  if (body.action === 'motions') {
+    const ids: string[] = Array.isArray(body.visual_ids) ? body.visual_ids.filter((x: unknown) => typeof x === 'string') : [];
+    const { data: visuals } = await service
+      .from('content_item_visuals')
+      .select('id, visual_index, label, visual_brief, visual_prompt')
+      .eq('content_item_id', contentItemId)
+      .order('visual_index');
+    const list = (visuals || []).filter((v: any) => ids.length === 0 || ids.includes(v.id));
+    const fallback = (v: any) =>
+      'Natural realistic motion: the people and objects in the scene move naturally (walking, gestures, hands, hair and clothes in the breeze, leaves swaying), with a slow smooth cinematic camera move. Keep faces, products, logos and any text unchanged. Realistic lighting, no morphing.' +
+      (v.visual_brief ? ` Scene: ${String(v.visual_brief).slice(0, 300)}` : '');
+    const system =
+      'You write image-to-video prompts for Runway Gen-4.5. For each scene, write ONE English prompt (max 60 words) describing what MOVES: ' +
+      'concrete subject actions (walking, driving, picking up, slicing, smiling, pointing), secondary motion (wind, water, leaves, steam, people in background) and ONE simple camera move ' +
+      '(tracking, slow push-in, gentle orbit, handheld). Vehicles drive forward on roads if they are on a road; parked vehicles stay parked. ' +
+      'Always end with: "Realistic, natural motion. Keep logos, products and text unchanged." No new objects, no scene changes. ' +
+      'Reply ONLY JSON: {"motions": [{"id": string, "prompt": string}]}.';
+    const user = list
+      .map((v: any) => `id: ${v.id}\nScene ${v.visual_index + 1}: ${String(v.visual_brief || v.visual_prompt || v.label || '').slice(0, 700)}`)
+      .join('\n\n');
+    let motions: Record<string, string> = {};
+    try {
+      const { data } = await callAI<{ motions: { id: string; prompt: string }[] }>(system, `Context: ${item.idea || ''}\n\n${user}`, {
+        userId,
+        temperature: 0.6,
+        maxTokens: 1500,
+      });
+      for (const m of data?.motions || []) if (m?.id && m?.prompt) motions[m.id] = String(m.prompt).slice(0, 900);
+    } catch (err) {
+      console.error('[reel-assembly] motions:', err);
+    }
+    for (const v of list) if (!motions[v.id]) motions[v.id] = fallback(v);
+    return NextResponse.json({ motions });
   }
 
   if (body.action === 'sign') {

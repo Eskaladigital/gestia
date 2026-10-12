@@ -1382,6 +1382,7 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
           projectName={projectName}
           onClose={() => setReelModalItemId(null)}
           onSaved={patch => setReelOverrides(prev => ({ ...prev, [reelModalItemId]: patch }))}
+          onVisualPatched={(visualId, patch) => patchVisual(reelModalItemId, visualId, patch)}
         />
       )}
 
