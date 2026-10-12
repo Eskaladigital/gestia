@@ -365,6 +365,10 @@ export interface ContentItem {
   scheduled_date: string;
   content_type: ContentType;
   format: ContentFormat | null;
+  /** Reel completo montado (clips + textos + cierre), migración 034. */
+  reel_video_url?: string | null;
+  reel_video_generated_at?: string | null;
+  reel_overlay_json?: Json | null;
   idea: string;
   copy: string | null;
   cta: string | null;

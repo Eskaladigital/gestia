@@ -25,6 +25,8 @@ import {
 import type { ContentItem, ContentItemVisual } from '@/types';
 import { ImageEditorModal } from './ImageEditorModal';
 import { VideoGenModal } from './VideoGenModal';
+import { ReelAssemblerModal } from './ReelAssemblerModal';
+import { isReelFormat } from '@/lib/ai/constants';
 import { ImageGenProgressModal, type ImageGenItem } from './ImageGenProgressModal';
 import { FORMAT_CONFIG, TYPE_LABELS } from './CalendarTable';
 import { aspectClassForOrientation } from '@/lib/ai/constants';
@@ -249,6 +251,10 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
     contentItemId: string;
     format?: ContentItem['format'];
   } | null>(null);
+
+  /** «Montar reel»: publicación abierta en el modal + reels ya montados en esta sesión. */
+  const [reelModalItemId, setReelModalItemId] = useState<string | null>(null);
+  const [reelOverrides, setReelOverrides] = useState<Record<string, { reel_video_url: string; reel_video_generated_at: string }>>({});
 
   const visualsMapRef = useRef(visualsMap);
   visualsMapRef.current = visualsMap;
@@ -938,6 +944,33 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
                       <span className="text-xs font-bold text-surface-800 truncate flex-1 min-w-0">
                         {item.idea}
                       </span>
+                      {isReelFormat(item.format) && visuals.length > 0 && (() => {
+                        const reelUrl = reelOverrides[item.id]?.reel_video_url || item.reel_video_url;
+                        const clips = visuals.filter(v => v.video_url).length;
+                        return (
+                          <>
+                            {reelUrl && (
+                              <a
+                                href={reelUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-bold uppercase tracking-wider text-white bg-emerald-600 border-2 border-surface-900 px-2 py-0.5 shadow-brutal-sm hover:shadow-none shrink-0"
+                                title="Ver el reel montado"
+                              >
+                                ▶ Reel listo
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setReelModalItemId(item.id)}
+                              className="text-[10px] font-bold uppercase tracking-wider text-white bg-fuchsia-600 border-2 border-surface-900 px-2 py-0.5 shadow-brutal-sm hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all shrink-0"
+                              title="Unir los clips de las escenas con textos y cierre de marca en un único vídeo"
+                            >
+                              🎬 {reelUrl ? 'Rehacer reel' : 'Montar reel'} · {clips}/{visuals.length} clips
+                            </button>
+                          </>
+                        );
+                      })()}
                       {postPending.length > 0 && visuals.length > 1 && (
                         <button
                           type="button"
@@ -1339,6 +1372,16 @@ export function ContentGallery({ items, projectId, projectName, imageOrientation
               image_edited_at: null,
             });
           }}
+        />
+      )}
+
+      {reelModalItemId && itemsById[reelModalItemId] && (
+        <ReelAssemblerModal
+          item={{ ...itemsById[reelModalItemId], ...(reelOverrides[reelModalItemId] || {}) }}
+          visuals={visualsMap[reelModalItemId] || []}
+          projectName={projectName}
+          onClose={() => setReelModalItemId(null)}
+          onSaved={patch => setReelOverrides(prev => ({ ...prev, [reelModalItemId]: patch }))}
         />
       )}
 

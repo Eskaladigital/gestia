@@ -315,12 +315,14 @@ En el SQL Editor de Supabase, ejecuta los archivos **en orden numérico** (`001`
 | `027_content_item_visuals_video_animation.sql` | Animación con IA de vídeo: `video_motion_prompt`, `video_url`, `video_status`, `video_error`, `video_model`, `video_source_image_url`, `video_generated_at` |
 | `028_project_reference_images_role.sql` | Rol por referencia (`reference_role`, `role_confidence`, `role_is_manual`), identidad de producto (`product_identity`, `product_traits`, `reference_view`). Base del motor de fidelidad |
 | `033_provider_api_keys_runway.sql` | Admite `runway` en `provider_api_keys.provider` (API key de Runway por usuario para animar reels) y añade `video_task_id` / `video_task_started_at` a `content_item_visuals` (animación Runway asíncrona) |
+| `034_content_items_reel_video.sql` | Reel completo montado: `reel_video_url`, `reel_video_generated_at`, `reel_overlay_json` en `content_items` («Montar reel») |
+| `035_visual_assets_allow_video.sql` | Bucket `visual-assets`: admite `video/mp4` y `video/webm`, tope 50 MB (reel montado y clips de Runway/Veo) |
 
 **Storage:**
 
 - Bucket **`screenshots`**: miniaturas del análisis web (público o creado vía service role).
 - Bucket **`project-reference-images`**: fotos reales del producto por proyecto (referencias de fidelidad).
-- Bucket **`visual-assets`**: imágenes IA generadas, PNG editados y MP4 de animación Veo (público; lo crea la app al primer guardado).
+- Bucket **`visual-assets`**: imágenes IA, PNG editados, clips de Runway/Veo y el MP4 del reel montado (público; `video/mp4` y `video/webm`, tope 50 MB, migración **035**).
 
 Alternativa con CLI: `npm run db:migrate` (requiere proyecto Supabase vinculado).
 
@@ -367,6 +369,8 @@ Para **animación a vídeo** (`POST /api/generate-video`):
 **Costes Runway** (por clip): Gen-4.5 = 12 créditos/s → **$0,60** (5 s) / **$1,20** (10 s). Gen-4 Turbo = 5 créditos/s → **$0,25** (5 s) / **$0,50** (10 s). Veo 3.1 Fast ≈ $1,20 (8 s).
 
 **Cómo funciona (asíncrono):** `POST /api/generate-video` con `engine: 'runway'` lanza `POST /v1/image_to_video` en Runway (cabecera `X-Runway-Version: 2024-11-06`, imagen = `edited_image_url` o `image_url` pública de Supabase, ratio `720:1280` o `1280:720` según la orientación del proyecto), guarda `video_task_id` / `video_task_started_at` (migración **033**) y responde al instante con `status: 'generating'`. El modal consulta `GET /api/generate-video?visual_id=…` cada 8 s: cada consulta mira la tarea una vez y, cuando Runway termina, el servidor descarga el MP4, lo sube a `visual-assets` y deja el visual en `ready`. No depende del límite de 300 s de la función, así que la cola de Runway (`PENDING` / `THROTTLED`, cuentas que procesan 1–2 tareas a la vez) no da error: el modal muestra «En cola en Runway…» y **se puede cerrar**; al reabrirlo sigue consultando. Si en 30 min no termina, se marca error. Un segundo «Generar» sobre un visual con tarea en curso no lanza otra (no cobra dos veces). Veo sigue siendo síncrono.
+
+**Montar reel (vídeo completo):** en la galería, cada reel tiene **«🎬 Montar reel · X/Y clips»**. Abre `ReelAssemblerModal`: un texto por escena (precargado del copy o con **«✨ Sugerir textos con IA»**, `POST /api/reel-assembly` action `suggest`), ubicación, frase de cierre en dos partes, marca, subtítulo, línea final y color de acento. `src/lib/reel-assembler.ts` dibuja en el navegador el vídeo vertical 1080×1920 (Canvas + WebCodecs H.264, VP9 de respaldo, `mp4-muxer`): clips de cada escena con fundidos (si una escena no tiene clip, su imagen con movimiento de cámara suave), texto por escena con las franjas de acento, barras de progreso, marca arriba, píldora de ubicación y tarjeta final. Se sube directo a `visual-assets` con URL firmada (action `sign`, sin pasar por la función) y queda en el post (action `save`, migración **034**): botón «▶ Reel listo» y «Descargar MP4». Sin audio (la música se pone en Instagram). No gasta créditos: solo une lo ya generado.
 
 ### 4. Ejecutar en desarrollo
 

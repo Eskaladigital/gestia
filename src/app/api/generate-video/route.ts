@@ -57,13 +57,28 @@ async function resolveProviderKey(userId: string, provider: KeyProvider, envFall
   return data?.api_key || envFallback || '';
 }
 
+const BUCKET_MIME = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/webm'];
+const BUCKET_LIMIT = 50 * 1024 * 1024;
+
 async function ensureBucket(supabase: ReturnType<typeof createServiceSupabase>) {
   const { data } = await supabase.storage.getBucket(BUCKET);
-  if (data) return;
+  if (data) {
+    const mimes = data.allowed_mime_types ?? [];
+    const allowsVideo = mimes.includes('video/mp4');
+    const bigEnough = (data.file_size_limit ?? 0) >= BUCKET_LIMIT;
+    if (allowsVideo && bigEnough) return;
+    const { error } = await supabase.storage.updateBucket(BUCKET, {
+      public: true,
+      fileSizeLimit: BUCKET_LIMIT,
+      allowedMimeTypes: BUCKET_MIME,
+    });
+    if (error) console.error('[generate-video] updateBucket:', error.message);
+    return;
+  }
   const { error } = await supabase.storage.createBucket(BUCKET, {
     public: true,
-    fileSizeLimit: 50 * 1024 * 1024,
-    allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'video/mp4'],
+    fileSizeLimit: BUCKET_LIMIT,
+    allowedMimeTypes: BUCKET_MIME,
   });
   if (error && !String(error.message || '').includes('already exists')) {
     console.error('[generate-video] createBucket:', error.message);
